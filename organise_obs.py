@@ -13,7 +13,8 @@ from datetime import datetime
 # Import and separate observation log into nights
 # -----------------------------------------------------------------------------
 # Find of the text logs
-all_logs = glob.glob("/priv/mulga1/arains/pionier/P99/*/PIONI*.NL.txt")
+#all_logs = glob.glob("/priv/mulga2/mireland/pionier/*/PIONI*.NL.txt")
+all_logs = glob.glob("/priv/mulga1/arains/pionier/p99/*/PIONI*.NL.txt")
 #all_logs = glob.glob("/Users/adamrains/Downloads/PIONI*.txt")
 all_logs.sort()
 
@@ -25,8 +26,8 @@ for obs_log in all_logs:
     # Get the time of the observation (truncated to seconds)
     # Example filename: PIONI.2017-09-06T08:36:53.372.NL.txt
     yyyymmddhhMMss = obs_log.split("/")[-1][6:25]
-    #ob_time = datetime.strptime(yyyymmddhhMMss, "%Y-%m-%dT%I:%M:%S")
-    ob_time = datetime.strptime(yyyymmddhhMMss, "%Y-%m-%dT%I_%M_%S")
+    ob_time = datetime.strptime(yyyymmddhhMMss, "%Y-%m-%dT%H:%M:%S")
+    #ob_time = datetime.strptime(yyyymmddhhMMss, "%Y-%m-%dT%I_%M_%S")
     
     # Read everything in the file
     with open(obs_log) as file:
@@ -57,15 +58,15 @@ for obs_log in all_logs:
     ob_fn = obs_log.split("/")[-1].replace(".NL.txt", "")
     
     # Select details of observation to save
-    ob_details = [container, OB, target, grade, yyyymmddhhMMss, ob_fn]
+    ob_details = [container, OB, target, grade, ob_time, ob_fn]
     
     # Now store the observation details in the dictionary
     # If night entry exists, append observation
     if night in night_log.keys():
-        night_log[night].append(observation)
+        night_log[night].append(ob_details)
     # Night entry  does not exist, create it
     else:
-        night_log[night] = [observation]
+        night_log[night] = [ob_details]
     
     file.close()
 
@@ -153,23 +154,29 @@ for night in night_log.keys():
             # For every observation in the night...
             for ob_i, observation in enumerate(night_log[night]):
                 try:
+		    if (sequence[sci][0] in night_log[night][ob_i][2]
+			and sequence[sci][1] in night_log[night][ob_i+1][2]
+			and sequence[sci][2] in night_log[night][ob_i+2][2]):
+			print sci
                     # Determine if the correct sequence exists in order
-                    if (sequence[sci][0] in night_log[night][ob_i][4] 
-                        and sequence[sci][1] in night_log[night][ob_i+1][4]
-                        and sequence[sci][2] in night_log[night][ob_i+2][4]
-                        and sequence[sci][3] in night_log[night][ob_i+3][4]
-                        and sequence[sci][4] in night_log[night][ob_i+4][4]):
-                    
+                    if (sequence[sci][0] in night_log[night][ob_i][2] 
+                        and sequence[sci][1] in night_log[night][ob_i+1][2]
+                        and sequence[sci][2] in night_log[night][ob_i+2][2]
+                        and sequence[sci][3] in night_log[night][ob_i+3][2]
+                        and sequence[sci][4] in night_log[night][ob_i+4][2]):
+                    	print "good seuqence"
                         # Only add if all observations in sequence are good
-                        grade = (night_log[night][ob_i][5]
-                                 + night_log[night][ob_i+1][5]
-                                 + night_log[night][ob_i+2][5]
-                                 + night_log[night][ob_i+3][5]
-                                 + night_log[night][ob_i+4][5])
+                        grade = (night_log[night][ob_i][3]
+                                 + night_log[night][ob_i+1][3]
+                                 + night_log[night][ob_i+2][3]
+                                 + night_log[night][ob_i+3][3]
+                                 + night_log[night][ob_i+4][3])
                              
                         # Determine start and end times of the concatenation
-                        start = night_log[night][ob_i][3].split(" ")[0]
-                        end = night_log[night][ob_i+4][3].split(" ")[-1]
+                        start = night_log[night][ob_i][4]
+			end = night_log[night][ob+4][4]
+			#start = night_log[night][ob_i][3].split(" ")[0]
+                        #end = night_log[night][ob_i+4][3].split(" ")[-1]
                         
                         # If all obs have acceptable grades the sequence exists
                         if ("C" not in grade and "D" not in grade 
