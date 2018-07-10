@@ -12,6 +12,7 @@ from astroquery.simbad import Simbad
 from astropy.table import Table
 from collections import OrderedDict
 from astropy.units import arcsec
+from collections import Counter
 
 
 # Import list of science and calibrator stars
@@ -20,7 +21,7 @@ all_targets = np.loadtxt(targets_csv, "string", delimiter=",")
 all_target_ids = OrderedDict()
 
 # -----------------------------------------------------------------------------
-# Query for 2MASS and Tycho IDs
+# Query for 2MASS, Tycho, HD IDs, plus Bayer Designation
 # -----------------------------------------------------------------------------
 # We want to get the 2MASS and Tycho2 IDs to ensure we are getting magnitudes
 # for the right targets. The following queries Simbad for 2MASS and Tycho IDs,
@@ -28,13 +29,16 @@ all_target_ids = OrderedDict()
 # key is found, the value "None" will be used.
 missing_2mass = set()
 missing_tycho = set()
+missing_hd = set()
+missing_bayer = set()
 
 print("Getting 2MASS and Tycho IDs...")
 
 for star in all_targets[:,3]:
     ids = Simbad.query_objectids(star)
        
-    all_target_ids[star] = [None, None]
+    # Get IDs [2MASS, Tycho, HD, Bayer]
+    all_target_ids[star] = [None, None, None, None]
     
     for id in ids:
         if "2MASS" in id[0]:
@@ -43,14 +47,45 @@ for star in all_targets[:,3]:
         elif "TYC" in id[0]:
             all_target_ids[star][1] = id[0]
             
+        elif "HD" in id[0]:
+            all_target_ids[star][2] = id[0].replace(" ", "")
+        
+        # Query for Bayer Designation (beginning with a single *), and 
+        # preferring names that are alpha numeric. Remove leading * and any . 
+        # before saving the ID. This level of specificity is to meet the ID
+        # specifics of the JMMC Stellar Diameter Catalogue (JSDC) 
+        elif ("* " == id[0][:2] and (not all_target_ids[star][3] 
+            or not all_target_ids[star][3].split(" ")[1].isalpha())):
+            all_target_ids[star][3] = id[0].replace("* ", "").replace(".", "")
+            
     if not all_target_ids[star][0]:
         missing_2mass.add(star)
         
     if not all_target_ids[star][1]:
         missing_tycho.add(star)
+        
+    if not all_target_ids[star][2]:
+        missing_hd.add(star)
+        
+    if not all_target_ids[star][3]:
+        missing_bayer.add(star)
 
 print("Missing 2MASS IDs: ", str(missing_2mass))
 print("Missing Tycho IDs: ", str(missing_tycho))
+print("Missing HD IDs: ", str(missing_hd))
+print("Missing Bayer IDs: ", str(missing_bayer))
+
+# -----------------------------------------------------------------------------
+# Remove duplicate stars
+# ----------------------------------------------------------------------------- 
+# Some of our calibrators might be listed under multiple different names. Since
+# all stars have HD numbers, use this to find and remove the duplicates
+all_hd_ids = np.asarray(all_target_ids.values())[:,2]
+
+duplicates = [id for id, num in Counter(all_hd_ids).items() if num > 1]
+
+for dup_star in duplicates:
+    all_target_ids.pop(dup_star.replace("D", "D "))
 
 # -----------------------------------------------------------------------------
 # Query Vizier for 2MASS and Tycho catalogue information
@@ -132,11 +167,14 @@ for star in all_target_ids.keys():
         dict_tycho[star] = None 
     
 # Store the results
-pkl_2mass = open("2mass_retrieved_target_data.pkl", "wb")
-pkl_tycho = open("tycho2_retrieved_target_data.pkl", "wb")
+pkl_ids = open("target_data_ids.pkl", "wb")
+pkl_2mass = open("target_data_2mass.pkl", "wb")
+pkl_tycho = open("target_data_tycho2.pkl", "wb")
 
+pickle.dump(all_target_ids, pkl_ids)
 pickle.dump([dict_2mass, table_2mass], pkl_2mass)
-pickle.dump([dict_tycho, table_2mass], pkl_tycho)
+pickle.dump([dict_tycho, table_tycho], pkl_tycho)
 
+pkl_ids.close()
 pkl_2mass.close()
 pkl_tycho.close()

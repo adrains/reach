@@ -15,7 +15,8 @@ A) Target and calibrator background:
 B) Observation reduction, organisation
     1) Download and reduce all observations
     2) Organise reduced obervations
-    3) Using generate_obs_summary.py, determine which observations are complete
+    3) Inpect visibility curves for signs of binarity.
+    4) Using generate_obs_summary.py, determine which observations are complete
        and calibrate only the complete/best quality bright/faint sequences. 
        This is done by creating/editing pndrsScript.i with the functions:
         i)   oiFitsFlagOiData - ignoring observsations within pndrs
@@ -36,7 +37,7 @@ Important reference publications:
  - Boyajian et al. 2014 - Predicting Stellar Angular Diameters
  - Green et al. 2015 - A Three-dimensional Map of Milky Way Dust
  - Bessell 2000 - The Hipparcos and Tycho Photometric System Passbands
- - Høg et al. 2000 - The Tycho-2 catalogue of the 2.5 million brightest stars
+ - Hog et al. 2000 - The Tycho-2 catalogue of the 2.5 million brightest stars
  - Skrutskie et al. 2006 - The Two Micron All Sky Survey (2MASS)
  - Wright et al. 2010 - The Wide-field Infrared Survey Explorer (WISE): Mission
    Description and Initial On-orbit Performance
@@ -64,39 +65,119 @@ Required Catalogues
  - WISE
  - Gaia DR2
 """
-from __future__ import division, print_statement
+from __future__ import division, print_function
 
 import numpy as np
+import pickle
 from astroquery.simbad import Simbad
+from astroquery.vizier import Vizier
 
 # -----------------------------------------------------------------------------
-# Import list of stars, query for 2MASS and Tycho IDs
+# Import list of stars, query for 2MASS and Tycho Details
 # -----------------------------------------------------------------------------
+# This is currently done in query_for_targets.py, which at the moment is a 
+# standalone script. Later it might be incorporated as a function.
+#
 # Initialise data structures
 # e.g. --> sci_targets["eps eri"] = [Gaia_ID, Tycho_ID, V, V_err, J, J_err, 
 #                                    H, H_err, K, K_err, SpT, Parallax, T_eff,
 #                                    T_eff_err, logg, logg_err, [Fe/H], 
 #                                    [Fe,H]_err, reddening, reddening_err]
-sci_targets = {}
-cal_targets = {}
+#sci_targets = {}
+#cal_targets = {}
 
-objects_file = "ids_to_gaia_2mass.txt"
-ids = np.loadtxt(objects_file, "string", delimiter="\t")
+pkl_ids = open("target_data_ids.pkl", "r")
+pkl_2mass = open("target_data_2mass.pkl", "r")
+pkl_tycho = open("target_data_tycho2.pkl", "r")
 
-resultant_ids = []
+all_target_ids = pickle.load(pkl_ids)
+[dict_2mass, table_2mass] = pickle.load(pkl_2mass)
+[dict_tycho, table_tycho] = pickle.load(pkl_tycho)
 
-# First try 2MASS ID to look for gaia ID
-if id_2mass != "":
-    all_ids = Simbad.query_objectids(id_)
+pkl_ids.close()
+pkl_2mass.close()
+pkl_tycho.close()
+
+# -----------------------------------------------------------------------------
+# Retrieve Literature Angular Diameter Estimations
+# -----------------------------------------------------------------------------
+# Get angular diameter predictions from JMMC Stellar Diameters Catalogue (JSDC)
+# from Chelli et al. 2016
+
+# Vizier catalogue ID for JSDC
+cat_id_JSDC = "II/346/jsdc_v2"
+
+# Setup custom Vizier object to query all columns
+vizier_all = Vizier(columns=["**"])
+#radius_2 = 450 * arcsec
+
+# Construct new tables to store all of the target data
+table_jsdc = vizier_all.query_object("eps eri", cat_id_JSDC)[0]
+table_jsdc.remove_rows(slice(0, len(table_jsdc)))
+
+dict_jsdc = {}
+
+print("Getting JSDC entries...")
+
+# For every target, query Vizier for the details. Select the targets based on
+# their HD numbers
+for star in all_target_ids.keys():
+    if star not in dict_jsdc.keys() and all_target_ids[star][2]:
+
+        results = []
+        results = vizier_all.query_object(star, cat_id_JSDC)
+
+        if len(results) > 0:
+            results = results[0]
+        else:
+            print(star, "not in catalogue")
+            continue
+            
+        # JSDC catalogue does not use a standard set of IDs (e.g. HD), so
+        # we will also try the more common name (e.g. Bayer designation, or 
+        # HR #). 
+        for star_i, jsdc_id in enumerate(results[:]["Name"]):
+            id_found = False
+            
+            # Get HD number if available (and remove spaces)
+            if all_target_ids[star][2]:
+                temp_star_hd = all_target_ids[star][2].replace(" ", "")
+                
+            # Get Bayer Designation if available (and remove spaces)
+            if all_target_ids[star][3]:
+                temp_star_bayer = all_target_ids[star][3].replace(" ", "")
+            
+            # Get primary (i.e. key) ID (and remove spaces)
+            temp_star_id = star.replace(" ", "")
+            
+            # Get ID used for JSDC, removing spaces and dots
+            temp_jsdc_id = jsdc_id.replace(" ", "").replace(".", "")
+            
+            # If one of Primary/HD/Bayer IDs match, retrieve and store the data
+            if ((temp_star_hd in temp_jsdc_id) 
+                or (temp_star_id in temp_jsdc_id)
+                or (temp_star_bayer in temp_jsdc_id)):
+                table_jsdc.add_row(results[star_i])
+                dict_jsdc[star] = table_jsdc[-1]
+                
+                print(star)
+                id_found = True
+                break
+                
+        if not id_found:
+            print(star, "not matched with", jsdc_id)
     
-    # Get into nicer format
-    all_ids = list(np.asarray(all_ids))
-    
-    # Grab any Gaia IDs
-    for id in all_ids:
-        if "Gaia" in id[0]:
-            id_gaia = id[0].split(" ")[-1]
-            resultant_ids.append([id_gaia, id_2mass])
-            break
+    # Account for the fact that several of the stars do not have JSDC data
+    elif not all_target_ids[star][0]:
+        dict_jsdc[star] = None
 
-# Import catalogues
+# Store the results
+pkl_jsdc = open("target_data_jsdc.pkl", "wb")
+pickle.dump([dict_jsdc, table_jsdc], pkl_jsdc)
+pkl_jsdc.close()
+
+# -----------------------------------------------------------------------------
+# Estimate Angular Diameters
+# -----------------------------------------------------------------------------
+# Using V-K relation from Boyajian et al. 2014, possible for all stars with 
+# Tycho and 2MASS data
