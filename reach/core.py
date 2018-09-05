@@ -3,6 +3,7 @@ Main location for reach functions
 """
 from __future__ import division, print_function
 import numpy as np
+import pandas as pd
 import matplotlib.pylab as plt
 from scipy.interpolate import interp1d
 
@@ -33,6 +34,14 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     ldd: float
         The predicted limb darkened angular diameter
     """
+    num_exponents = 4
+    
+    # Convert to numpy arrays
+    F1_mag = np.array(F1_mag)
+    F1_mag_err = np.array(F1_mag_err)
+    F2_mag = np.array(F2_mag)
+    F2_mag_err = np.array(F2_mag_err)
+    
     # Import the Boyajian relations, columns are:
     # [Colour Index, Num Points, Range (mag), a0, a0_err, a1, a1_err,
     #  a2, a2_err, a3, a3_err, Reduced chi^2, err (%)]
@@ -48,10 +57,13 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     
     # Calculate diameters
     # Relationship is log_diam = Sigma(i=0) a_i * (F1_mag-F2_mag) ** i
-    exponents = np.arange(0,4)
+    exponents = np.arange(0, num_exponents)
     colour = F1_mag - F2_mag
     
-    log_diam = np.sum(diam_rel_coeff[colour_rel][::2]*colour**exponents)
+    # Repeat along new direction so operation is vectorised
+    colour = np.repeat(np.array(colour)[:,None], num_exponents, 1)
+    
+    log_diam = np.sum(diam_rel_coeff[colour_rel][::2]*colour**exponents, 1)
     
     ldd = 10**(-0.2*F1_mag) * 10**log_diam
     
@@ -121,11 +133,11 @@ def convert_vt_to_v(B_T, V_T):
     # Interpolation only works for colour range in Bessell 2000 - reject values
     # that fall outside of this
     if not np.min(B_T_minus_V_T) > np.min(colour_rel[:,0]):
-       raise ColourOutOfBoundsException("Minimum (B_T-V_T colour must be >"
-                                        " %f0.2" % np.min(colour_rel[:,0]))
+       raise ColourOutOfBoundsException("Minimum (B_T-V_T) colour must be >"
+                                        " %f20" % np.min(colour_rel[:,0]))
     elif not np.max(B_T_minus_V_T) < np.max(colour_rel[:,0]):
-       raise ColourOutOfBoundsException("Maximum (B_T-V_T colour must be <"
-                                        " %f0.2" % np.max(colour_rel[:,0]))
+       raise ColourOutOfBoundsException("Maximum (B_T-V_T) colour must be <"
+                                        " %f0" % np.max(colour_rel[:,0]))
     
     # Predict (V-V_T) from (B_T-V_T)
     V_minus_V_T_predicted = colour_func(B_T_minus_V_T)
@@ -134,3 +146,25 @@ def convert_vt_to_v(B_T, V_T):
     V_predicted = V_minus_V_T_predicted + V_T
     
     return V_predicted
+    
+    
+def load_target_information(filepath="target_info.tsv"):
+    """Loads in the target information tsv (tab separated) as a pandas 
+    dataframne with appropriate column labels and rows labelled as each star.
+    
+    https://pandas.pydata.org/pandas-docs/version/0.21/generated/
+    pandas.read_csv.html#pandas.read_csv
+    """
+    # Import (TODO: specify dtypes)
+    target_info = pd.read_csv(filepath, sep="\t", header=1, index_col=5, 
+                              skiprows=0)
+    
+    # Organise dataframe by removing duplicates
+    # Note that the tilde is a bitwise not operation on the mask
+    target_info = target_info[~target_info.index.duplicated(keep="first")]
+    
+    # Return result
+    return target_info
+    
+    
+    
