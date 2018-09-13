@@ -19,6 +19,7 @@ from __future__ import division, print_function
 import csv
 import glob
 import os
+import pickle
 from shutil import copyfile
 from collections import OrderedDict
 from datetime import datetime
@@ -240,11 +241,11 @@ for night in night_log.keys():
                     grade = "".join(all_grades)
                     
                     # Record the period of the sequence
-                    period = concatenation[0][6]
+                    period = int(concatenation[0][6].split(".")[0])
                     
                     end_time = concatenation[-1][4].isoformat()
-                    key = (period, sci, seq_label[seq_i], end_time, grade)
-                    complete_sequences[key] = concatenation
+                    key = (period, sci, seq_label[seq_i])
+                    complete_sequences[key] = (night, grade, concatenation)
                     print(" [DONE, %s, # Obs: %i]" % (grade, len(grade)))
                     
                     if (sci, seq_label[seq_i]) in missing_sequences:
@@ -319,12 +320,12 @@ concatenation.extend(night_log["2017-08-27"][16:])
 
 # Determine grades, period, and end time, then save to dict as usual
 grade = "".join([observation[3] for observation in concatenation])
-period = concatenation[0][6]
+period = int(concatenation[0][6].split(".")[0])
 end_time = concatenation[-1][4].isoformat()
 
-key = (period, "delPav", "faint", end_time, grade)
-print(key in complete_sequences)
-complete_sequences[key] = concatenation
+key = (period, "delPav", "faint")
+#print(key in complete_sequences)
+complete_sequences[key] = ("2017-08-27", grade, concatenation)
 
 missing_sequences.remove(("delPav", "faint"))
 
@@ -336,11 +337,11 @@ concatenation.extend(night_log["2017-08-26"][17:51])
 
 # Determine grades, period, and end time, then save to dict as usual
 grade = "".join([observation[3] for observation in concatenation])
-period = concatenation[0][6]
+period = int(concatenation[0][6].split(".")[0])
 end_time = concatenation[-1][4].isoformat()
 
-key = (period, "lamSgr", "faint", end_time, grade)
-complete_sequences[key] = concatenation
+key = (period, "lamSgr", "faint")
+complete_sequences[key] = ("2017-08-26", grade, concatenation)
 
 missing_sequences.remove(("lamSgr", "faint"))
 
@@ -352,13 +353,13 @@ concatenation = night_log["2017-08-26"][67:101]
 
 # Determine grades, period, and end time, then save to dict as usual
 grade = "".join([observation[3] for observation in concatenation])
-period = concatenation[0][6]
+period = int(concatenation[0][6].split(".")[0])
 end_time = concatenation[-1][4].isoformat()
 
-key = (period, "TauCet", "bright", end_time, grade)
-complete_sequences[key] = concatenation
+key = (period, "TauCet", "bright")
+complete_sequences[key] = ("2017-08-26", grade, concatenation)
 
-missing_sequences.remove(("TauCet", "bright"))
+#missing_sequences.remove(("TauCet", "bright"))
 
 # -----------------------------------------------------------------------------
 # Summarise keys for easy inspection
@@ -374,7 +375,9 @@ print("%-16s%-12s%-12s%-22s%-10s\n" % ("Period", "Target", "Sequence", "Time",
                                        "Grade")) 
 
 for ob in obs_keys:
-    print("%-16s%-12s%-12s%-22s%-10s" % (ob[0], ob[1], ob[2], ob[3], ob[4])) 
+    print("%6i%-12s%-12s%-22s%-10s" % (ob[0], ob[1], ob[2], 
+                                       complete_sequences[ob][0], 
+                                       complete_sequences[ob][1])) 
    
 
 print("\n\n----------------------\nMissing Sequences\n----------------------")  
@@ -408,8 +411,10 @@ duplicates = []
 
 for sequence in complete_sequences:
     print("Copying data for: %s, %s, %s, %s" % (sequence[0], sequence[1],
-                                                sequence[2], sequence[3]))
-    for observation in complete_sequences[sequence]:
+                                            sequence[2], 
+                                            complete_sequences[sequence][0]))
+                                            
+    for observation in complete_sequences[sequence][2]:
         # Create the new file paths for the logs and data
         new_nl = observation[5].replace("all_sequences", "complete_sequences")
         new_fits = observation[7].replace("all_sequences", 
@@ -432,3 +437,10 @@ for sequence in complete_sequences:
 
 print("Finished! %i files (%0.2f GB) copied" % (n_files_copied, 
                                                 bytes_copied/1024**3))
+                                                
+# -----------------------------------------------------------------------------
+# Save details
+# -----------------------------------------------------------------------------
+pkl_obslog = open("pionier_observing_log.pkl", "wb")
+pickle.dump(complete_sequences, pkl_obslog)
+pkl_obslog.close()

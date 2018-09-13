@@ -2,11 +2,18 @@
 Main location for reach functions
 """
 from __future__ import division, print_function
+import csv
+import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
+from astropy.io import fits
+from collections import OrderedDict
 from scipy.interpolate import interp1d
 
+# -----------------------------------------------------------------------------
+# Science Functions
+# -----------------------------------------------------------------------------
 class ColourOutOfBoundsException(Exception):
     pass
 
@@ -67,10 +74,11 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     
     ldd = 10**(-0.2*F1_mag) * 10**log_diam
     
-    # Calculate the error (TODO)
-    ldd_err = 0
+    # Calculate the error. Currently this is done solely using the percentage
+    # error given in the paper, and does not treat errors in either magnitude
+    e_ldd = ldd * diam_rel_coeff[colour_rel][-1]/100
     
-    return ldd, ldd_err
+    return ldd, e_ldd
     
     
 def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
@@ -147,6 +155,51 @@ def convert_vt_to_v(B_T, V_T):
     
     return V_predicted
     
+# -----------------------------------------------------------------------------
+# Utilities Functions
+# -----------------------------------------------------------------------------
+def summarise_sequences():
+    """
+    """
+    # Read in each sequence
+    bright_list_files = ["p99_bright.txt", "p101_bright.txt"]
+    faint_list_files = ["p99_faint.txt", "p101_faint.txt"]
+    period = [99, 101]
+
+    target_list = []
+
+    for p_i, bright_list_file in enumerate(bright_list_files):
+        with open(bright_list_file) as csv_file:
+            for line in csv.reader(csv_file):
+                target_list.append((period[p_i], line[0].replace(" ", ""),
+                                    "bright"))
+
+    for p_i, faint_list_file in enumerate(faint_list_files):
+        with open(faint_list_file) as csv_file:
+            for line in csv.reader(csv_file):
+                target_list.append((period[p_i], line[0].replace(" ", ""),
+                                    "faint"))
+        
+    # Order each sequence
+    sequences = OrderedDict()
+    
+    for tgt_i in xrange(0, len(target_list), 4):
+        # All targets must share a sequence and period
+        assert (target_list[tgt_i][::2] == target_list[tgt_i+1][::2] 
+                and target_list[tgt_i][::2] == target_list[tgt_i+2][::2] 
+                and target_list[tgt_i][::2] == target_list[tgt_i+3][::2])
+        
+        sequences[target_list[tgt_i]] = [target_list[tgt_i+1][1], 
+                                         target_list[tgt_i][1],
+                                         target_list[tgt_i+2][1], 
+                                         target_list[tgt_i][1],
+                                         target_list[tgt_i+3][1]]
+    
+    pkl_sequences = open("sequences.pkl", "wb")
+    pickle.dump(sequences, pkl_sequences)
+    pkl_sequences.close()
+    
+    return sequences
     
 def load_target_information(filepath="target_info.tsv"):
     """Loads in the target information tsv (tab separated) as a pandas 
@@ -156,15 +209,153 @@ def load_target_information(filepath="target_info.tsv"):
     pandas.read_csv.html#pandas.read_csv
     """
     # Import (TODO: specify dtypes)
-    target_info = pd.read_csv(filepath, sep="\t", header=1, index_col=5, 
+    tgt_info = pd.read_csv(filepath, sep="\t", header=1, index_col=5, 
                               skiprows=0)
     
     # Organise dataframe by removing duplicates
     # Note that the tilde is a bitwise not operation on the mask
-    target_info = target_info[~target_info.index.duplicated(keep="first")]
+    tgt_info = tgt_info[~tgt_info.index.duplicated(keep="first")]
+    
+    # Force primary IDs to standard no-space format
+    tgt_info.Primary = [pid.replace(" ", "").replace(".", "").replace("_","")
+                           for pid in tgt_info.Primary]
     
     # Return result
-    return target_info
+    return tgt_info
     
     
+# -----------------------------------------------------------------------------
+# pndrs Affiliated Functions
+# -----------------------------------------------------------------------------
+def summarise_observations():
+    """
+    """
+    pass
     
+def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
+                     base_path="/priv/mulga1/arains/pionier/complete_sequences/",
+                     dir_suffix="_v3.73_abcd"):
+    """This is a function to create and save the oiDiam.fits files referenced
+    by pndrs during calibration. Each night of observations has a single such
+    file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
+    empty primary HDU, and a fits table with LDD and e_LDD for each star listed
+    alphabetically.
+    """
+    
+    nights = OrderedDict()
+    
+    # Get nightly sets of what targets have been observed
+    for seq in complete_sequences:
+        night = complete_sequences[seq][0]
+        
+        sequence = [star.replace("_", "").replace(".","").replace(" ", "") 
+                    for star in sequences[seq]]
+        
+        if night not in nights:
+            nights[night] = set(sequence)
+        else:
+            nights[night].update(sequence)
+    
+    print("Writing oiDiam.fits for %i nights" % len(nights))
+    
+    # For every night, construct a record array/fits file of target diameters
+    # This record array takes the form:
+    # TARGET_ID, DIAM, DIAMERR, HMAG, KMAG, VMAG, ISCAL, TARGET, INFO
+    #   >i2      >f8     >f8    >f8   >f8   >f8    >i4    s8     s18
+    # Where TARGET_ID is simply an integer index (one indexed), ISCAL is a 
+    # boolean value of either 0 or 1, and TARGET is the name of the target. 
+    # The targets are ordered by name, but sorted in ascii order (i.e. all 
+    # numbers, then all capital letters, then all lower case letters). Unclear 
+    # how significant this is. Only Hmags have been populated for some stars, 
+    # though it is unclear what impact this has on the calibration.
+    for night in nights:
+        # Initialise record array
+        #bright = np.rec.array([(1,'Sirius', -1.45, 'A1V'),
+                              #(2,'Canopus', -0.73, 'F0Ib'),
+                             #(3,'Rigil Kent', -0.1, 'G2V')],
+                             #formats="int16,float32,float32,float32,float32,float32,int16,a20,a20",
+                            #names="TARGET_ID,DIAM,DIAMERR,HMAG,KMAG,VMAG,ISCAL,TARGET,INFO")
+        
+        # Columns
+        # np.arange(1,len(all_nights[night])+1)
+        # tgt_info.LDD_V_W3
+        # tgt_info.e_LDD_V_W3
+        # tgt_info.Hmag
+        # tgt_info.Kmag
+        # tgt_info.Vmag
+        # tgt_info.Science.astype(int)
+        # tgt_info.Primary_pndrs
+        # np.repeat("(V-W3) diameter from Boyajian et al. 2014")
+        failed = False
+        
+        ids = []
+        # Grab the primary IDs
+        for star in nights[night]:
+            #star = star.replace("_", "").replace(".","").replace(" ", "")
+            prim_id = tgt_info[tgt_info.Primary==star].index
+            try:
+                assert len(prim_id) > 0
+            except:
+                print("...failed on %s, %s" % (night, star))
+                failed = True
+                break
+            ids.append(prim_id[0])    
+            
+        if failed:
+            continue
+            
+        # Sort the IDs
+        ids.sort()   
+        
+        # Construct the record
+        rec = tgt_info.loc[ids][["LDD_V_W3", "e_LDD_V_W3", "Hmag", "Kmag", 
+                                 "Vmag", "Science", "Primary"]]
+        
+        # Invert, as column is for calibrator status
+        rec.Science =  np.abs(rec.Science - 1)#.astype("int32") - 1)
+        rec["INFO"] = np.repeat("(V-W3) diameter from Boyajian et al. 2014",
+                                len(rec))
+        
+        rec.insert(0,"TARGET_ID", np.arange(1,len(nights[night])+1))#.astype("int16"))
+        
+        formats="int16,float64,float64,float64,float64,float64,int32,string,string"
+        names = "TARGET_ID,DIAM,DIAMERR,HMAG,KMAG,VMAG,ISCAL,TARGET,INFO"
+        rec = np.rec.array(rec.values.tolist(), names=names, formats=formats)
+        
+        """
+        rec = rec.astype([("TARGET_ID","int16"), ("DIAM","float64"), 
+                          ("DIAMERR","float64"),("HMAG", "float64"), 
+                          ("KMAG", "float64"), ("VMAG", "float64"), 
+                          ("ISCAL", "int32"), ("TARGET", "string"), 
+                          ("INFO", "string")])
+        """
+        # Construct a fits/astopy table in this form
+        hdu = fits.BinTableHDU.from_columns(rec)
+    
+        # Save the fits file to the night directory
+        #fname = base_path + night + dir_suffix + "/" night + "_oiDiam.fits"
+        fname = base_path + night + "_oiDiam.fits"
+        hdu.writeto(fname, overwrite=True)
+        
+        # Done, move to the next night
+        print("...wrote %s, %s" % (night, nights[night]))
+        
+    return nights
+
+def save_nightly_pndrs_script():
+    """This is a function to create and save the pndrs script files referenced
+    by pndrs during calibration. Each night of observations has a single such
+    file with the name formatted per YYYY-MM-DD_pndrsScript.i containing a list
+    of pndrs commands to run in order to customise the calibration procedure.
+    
+    Important here are the following commands:
+        - Ignore some observations: oiFitsFlagOiData
+        - Splot the night: oiFitsSplitNight
+    """
+    for night in all_nights:
+        # Initialise empty string for YYYY-MM-DD_pndrsScript.i
+        
+        # Split the night if more than one sequence has been observed
+        
+        # Disqualify any bad calibrators
+        pass

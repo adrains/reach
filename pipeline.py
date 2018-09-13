@@ -13,15 +13,19 @@ A) Target and calibrator background:
         ii) Magnitudes: V (Tycho-2), K (2MASS), reddening (Green et al. 2015)
     
 B) Observation reduction, organisation
-    1) Download and reduce all observations
-    2) Organise reduced obervations
-    3) Inpect visibility curves for signs of binarity.
-    4) Using generate_obs_summary.py, determine which observations are complete
-       and calibrate only the complete/best quality bright/faint sequences. 
+    1) Download all observations.
+    2) Organise observations by moving only complete CAL-SCI-CAL-SCI-CAL 
+       sequences to a new directory structure.
+    3) Reduce obervations.
+    4) Check reduction (e.g. inspect visibility curves for signs of binarity).
+    5) Calibrate only the complete/best quality bright/faint sequences. 
        This is done by creating/editing pndrsScript.i with the functions:
         i)   oiFitsFlagOiData - ignoring observsations within pndrs
         ii)  oiFitsSplitNight - splitting the "night" between different 
              sequences within pndrs
+       Here there also needs to be some consideration for the calibration files
+       sent by Xavier Habois from ESO (see 10/07/18 Ireland email).
+       
        At the conclusion of this calibration, there should be a single oiFits
        file for each science target containing the (among other things) the 
        squared visibilities and closure phases.
@@ -51,6 +55,8 @@ Important reference publications:
    models. IV. Limb darkening coefficients
  - Derekas et al. 2011 - HD 181068: A Red Giant in a Triply Eclipsing Compact 
    Hierarchical Triple System
+ - Casagrande et al. 2010 - An absolutely calibrated Teff scale from the 
+   Infrared Flux Method Dwarfs and subgiants
  - Casagrande et al. 2014 - Towards stellar effective temperatures and 
    diameters at 1 per cent accuracy for future surveys
    
@@ -68,116 +74,82 @@ Required Catalogues
 from __future__ import division, print_function
 
 import numpy as np
+import pandas as pd
+import reach.core as rch
+import reach.plotting as rplt
 import pickle
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
 
 # -----------------------------------------------------------------------------
-# Import list of stars, query for 2MASS and Tycho Details
+# (1) Import target details
 # -----------------------------------------------------------------------------
-# This is currently done in query_for_targets.py, which at the moment is a 
-# standalone script. Later it might be incorporated as a function.
-#
-# Initialise data structures
-# e.g. --> sci_targets["eps eri"] = [Gaia_ID, Tycho_ID, V, V_err, J, J_err, 
-#                                    H, H_err, K, K_err, SpT, Parallax, T_eff,
-#                                    T_eff_err, logg, logg_err, [Fe/H], 
-#                                    [Fe,H]_err, reddening, reddening_err]
-#sci_targets = {}
-#cal_targets = {}
-
-pkl_ids = open("target_data_ids.pkl", "r")
-pkl_2mass = open("target_data_2mass.pkl", "r")
-pkl_tycho = open("target_data_tycho2.pkl", "r")
-
-all_target_ids = pickle.load(pkl_ids)
-[dict_2mass, table_2mass] = pickle.load(pkl_2mass)
-[dict_tycho, table_tycho] = pickle.load(pkl_tycho)
-
-pkl_ids.close()
-pkl_2mass.close()
-pkl_tycho.close()
+# Targets information is loaded into a pandas dataframe, with column labels for
+# each of the stored parameters (e.g. VTmag) and row indices of HD ID
+tgt_info = rch.load_target_information()
 
 # -----------------------------------------------------------------------------
-# Retrieve Literature Angular Diameter Estimations
+# (2) Estimate angular diameters for all targets
 # -----------------------------------------------------------------------------
-# Get angular diameter predictions from JMMC Stellar Diameters Catalogue (JSDC)
-# from Chelli et al. 2016
+# Do the following:
+#  i)   Convert Tycho V to Johnson system using Bessell 2000
+#  ii)  Correct for reddening 
+#  iii) Estimate angular diameters using colour relation
 
-# Vizier catalogue ID for JSDC
-cat_id_JSDC = "II/346/jsdc_v2"
+# For simplification during testing, remove any stars that fall outside the 
+# VT --> V conversion from Bessell 2000
+tgt_info = tgt_info.drop(["GJ551","HD133869"])
 
-# Setup custom Vizier object to query all columns
-vizier_all = Vizier(columns=["**"])
-#radius_2 = 450 * arcsec
+# Convert VT to V
+# TODO: proper treatment of magnitude errors
+tgt_info["Vmag"] = rch.convert_vt_to_v(tgt_info["BTmag"], tgt_info["VTmag"])   
+tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
 
-# Construct new tables to store all of the target data
-table_jsdc = vizier_all.query_object("eps eri", cat_id_JSDC)[0]
-table_jsdc.remove_rows(slice(0, len(table_jsdc)))
+# Correct for reddening 
+pass
 
-dict_jsdc = {}
-
-print("Getting JSDC entries...")
-
-# For every target, query Vizier for the details. Select the targets based on
-# their HD numbers
-for star in all_target_ids.keys():
-    if star not in dict_jsdc.keys() and all_target_ids[star][2]:
-
-        results = []
-        results = vizier_all.query_object(star, cat_id_JSDC)
-
-        if len(results) > 0:
-            results = results[0]
-        else:
-            print(star, "not in catalogue")
-            continue
-            
-        # JSDC catalogue does not use a standard set of IDs (e.g. HD), so
-        # we will also try the more common name (e.g. Bayer designation, or 
-        # HR #). 
-        for star_i, jsdc_id in enumerate(results[:]["Name"]):
-            id_found = False
-            
-            # Get HD number if available (and remove spaces)
-            if all_target_ids[star][2]:
-                temp_star_hd = all_target_ids[star][2].replace(" ", "")
-                
-            # Get Bayer Designation if available (and remove spaces)
-            if all_target_ids[star][3]:
-                temp_star_bayer = all_target_ids[star][3].replace(" ", "")
-            
-            # Get primary (i.e. key) ID (and remove spaces)
-            temp_star_id = star.replace(" ", "")
-            
-            # Get ID used for JSDC, removing spaces and dots
-            temp_jsdc_id = jsdc_id.replace(" ", "").replace(".", "")
-            
-            # If one of Primary/HD/Bayer IDs match, retrieve and store the data
-            if ((temp_star_hd in temp_jsdc_id) 
-                or (temp_star_id in temp_jsdc_id)
-                or (temp_star_bayer in temp_jsdc_id)):
-                table_jsdc.add_row(results[star_i])
-                dict_jsdc[star] = table_jsdc[-1]
-                
-                print(star)
-                id_found = True
-                break
-                
-        if not id_found:
-            print(star, "not matched with", jsdc_id)
-    
-    # Account for the fact that several of the stars do not have JSDC data
-    elif not all_target_ids[star][0]:
-        dict_jsdc[star] = None
-
-# Store the results
-pkl_jsdc = open("target_data_jsdc.pkl", "wb")
-pickle.dump([dict_jsdc, table_jsdc], pkl_jsdc)
-pkl_jsdc.close()
+# Estimate angular diameters
+ldd, e_ldd = rch.predict_ldd_boyajian(tgt_info.Vmag, tgt_info.e_VTmag, 
+                                    tgt_info.W3mag, tgt_info.e_W3mag, "V-W3")
+                                    
+tgt_info["LDD_V_W3"] = ldd
+tgt_info["e_LDD_V_W3"] = e_ldd
 
 # -----------------------------------------------------------------------------
-# Estimate Angular Diameters
+# (3) Import observing logs
 # -----------------------------------------------------------------------------
-# Using V-K relation from Boyajian et al. 2014, possible for all stars with 
-# Tycho and 2MASS data
+# Load in the summarising data structures created in organise_obs.py
+# Format of this file is as follows
+pkl_obslog = open("pionier_observing_log.pkl", "r")
+complete_sequences = pickle.load(pkl_obslog)
+pkl_obslog.close()
+
+# -----------------------------------------------------------------------------
+# (4) Inspect reduced data
+# -----------------------------------------------------------------------------
+# Check visibilities for anything unusual (?) or potential saturated data
+
+# -----------------------------------------------------------------------------
+# (5) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
+# -----------------------------------------------------------------------------
+# Fits file with two HDUs: [0] is (empty) primary image, [1] is table of diams
+pkl_sequences = open("sequences.pkl", "r")
+sequences = pickle.load(pkl_sequences)
+pkl_sequences.close()
+
+nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, base_path="test/")
+
+# -----------------------------------------------------------------------------
+# (6) Write YYYY-MM-DD_pndrsScript.i
+# -----------------------------------------------------------------------------
+# Do the following:
+#  i)  Exclude bad calibrators (informed by 5)
+#  ii) Split nights between sequences
+
+# -----------------------------------------------------------------------------
+# (7) Run pndrsCalibrate for each night of observing
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# (8) Create summary pdf with vis^2 plots for all science targets
+# -----------------------------------------------------------------------------
