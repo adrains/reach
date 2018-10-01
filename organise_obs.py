@@ -20,6 +20,7 @@ import csv
 import glob
 import os
 import pickle
+import numpy as np
 from shutil import copyfile
 from collections import OrderedDict
 from datetime import datetime
@@ -34,6 +35,8 @@ all_logs.sort()
 
 # Initialise dictionary to store observations
 night_log = OrderedDict()
+
+ref_ids = set()
 
 # Generate an observational log from these text files
 for obs_log in all_logs:
@@ -58,9 +61,12 @@ for obs_log in all_logs:
         # Night grade
         if row[:6] == "Grade:":
             grade = row[-1]
-        # Target name
+        # Target name (uniform) AND target name (unaltered)
         elif row[:7] == "Target:":
             target = row.split(" ")[-1].replace("_", "")
+            
+            ref_ids.add(row.split(" ")[-1])
+            
         # OB - ESO observation ID
         elif row[:3] == "OB:":
             OB = row.split(" ")[-1]
@@ -88,6 +94,7 @@ for obs_log in all_logs:
     
     file.close()
 
+np.savetxt("ref_ids.csv", list(ref_ids), fmt="%s")
 # Can check that two datetime objects are close in time by subtracting them   
 # datetime1 - datetime2 --> datetime.timedelta(...)
 # datetime.timedelta(...).seconds

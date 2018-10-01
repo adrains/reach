@@ -2,6 +2,7 @@
 Main location for reach functions
 """
 from __future__ import division, print_function
+import os
 import csv
 import pickle
 import numpy as np
@@ -52,7 +53,9 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     # Import the Boyajian relations, columns are:
     # [Colour Index, Num Points, Range (mag), a0, a0_err, a1, a1_err,
     #  a2, a2_err, a3, a3_err, Reduced chi^2, err (%)]
-    boyajian_2014_rel_file = "boyajian_2014_colour_diameter_relations.csv"
+    dd = os.path.dirname(__file__)[:-5]
+    boyajian_2014_rel_file = os.path.join(dd, 
+                            "boyajian_2014_colour_diameter_relations.csv")
     
     diam_rel = np.loadtxt(boyajian_2014_rel_file, delimiter=",", 
                           skiprows=1, dtype="str")
@@ -154,6 +157,12 @@ def convert_vt_to_v(B_T, V_T):
     V_predicted = V_minus_V_T_predicted + V_T
     
     return V_predicted
+
+
+def deredden():
+    """
+    """
+    pass
     
 # -----------------------------------------------------------------------------
 # Utilities Functions
@@ -209,7 +218,7 @@ def load_target_information(filepath="target_info.tsv"):
     pandas.read_csv.html#pandas.read_csv
     """
     # Import (TODO: specify dtypes)
-    tgt_info = pd.read_csv(filepath, sep="\t", header=1, index_col=5, 
+    tgt_info = pd.read_csv(filepath, sep="\t", header=1, index_col=8, 
                               skiprows=0)
     
     # Organise dataframe by removing duplicates
@@ -269,29 +278,12 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
     # how significant this is. Only Hmags have been populated for some stars, 
     # though it is unclear what impact this has on the calibration.
     for night in nights:
-        # Initialise record array
-        #bright = np.rec.array([(1,'Sirius', -1.45, 'A1V'),
-                              #(2,'Canopus', -0.73, 'F0Ib'),
-                             #(3,'Rigil Kent', -0.1, 'G2V')],
-                             #formats="int16,float32,float32,float32,float32,float32,int16,a20,a20",
-                            #names="TARGET_ID,DIAM,DIAMERR,HMAG,KMAG,VMAG,ISCAL,TARGET,INFO")
         
-        # Columns
-        # np.arange(1,len(all_nights[night])+1)
-        # tgt_info.LDD_V_W3
-        # tgt_info.e_LDD_V_W3
-        # tgt_info.Hmag
-        # tgt_info.Kmag
-        # tgt_info.Vmag
-        # tgt_info.Science.astype(int)
-        # tgt_info.Primary_pndrs
-        # np.repeat("(V-W3) diameter from Boyajian et al. 2014")
         failed = False
         
         ids = []
         # Grab the primary IDs
         for star in nights[night]:
-            #star = star.replace("_", "").replace(".","").replace(" ", "")
             prim_id = tgt_info[tgt_info.Primary==star].index
             try:
                 assert len(prim_id) > 0
@@ -309,38 +301,46 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         
         # Construct the record
         rec = tgt_info.loc[ids][["LDD_V_W3", "e_LDD_V_W3", "Hmag", "Kmag", 
-                                 "Vmag", "Science", "Primary"]]
+                                 "Vmag", "Science", "Ref_ID_1"]]
         
         # Invert, as column is for calibrator status
-        rec.Science =  np.abs(rec.Science - 1)#.astype("int32") - 1)
+        rec.Science =  np.abs(rec.Science - 1)
         rec["INFO"] = np.repeat("(V-W3) diameter from Boyajian et al. 2014",
                                 len(rec))
         
-        rec.insert(0,"TARGET_ID", np.arange(1,len(nights[night])+1))#.astype("int16"))
+        rec.insert(0,"TARGET_ID", np.arange(1,len(nights[night])+1))
         
-        formats="int16,float64,float64,float64,float64,float64,int32,string,string"
+        max_id = np.max([len(id) for id in rec["Ref_ID_1"]])
+        max_info = np.max([len(info) for info in rec["INFO"]])
+        
+        formats = "int16,float64,float64,float64,float64,float64,int32,a%s,a%s"
+        formats = formats % (max_id, max_info)
+        
         names = "TARGET_ID,DIAM,DIAMERR,HMAG,KMAG,VMAG,ISCAL,TARGET,INFO"
         rec = np.rec.array(rec.values.tolist(), names=names, formats=formats)
         
-        """
-        rec = rec.astype([("TARGET_ID","int16"), ("DIAM","float64"), 
-                          ("DIAMERR","float64"),("HMAG", "float64"), 
-                          ("KMAG", "float64"), ("VMAG", "float64"), 
-                          ("ISCAL", "int32"), ("TARGET", "string"), 
-                          ("INFO", "string")])
-        """
         # Construct a fits/astopy table in this form
         hdu = fits.BinTableHDU.from_columns(rec)
+        
+        hdu.header["EXTNAME"] = ("OIU_DIAM", 
+                                 "name of this binary table extension")
     
         # Save the fits file to the night directory
-        #fname = base_path + night + dir_suffix + "/" night + "_oiDiam.fits"
-        fname = base_path + night + "_oiDiam.fits"
-        hdu.writeto(fname, overwrite=True)
+        dir = base_path + night + dir_suffix 
         
-        # Done, move to the next night
-        print("...wrote %s, %s" % (night, nights[night]))
+        if os.path.exists(dir):
+            #fname = base_path + night + "_oiDiam.fits"
+            fname = dir + "/" + night + "_oiDiam.fits" 
+            hdu.writeto(fname, output_verify="warn", overwrite=True)
+            
+            # Done, move to the next night
+            print("...wrote %s, %s" % (night, nights[night]))
+        else:
+            # The directory does not exist, flag
+            print("...directory '%s' does not exist" % dir)
         
     return nights
+
 
 def save_nightly_pndrs_script():
     """This is a function to create and save the pndrs script files referenced

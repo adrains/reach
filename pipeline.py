@@ -137,7 +137,7 @@ pkl_sequences = open("sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
-nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, base_path="test/")
+nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
 
 # -----------------------------------------------------------------------------
 # (6) Write YYYY-MM-DD_pndrsScript.i
