@@ -159,10 +159,137 @@ def convert_vt_to_v(B_T, V_T):
     return V_predicted
 
 
-def deredden():
+def calculate_selective_extinction(B_mag, V_mag):
+    """Calculate the selective extinction (i.e. colour excess). This takes the
+    form:
+    
+    E(B-V) = A(B) - A(V)
+           = (B-V) - (B-V)_0
+           
+    Where E(B-V) is the selective extinction (i.e. the additional colour excess
+    caused by extinction), A(B) and A(V) are the extinctions in the B and V 
+    bands respectively, (B-V) is the observed B minus V colour, and (B-V)_0 is
+    the unextincted B minus V colour.
+    
+    See http://w.astro.berkeley.edu/~ay216/08/NOTES/Lecture05-08.pdf
+    
+    Parameters
+    ----------
+    B_mag: float
+        Apparent B band magnitude.
+    
+    V_mag: float
+        Apparent V band magnitude
+    
+    Returns
+    -------
+    e_bv: float
+        Selective extinction, E(B-V) = (B-V) - (B-V)_0
     """
+    # Import the true stellar colours
+    m_colour_relations = "mamajek_dwarf_colours.csv"
+    sk_colour_relations = "schmidt-kaler_bv_colours.csv"
+    
+    # Retrieve the true (B-V) colour of the star, interpolating as necessary
+    
+    # Calculate the selective extinction
+    e_bv = 0
+    
+    return e_bv
+    
+    
+#def calculate_normalised_extinction(e_bv, r_v):
+def calculate_v_band_extinction(e_bv, r_v):
+    """Calculate A(V) from: 
+    
+    R_V = A(V) / [A(B) - A(V)]
+        = A(V) / E(B-V)
+        
+    Where 1/R_V is the normalised extinction, and measures the steepness of the 
+    extinction curve. R_V = 3.1 +/- 0.2 is for the diffuse ISM, R ~= 5 is for 
+    dark interstellar clouds.
+    
+    A(V) is the V band extinction and serves as a scaling parameter. Thus:
+    
+    A(V) = R_V * E(B-V) 
+    
+    Parameters
+    ----------
+    e_bv: float
+        Selective extinction, E(B-V).
+    r_v: float
+        Ratio of total to selective extinction, A_V / E(B-V).
+    
+    Returns
+    -------
+    a_v: float
+        V band extinction.
+    """
+    a_v = r_v * e_bv
+    
+    return a_v
+    
+    
+def calculate_effective_wavelength(spt, filter):
+    """Given a stellar spectral type, and a particular photometric filter, 
+    return the effective wavelength.
+    
+    This is per discussion in Bessell et al. 1998. As an example: 
+     - "In broad-band photometry the nominal wavelength associated with a 
+        passband (the effective wavelength) shifts with the color of the star.
+        For Vega the effective wavelength of the V band is 5448 A and for the 
+        sun it is 5502 A"
+        
+    Ideally this function should just reference a grid of effective wavelengths
+    from a table comparing filters and spectral types.
+    
+    Parameters
+    ----------
+    spt: string
+        Spectral type of the star/s.
+        
+    filter: string
+        Name of the photometric band
+    
+    Returns
+    -------
+    filter_eff_lambda: float
+    
     """
     pass
+    
+    
+def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v):
+    """Use an extinction law to deredden photometry from a given band.
+    
+    Parameters
+    ----------
+    ext_mag: np.array of type float
+        The extincted magnitude.
+    
+    ext_mag_err: np.array of type float
+        Error in the extincted magnitude
+    
+    filter_eff_lamda: np.array of type float
+        Effective wavelength of the broad-band photometric filter specific to
+        stellar spectral type.
+    
+    a_v : np.array of type float
+        Scaling parameter, A_V: extinction in magnitudes at characteristic
+        V band wavelength.
+    r_v : np.array of type float
+        Ratio of total to selective extinction, A_V / E(B-V).
+        
+    Returns
+    -------
+    de_ext_mag: np.array of type float
+        The de-extincted magnitude.
+    
+    de_ext_mag_err: np.array of type float
+        Error in the de-extincted magnitude.
+    """
+    pass
+    
     
 # -----------------------------------------------------------------------------
 # Utilities Functions
