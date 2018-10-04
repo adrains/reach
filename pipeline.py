@@ -89,26 +89,34 @@ from astroquery.vizier import Vizier
 tgt_info = rch.load_target_information()
 
 # -----------------------------------------------------------------------------
-# (2) Estimate angular diameters for all targets
+# (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
 # -----------------------------------------------------------------------------
-# Do the following:
-#  i)   Convert Tycho V to Johnson system using Bessell 2000
-#  ii)  Correct for reddening 
-#  iii) Estimate angular diameters using colour relation
+# Convert Tycho V to Johnson system using Bessell 2000
 
 # For simplification during testing, remove any stars that fall outside the 
 # VT --> V conversion from Bessell 2000
 tgt_info = tgt_info.drop(["GJ551","HD133869"])
 
-# Convert VT to V
+# Convert VT and BT to V and B
 # TODO: proper treatment of magnitude errors
-tgt_info["Vmag"] = rch.convert_vt_to_v(tgt_info["BTmag"], tgt_info["VTmag"])   
+Bmag, Vmag = rch.convert_vtbt_to_vb(tgt_info["BTmag"], tgt_info["VTmag"])
+
+tgt_info["Bmag"] = Bmag   
+tgt_info["e_Bmag"] = tgt_info["e_BTmag"]
+
+tgt_info["Vmag"] = Vmag   
 tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
 
-# Correct for reddening 
+# -----------------------------------------------------------------------------
+# (3) Correct photometry for interstellar extinction
+# -----------------------------------------------------------------------------
 pass
 
-# Estimate angular diameters
+
+# -----------------------------------------------------------------------------
+# (4) Estimate angular diameters
+# -----------------------------------------------------------------------------
+# Estimate angular diameters using colour relation
 ldd, e_ldd = rch.predict_ldd_boyajian(tgt_info.Vmag, tgt_info.e_VTmag, 
                                     tgt_info.W3mag, tgt_info.e_W3mag, "V-W3")
                                     
@@ -116,7 +124,7 @@ tgt_info["LDD_V_W3"] = ldd
 tgt_info["e_LDD_V_W3"] = e_ldd
 
 # -----------------------------------------------------------------------------
-# (3) Import observing logs
+# (5) Import observing logs
 # -----------------------------------------------------------------------------
 # Load in the summarising data structures created in organise_obs.py
 # Format of this file is as follows
@@ -125,31 +133,40 @@ complete_sequences = pickle.load(pkl_obslog)
 pkl_obslog.close()
 
 # -----------------------------------------------------------------------------
-# (4) Inspect reduced data
+# (6) Inspect reduced data
 # -----------------------------------------------------------------------------
 # Check visibilities for anything unusual (?) or potential saturated data
+pass
 
 # -----------------------------------------------------------------------------
-# (5) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
+# (7) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
 # -----------------------------------------------------------------------------
 # Fits file with two HDUs: [0] is (empty) primary image, [1] is table of diams
 pkl_sequences = open("sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
-nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
+#nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
 
 # -----------------------------------------------------------------------------
-# (6) Write YYYY-MM-DD_pndrsScript.i
+# (8) Write YYYY-MM-DD_pndrsScript.i
 # -----------------------------------------------------------------------------
 # Do the following:
 #  i)  Exclude bad calibrators (informed by 5)
 #  ii) Split nights between sequences
+pass
 
 # -----------------------------------------------------------------------------
-# (7) Run pndrsCalibrate for each night of observing
+# (9) Run pndrsCalibrate for each night of observing
 # -----------------------------------------------------------------------------
+pass
 
 # -----------------------------------------------------------------------------
-# (8) Create summary pdf with vis^2 plots for all science targets
+# (10) Fit angular diameters to vis^2 of all science targets
 # -----------------------------------------------------------------------------
+pass
+
+# -----------------------------------------------------------------------------
+# (N) Create summary pdf with vis^2 plots for all science targets
+# -----------------------------------------------------------------------------
+pass
