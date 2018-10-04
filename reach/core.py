@@ -110,53 +110,65 @@ def calculate_ldd():
     pass
     
     
-def convert_vt_to_v(B_T, V_T):
-    """Convert Tycho V_T band magnitudes to Cousins-Johnson V band using 
-    relations from Bessell 2000:
+def convert_vtbt_to_vb(BTmag, VTmag):
+    """Convert Tycho BT and VT band magnitudes to Cousins-Johnson B and V band  
+    using relations from Bessell 2000:
         http://adsabs.harvard.edu/abs/2000PASP..112..961B)
     
     Import the relation points from file, fit a cubic spline to them, and use
-    that to predict the Cousins-Johnson V band magnitude.
+    that to predict the Cousins-Johnson B and V band magnitudes.
         
     Parameters
     ----------
-    B_T: float or float array
+    BTmag: float or float array
         Tycho B_T band magnitude.
-    V_T: float or float array
+    VTmag: float or float array
         Tycho V_T band magnitude.
     
     Returns
     -------
-    V_predicted: float or float array
+    Bmag: float or float array
+        The predicted B band magnitude in the Cousins-Johnson system.
+    Vmag: float or float array
         The predicted V band magnitude in the Cousins-Johnson system.
     """
     # Load the stored colour relations table in from Bessell 2000 (Table 2)
-    # Columns are: [B_T-V_T    V-V_T    (B-V)-(B_T-V_T)    V-H_P]
+    # Columns are: [BT-VT    V-VT    (B-V)-(BT-VT)    V-H_P]
     bessell_2000_rel_file = "bessell_2000_bt_colour_relations.csv"
     colour_rel = np.loadtxt(bessell_2000_rel_file, delimiter=",", skiprows=1)
     
-    # Create a cubic spline using the first two columns of the imported table
-    colour_func = interp1d(colour_rel[:,0], colour_rel[:,1], kind="cubic") 
+    # Create cubic splines interpolators to predict (V-VT) and delta(V-T)
+    # from (BT-VT) - second, third, and first column of the csv respectively
+    predict_V_minus_VT = interp1d(colour_rel[:,0], colour_rel[:,1], 
+                                  kind="cubic") 
+    predict_delta_B_minus_V = interp1d(colour_rel[:,0], colour_rel[:,2], 
+                                       kind="cubic") 
     
-    # Calculate (B_T-V_T)
-    B_T_minus_V_T = B_T - V_T
+    # Calculate (BT-VT)
+    BT_minus_VT = BTmag - VTmag
     
     # Interpolation only works for colour range in Bessell 2000 - reject values
     # that fall outside of this
-    if not np.min(B_T_minus_V_T) > np.min(colour_rel[:,0]):
+    if not np.min(BT_minus_VT) > np.min(colour_rel[:,0]):
        raise ColourOutOfBoundsException("Minimum (B_T-V_T) colour must be >"
                                         " %f20" % np.min(colour_rel[:,0]))
-    elif not np.max(B_T_minus_V_T) < np.max(colour_rel[:,0]):
+    elif not np.max(BT_minus_VT) < np.max(colour_rel[:,0]):
        raise ColourOutOfBoundsException("Maximum (B_T-V_T) colour must be <"
                                         " %f0" % np.max(colour_rel[:,0]))
     
-    # Predict (V-V_T) from (B_T-V_T)
-    V_minus_V_T_predicted = colour_func(B_T_minus_V_T)
+    # Predict (V-VT) from (BT-VT)
+    V_minus_VT= predict_V_minus_VT(BT_minus_VT)
     
-    # Determine V from the (V-V_T) prediction
-    V_predicted = V_minus_V_T_predicted + V_T
+    # Determine V from the (V-VT) prediction
+    Vmag = V_minus_VT + VTmag
     
-    return V_predicted
+    # Predict delta(B-V)
+    delta_B_minus_V = predict_delta_B_minus_V(BT_minus_VT)
+    
+    # Determine B from delta(B-V), BT, VT, and V
+    Bmag = delta_B_minus_V + BT_minus_VT + Vmag
+    
+    return Bmag, Vmag
 
 
 def calculate_selective_extinction(B_mag, V_mag):
