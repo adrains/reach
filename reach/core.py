@@ -5,6 +5,7 @@ from __future__ import division, print_function
 import os
 import csv
 import pickle
+import extinction
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
@@ -171,6 +172,78 @@ def convert_vtbt_to_vb(BTmag, VTmag):
     return Bmag, Vmag
 
 
+def create_spt_uv_grid(do_interpolate=True):
+    """
+    """
+    # Import the relations to be used
+    m_colour_relations = "mamajek_dwarf_colours.csv"
+    sk_colour_relations = "schmidt-kaler_bv_colours.csv"
+    
+    mcr = pd.read_csv("EEM_dwarf_UBVIJHK_colors_Teff.txt", comment="#", 
+                      nrows=123, delim_whitespace=True, engine="python", 
+                      index_col=0, na_values="...")
+    
+    skcr = pd.read_csv("schmidt-kaler_bv_colours.csv", sep=",", index_col=0)
+    
+    # Initialise new pandas dataframe to store the entire grid. This should
+    # be of the form:
+    # | SpT | Teff |              (B-V)_0              |
+    # |     |      | V | IV | III | II | Ib | Iab | Ia |
+    # The values for dwarfs should come from the Mamajek table, as should the
+    # labels and temperatures for the spectral types themselves. The (numeric)
+    # temperatures will then be interpolated over to cover the Mamajek rang of
+    # spectral types for the older (and less complete) Schmidt-Kaler dataset.
+    
+    # Remove the V from the Mamajek spectral types
+    mcr.index = [spt[:-1] for spt in mcr.index]
+    
+    # Initialise the grid, with nans for empty spaces (take care to consider 
+    # the difference between pandas views vs copy
+    grid = mcr[["Teff", "B-V"]].copy()
+    grid.rename(index=str, columns={"B-V":"V"}, inplace=True)
+    grid["IV"] = np.nan
+    grid["III"] = np.nan
+    grid["II"] = np.nan
+    grid["Ib"] = np.nan
+    grid["Iab"] = np.nan
+    grid["Ia"] = np.nan
+    
+    # Step through the Schmidt-Kaler relations and fill in the appropriate SpT
+    for row_i, row in skcr.iterrows():
+        if row.name in grid.index:
+            # Add values for each spectral type
+            grid.loc[row.name, "skV"] = row["V"]
+            grid.loc[row.name, "III"] = row["III"]
+            grid.loc[row.name, "II"] = row["II"]
+            grid.loc[row.name, "Ib"] = row["Ia"]
+            grid.loc[row.name, "Iab"] = row["Iab"]
+            grid.loc[row.name, "Ia"] = row["Ia"]
+    
+    # Option to abort in case we only want the raw data sans interpolation
+    if not do_interpolate:
+        return grid
+            
+    # Using the temperatures, interpolate each along each spectral type and 
+    # fill in the missing values
+    teff = grid["Teff"][~np.isnan(grid["III"])]
+    b_minus_v = grid["III"][~np.isnan(grid["III"])]
+    calc_b_minus_v = interp1d(teff, b_minus_v, kind="linear") 
+    
+    # Only interpolate for spectral types without values *within* the 
+    # interpolation range
+    for col in ["III", "II", "Ib", "Iab", "Ia"]:
+        unknown_i = (np.isnan(grid[col]) & (grid["Teff"] > np.min(teff)) 
+                          & (grid["Teff"] < np.max(teff)))
+
+        grid.loc[unknown_i, col] = calc_b_minus_v(grid["Teff"][unknown_i])
+    
+    # Interpolate across the spectral types to fill in the values for subgiants
+    
+    # Save and return the grid
+    return grid
+    
+    
+    
 def calculate_selective_extinction(B_mag, V_mag):
     """Calculate the selective extinction (i.e. colour excess). This takes the
     form:
@@ -211,7 +284,7 @@ def calculate_selective_extinction(B_mag, V_mag):
     
     
 #def calculate_normalised_extinction(e_bv, r_v):
-def calculate_v_band_extinction(e_bv, r_v):
+def calculate_v_band_extinction(e_bv, r_v=3.1):
     """Calculate A(V) from: 
     
     R_V = A(V) / [A(B) - A(V)]
@@ -271,8 +344,13 @@ def calculate_effective_wavelength(spt, filter):
     pass
     
     
-def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v):
+def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v=3.1):
     """Use an extinction law to deredden photometry from a given band.
+    
+    Relies on:
+        https://github.com/kbarbary/extinction
+    With documentation at:
+        https://extinction.readthedocs.io/en/latest/
     
     Parameters
     ----------
@@ -300,7 +378,10 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v):
     de_ext_mag_err: np.array of type float
         Error in the de-extincted magnitude.
     """
-    pass
+    # Use the Cardelli, Clayton, & Mathis 1989 extinction model
+    a_mag = extinction.ccm89(filter_eff_lambda, a_v, r_v)
+    
+    return a_mag
     
     
 # -----------------------------------------------------------------------------
