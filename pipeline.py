@@ -110,15 +110,43 @@ tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
 # -----------------------------------------------------------------------------
 # (3) Correct photometry for interstellar extinction
 # -----------------------------------------------------------------------------
-pass
+# These are the filter effective wavelengths *not* considering the effect of 
+# spectral type (Angstroms)
+filter_eff_lambda = {"B":4450, "V":5510, "J":12200, "H":16300, "K":21900, 
+                     "W1":34000, "W2":46000, "W3":120000, "W4":220000}
 
+# Import/create the SpT vs B-V grid
+grid = rch.create_spt_uv_grid()
+                     
+# Calculate selective extinction (i.e. (B-V) colour excess)
+tgt_info["eb_v"] = rch.calculate_selective_extinction(tgt_info["Bmag"], 
+                                                      tgt_info["Vmag"], 
+                                                      tgt_info["SpT_simple"],
+                                                      grid)
+
+# Calculate V band extinction
+tgt_info["A_V"] = rch.calculate_v_band_extinction(tgt_info["eb_v"])
+
+# Calculate the filter effective wavelength *considering* spectral type
+#eff_lambda = rch.calculate_effective_wavelength(tgt_info["SpT"], filter_list)
+
+# Deredden photometry
+a_mags = rch.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
+                                           "Kmag", "W1mag","W2mag", "W3mag", 
+                                           "W4mag"]], 
+                                 tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
+                                           "e_Hmag", "e_Kmag", "e_W1mag",  
+                                           "e_W2mag", "e_W3mag", "e_W4mag"]], 
+                                 np.array(filter_eff_lambda.values()).astype(float), 
+                                 tgt_info["A_V"])
 
 # -----------------------------------------------------------------------------
 # (4) Estimate angular diameters
 # -----------------------------------------------------------------------------
-# Estimate angular diameters using colour relation
+# Estimate angular diameters using colour relations. We want to do this using 
+# as many colour combos as is feasible, as this can be a useful diagnostic
 ldd, e_ldd = rch.predict_ldd_boyajian(tgt_info.Vmag, tgt_info.e_VTmag, 
-                                    tgt_info.W3mag, tgt_info.e_W3mag, "V-W3")
+                                      tgt_info.W3mag, tgt_info.e_W3mag, "V-W3")
                                     
 tgt_info["LDD_V_W3"] = ldd
 tgt_info["e_LDD_V_W3"] = e_ldd

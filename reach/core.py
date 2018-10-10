@@ -14,7 +14,7 @@ from collections import OrderedDict
 from scipy.interpolate import interp1d
 
 # -----------------------------------------------------------------------------
-# Science Functions
+# Angular Diameters
 # -----------------------------------------------------------------------------
 class ColourOutOfBoundsException(Exception):
     pass
@@ -110,7 +110,10 @@ def calculate_ldd():
     """
     pass
     
-    
+
+# -----------------------------------------------------------------------------
+# Photometry/Reddening
+# -----------------------------------------------------------------------------    
 def convert_vtbt_to_vb(BTmag, VTmag):
     """Convert Tycho BT and VT band magnitudes to Cousins-Johnson B and V band  
     using relations from Bessell 2000:
@@ -223,28 +226,30 @@ def create_spt_uv_grid(do_interpolate=True):
     if not do_interpolate:
         return grid
             
-    # Using the temperatures, interpolate each along each spectral type and 
-    # fill in the missing values
-    teff = grid["Teff"][~np.isnan(grid["III"])]
-    b_minus_v = grid["III"][~np.isnan(grid["III"])]
-    calc_b_minus_v = interp1d(teff, b_minus_v, kind="linear") 
-    
     # Only interpolate for spectral types without values *within* the 
     # interpolation range
     for col in ["III", "II", "Ib", "Iab", "Ia"]:
+        # Using the temperatures, interpolate each along each spectral type and 
+        # fill in the missing values
+        teff = grid["Teff"][~np.isnan(grid[col])]
+        b_minus_v = grid[col][~np.isnan(grid[col])]
+        calc_b_minus_v = interp1d(teff, b_minus_v, kind="linear") 
+        
         unknown_i = (np.isnan(grid[col]) & (grid["Teff"] > np.min(teff)) 
                           & (grid["Teff"] < np.max(teff)))
 
         grid.loc[unknown_i, col] = calc_b_minus_v(grid["Teff"][unknown_i])
     
     # Interpolate across the spectral types to fill in the values for subgiants
+    # TODO - this is *bad*
+    grid["IV"] = (grid["V"] + grid["III"]) / 2
     
     # Save and return the grid
     return grid
     
     
     
-def calculate_selective_extinction(B_mag, V_mag):
+def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
     """Calculate the selective extinction (i.e. colour excess). This takes the
     form:
     
@@ -276,11 +281,29 @@ def calculate_selective_extinction(B_mag, V_mag):
     sk_colour_relations = "schmidt-kaler_bv_colours.csv"
     
     # Retrieve the true (B-V) colour of the star, interpolating as necessary
+    classes = ["IV", "V", "III", "II", "Ib", "Iab", "Ia"]
     
-    # Calculate the selective extinction
-    e_bv = 0
+    bv_0_all = np.zeros(len(B_mag))
     
-    return e_bv
+    lum_class_matched = False
+    
+    for spt_i, spt_full in enumerate(sptypes):
+        # Determine class
+        for lum_class in classes:
+            if lum_class in spt_full:
+                lum_class_matched = True
+                break
+               
+        assert lum_class_matched
+        
+        spt = spt_full.replace(lum_class, "")
+    
+        bv_0_all[spt_i] = grid.loc[spt, lum_class]
+        
+    ebv = (B_mag - V_mag) - bv_0_all
+    
+    return ebv
+        
     
     
 #def calculate_normalised_extinction(e_bv, r_v):
@@ -344,7 +367,7 @@ def calculate_effective_wavelength(spt, filter):
     pass
     
     
-def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v=3.1):
+def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
     """Use an extinction law to deredden photometry from a given band.
     
     Relies on:
@@ -378,10 +401,16 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lamda, a_v, r_v=3.1):
     de_ext_mag_err: np.array of type float
         Error in the de-extincted magnitude.
     """
-    # Use the Cardelli, Clayton, & Mathis 1989 extinction model
-    a_mag = extinction.ccm89(filter_eff_lambda, a_v, r_v)
+    # Create grid of extinction
+    a_mags = np.zeros(ext_mag.shape)
     
-    return a_mag
+    for star_i, star in enumerate(ext_mag.itertuples(index=False)):
+        a_mags[star_i,:] = extinction.ccm89(filter_eff_lambda, a_v[star_i], r_v)
+    
+    # Use the Cardelli, Clayton, & Mathis 1989 extinction model
+    #a_mag = extinction.ccm89(filter_eff_lambda, a_v, r_v)
+    
+    return a_mags
     
     
 # -----------------------------------------------------------------------------
@@ -570,7 +599,7 @@ def save_nightly_pndrs_script():
     
     Important here are the following commands:
         - Ignore some observations: oiFitsFlagOiData
-        - Splot the night: oiFitsSplitNight
+        - Split the night: oiFitsSplitNight
     """
     for night in all_nights:
         # Initialise empty string for YYYY-MM-DD_pndrsScript.i

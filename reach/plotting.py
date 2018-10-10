@@ -15,17 +15,24 @@ def plot_diameter_comparison(diam_series_1, diam_series_2, diam_label_1,
     
 
 def plot_bv_intrinsic(grid):
-    """
+    """Function to plot the grid of (B-V) colours for visualisation/comparison
+    purposes.
+    
+    Parameters
+    ----------
+    grid: pandas dataframe
+        The grid mapping Teff to SpT and (B-V)_0
     """
     plt.close("all")
     plt.figure()
     plt.plot(grid["Teff"], grid["V"], "*-", label="V (Mamajek)")
     plt.plot(grid["Teff"], grid["skV"], "o", label="V (Schmidt-Kaler)")
-    plt.plot(grid["Teff"], grid["III"], "x", label="III (Schmidt-Kaler)")
-    plt.plot(grid["Teff"], grid["II"], "+", label="II (Schmidt-Kaler)")
-    #plt.plot(grid["Teff"], grid["Ib"], label="Ib")
-    #plt.plot(grid["Teff"], grid["Iab"], label="Iab")
-    #plt.plot(grid["Teff"], grid["Ia"], label="Ia")
+    plt.plot(grid["Teff"], grid["IV"], "1-", label="IV (Mean V-III)")
+    plt.plot(grid["Teff"], grid["III"], "x-", label="III (Schmidt-Kaler)")
+    plt.plot(grid["Teff"], grid["II"], "+-", label="II (Schmidt-Kaler)")
+    plt.plot(grid["Teff"], grid["Ib"], "v-", label="Ib (Schmidt-Kaler)")
+    plt.plot(grid["Teff"], grid["Iab"], "s-", label="Iab (Schmidt-Kaler)")
+    plt.plot(grid["Teff"], grid["Ia"], "d-", label="Ia (Schmidt-Kaler)")
     
     flip = True
     for row_i, row in grid.iterrows():
@@ -42,3 +49,43 @@ def plot_bv_intrinsic(grid):
     plt.xscale("log")
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("intrinsic_colours.pdf")
+    
+def plot_extinction_hists(a_mags, tgt_info):
+    """Function for plotting diagnostic extinction related plots.
+    """
+    plt.close("all")
+    plt.figure()
+    
+    mag_labels = ["B", "V", "J", "H", "K", "W1", "W2", "W3", "W4"]
+    
+    for mag_i, mag in enumerate(a_mags.T):
+        plt.hist(mag[~np.isnan(mag)], bins=25, label=mag_labels[mag_i], alpha=0.25)
+    
+    plt.title("Distribution of stellar extinction, B through W4 filters")
+    plt.xlabel("Extinction (mags)")
+    plt.ylabel("# Stars")
+    plt.legend(loc="best")
+    
+    plt.figure()
+    dists = 1000/tgt_info["Plx"]
+    
+    for mag_i, mag in enumerate(a_mags.T): 
+        plt.plot(dists, mag, "+", label=mag_labels[mag_i])
+        
+    plt.plot(dists, tgt_info["A_V"], "o", label="A_V")    
+    plt.xlabel("Dist (pc)")
+    plt.ylabel("Extinction (mags)")
+    plt.legend(loc="best")
+    
+    
+def plot_distance_hists(tgt_info):
+    """Function to plot a distance histogram of all targets.
+    """
+    plt.close("all")
+    plt.figure()
+    
+    plt.hist(1000/tgt_info["Plx"][~np.isnan(tgt_info["Plx"])], bins=25, alpha=0.75)
+    plt.xlabel("Distance (pc)")
+    plt.ylabel("# Stars")
+    
+    
