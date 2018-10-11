@@ -5,13 +5,22 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_diameter_comparison(diam_series_1, diam_series_2, diam_label_1, 
-                             diam_label_2):
+def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
+                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
     """
     """
-    plt.scatter(diam_series_1, diam_series_2)
-    plt.xlabel(diam_label_1 + "(mas)")
-    plt.ylabel(diam_label_2 + "(mas)")
+    plt.close("all")
+    plt.figure()
+    plt.plot(diam_rel_1, diam_rel_2, "*", label="Reddened", alpha=0.5)
+    plt.plot(diam_rel_1_dr, diam_rel_2_dr, "+", label="Corrected", alpha=0.5)
+    plt.title("Angular diameter comparison for reddened and corrected photometry")
+    plt.xlabel(diam_rel_1_label + "(mas)")
+    plt.ylabel(diam_rel_2_label + "(mas)")
+    plt.legend(loc="best")
+    plt.xlim([0,5])
+    plt.ylim([0,5])
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("angular_diameter_comp.pdf")
     
 
 def plot_bv_intrinsic(grid):
@@ -65,6 +74,8 @@ def plot_extinction_hists(a_mags, tgt_info):
     plt.xlabel("Extinction (mags)")
     plt.ylabel("# Stars")
     plt.legend(loc="best")
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("plots/extinction_hists.pdf")
     
     plt.figure()
     dists = 1000/tgt_info["Plx"]
@@ -72,10 +83,17 @@ def plot_extinction_hists(a_mags, tgt_info):
     for mag_i, mag in enumerate(a_mags.T): 
         plt.plot(dists, mag, "+", label=mag_labels[mag_i])
         
-    plt.plot(dists, tgt_info["A_V"], "o", label="A_V")    
+    ids = tgt_info.index.values
+    
+    for star_i, star in enumerate(ids):
+        plt.text(dists[star_i], -0.25, star, fontsize=6, rotation="vertical",
+                     horizontalalignment="center")
+          
     plt.xlabel("Dist (pc)")
     plt.ylabel("Extinction (mags)")
     plt.legend(loc="best")
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("plots/extinction_vs_distance.pdf")
     
     
 def plot_distance_hists(tgt_info):

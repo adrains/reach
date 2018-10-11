@@ -114,6 +114,9 @@ tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
 # spectral type (Angstroms)
 filter_eff_lambda = {"B":4450, "V":5510, "J":12200, "H":16300, "K":21900, 
                      "W1":34000, "W2":46000, "W3":120000, "W4":220000}
+                     
+filter_eff_lambda = np.array([4450., 5510., 12200., 16300., 21900., 34000., 
+                              46000., 120000., 220000.])
 
 # Import/create the SpT vs B-V grid
 grid = rch.create_spt_uv_grid()
@@ -130,26 +133,54 @@ tgt_info["A_V"] = rch.calculate_v_band_extinction(tgt_info["eb_v"])
 # Calculate the filter effective wavelength *considering* spectral type
 #eff_lambda = rch.calculate_effective_wavelength(tgt_info["SpT"], filter_list)
 
-# Deredden photometry
+# Determine extinction
 a_mags = rch.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
                                            "Kmag", "W1mag","W2mag", "W3mag", 
                                            "W4mag"]], 
                                  tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
                                            "e_Hmag", "e_Kmag", "e_W1mag",  
                                            "e_W2mag", "e_W3mag", "e_W4mag"]], 
-                                 np.array(filter_eff_lambda.values()).astype(float), 
-                                 tgt_info["A_V"])
+                                 filter_eff_lambda, tgt_info["A_V"])
+                                 
+# Correct magnitudes for extinction
+# TODO: Only correct the magnitudes if the star is beyond the local bubble
+tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0]
+tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1]
+tgt_info["Jmag_dr"] = tgt_info["Jmag"] - a_mags[:,2]
+tgt_info["Hmag_dr"] = tgt_info["Hmag"] - a_mags[:,3]
+tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4]
+#tgt_info["W1mag_dr"] = a_mags[:,5]
+#tgt_info["W2mag_dr"] = a_mags[:,6]
+#tgt_info["W3mag_dr"] = a_mags[:,7]
+#tgt_info["W4mag_dr"] = a_mags[:,8]
 
 # -----------------------------------------------------------------------------
 # (4) Estimate angular diameters
 # -----------------------------------------------------------------------------
 # Estimate angular diameters using colour relations. We want to do this using 
 # as many colour combos as is feasible, as this can be a useful diagnostic
-ldd, e_ldd = rch.predict_ldd_boyajian(tgt_info.Vmag, tgt_info.e_VTmag, 
-                                      tgt_info.W3mag, tgt_info.e_W3mag, "V-W3")
-                                    
-tgt_info["LDD_V_W3"] = ldd
-tgt_info["e_LDD_V_W3"] = e_ldd
+ldd_vk, e_ldd_vk = rch.predict_ldd_boyajian(tgt_info["Vmag"], tgt_info["e_VTmag"], 
+                                            tgt_info["Kmag"], tgt_info["e_Kmag"], 
+                                            "V-K")
+ldd_vw3, e_ldd_vw3 = rch.predict_ldd_boyajian(tgt_info["Vmag"], tgt_info["e_VTmag"], 
+                                            tgt_info["W3mag"], tgt_info["e_W3mag"], 
+                                            "V-W3")
+                                            
+ldd_vk_dr, e_ldd_vk_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], tgt_info["e_VTmag"], 
+                                            tgt_info["Kmag_dr"], tgt_info["e_Kmag"], 
+                                            "V-K")
+ldd_vw3_dr, e_ldd_vw3_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], tgt_info["e_VTmag"], 
+                                            tgt_info["W3mag"], tgt_info["e_W3mag"], 
+                                            "V-W3")                                            
+                                                     
+tgt_info["LDD_VK"] = ldd_vk
+tgt_info["LDD_VW3"] = ldd_vw3
+tgt_info["LDD_VK_dr"] = ldd_vk_dr
+tgt_info["LDD_VW3_dr"] = ldd_vw3_dr
+#tgt_info["e_LDD_V_W3"] = e_ldd
+
+
+rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", "(V-W3)")
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
