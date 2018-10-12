@@ -78,6 +78,7 @@ import pandas as pd
 import reach.core as rch
 import reach.plotting as rplt
 import pickle
+import platform
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
 
@@ -159,35 +160,45 @@ tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4]
 # -----------------------------------------------------------------------------
 # Estimate angular diameters using colour relations. We want to do this using 
 # as many colour combos as is feasible, as this can be a useful diagnostic
-ldd_vk, e_ldd_vk = rch.predict_ldd_boyajian(tgt_info["Vmag"], tgt_info["e_VTmag"], 
-                                            tgt_info["Kmag"], tgt_info["e_Kmag"], 
-                                            "V-K")
-ldd_vw3, e_ldd_vw3 = rch.predict_ldd_boyajian(tgt_info["Vmag"], tgt_info["e_VTmag"], 
-                                            tgt_info["W3mag"], tgt_info["e_W3mag"], 
-                                            "V-W3")
+ldd_vk, e_ldd_vk = rch.predict_ldd_boyajian(tgt_info["Vmag"], 
+                                            tgt_info["e_VTmag"], 
+                                            tgt_info["Kmag"], 
+                                            tgt_info["e_Kmag"], "V-K")
                                             
-ldd_vk_dr, e_ldd_vk_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], tgt_info["e_VTmag"], 
-                                            tgt_info["Kmag_dr"], tgt_info["e_Kmag"], 
-                                            "V-K")
-ldd_vw3_dr, e_ldd_vw3_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], tgt_info["e_VTmag"], 
-                                            tgt_info["W3mag"], tgt_info["e_W3mag"], 
-                                            "V-W3")                                            
+ldd_vw3, e_ldd_vw3 = rch.predict_ldd_boyajian(tgt_info["Vmag"], 
+                                              tgt_info["e_VTmag"], 
+                                              tgt_info["W3mag"], 
+                                              tgt_info["e_W3mag"], "V-W3")
+                                            
+ldd_vk_dr, e_ldd_vk_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+                                                  tgt_info["e_VTmag"], 
+                                                  tgt_info["Kmag_dr"], 
+                                                  tgt_info["e_Kmag"], "V-K")
+                                                  
+ldd_vw3_dr, e_ldd_vw3_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+                                                    tgt_info["e_VTmag"], 
+                                                    tgt_info["W3mag"], 
+                                                    tgt_info["e_W3mag"],"V-W3")                                            
                                                      
-tgt_info["LDD_VK"] = ldd_vk
-tgt_info["LDD_VW3"] = ldd_vw3
+#tgt_info["LDD_VK"] = ldd_vk
+#tgt_info["e_LDD_VK"] = e_ldd_vk
+#tgt_info["LDD_VW3"] = ldd_vw3
+#tgt_info["e_LDD_VK"] = e_ldd_vk
 tgt_info["LDD_VK_dr"] = ldd_vk_dr
+tgt_info["e_LDD_VK_dr"] = e_ldd_vk_dr
+
 tgt_info["LDD_VW3_dr"] = ldd_vw3_dr
-#tgt_info["e_LDD_V_W3"] = e_ldd
+tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
 
-
-rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", "(V-W3)")
+#rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", 
+                               #"(V-W3)")
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
 # -----------------------------------------------------------------------------
 # Load in the summarising data structures created in organise_obs.py
 # Format of this file is as follows
-pkl_obslog = open("pionier_observing_log.pkl", "r")
+pkl_obslog = open("data/pionier_observing_log.pkl", "r")
 complete_sequences = pickle.load(pkl_obslog)
 pkl_obslog.close()
 
@@ -201,11 +212,15 @@ pass
 # (7) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
 # -----------------------------------------------------------------------------
 # Fits file with two HDUs: [0] is (empty) primary image, [1] is table of diams
-pkl_sequences = open("sequences.pkl", "r")
+pkl_sequences = open("data/sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
-#nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
+if "wintermute" not in platform.node():
+    nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
+else:
+    nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
+                                  run_local=True)
 
 # -----------------------------------------------------------------------------
 # (8) Write YYYY-MM-DD_pndrsScript.i

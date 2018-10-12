@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pylab as plt
 from astropy.io import fits
 from collections import OrderedDict
+from scipy.special import jv
 from scipy.interpolate import interp1d
 
 # -----------------------------------------------------------------------------
@@ -56,7 +57,7 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     #  a2, a2_err, a3, a3_err, Reduced chi^2, err (%)]
     dd = os.path.dirname(__file__)[:-5]
     boyajian_2014_rel_file = os.path.join(dd, 
-                            "boyajian_2014_colour_diameter_relations.csv")
+                            "data/boyajian_2014_colour_diameter_relations.csv")
     
     diam_rel = np.loadtxt(boyajian_2014_rel_file, delimiter=",", 
                           skiprows=1, dtype="str")
@@ -103,14 +104,79 @@ def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
     return log_ldd, log_ldd_err, ldd, ldd_err   
      
 
-def calculate_ldd():
-    """Calculates limb-darkened disk model to fit to observations as outlined 
-    in Hanbury Brown et al. 1974: 
+def calculate_visibility(b_on_lambda, u_lld, ldd):
+    """Calculates fringe visibility assuming a linearly limb-darkened disk. As 
+    outlined in Hanbury Brown et al. 1974: 
         http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
+        
+    This function is used in fit_for_ldd.
+        
+    Parameters
+    ----------
+    b_on_lambda: float or float array
+        The projected baseline B (m), divided by the wavelength lambda (m)
+    
+    u_lld: float or float array
+        The wavelength dependent linear limb-darkening coefficient
+    
+    ldd: float or float array
+        The limb-darkened angular diameter (mas)
+        
+    Returns
+    -------
+    vis: float or float array
+        Calibrated fringe visibility
+    """
+    x = np.pi * b_on_lambda * ldd
+    
+    vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
+          ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
+          
+    return vis
+          
+          
+def fit_for_ldd():
+    """
     """
     pass
-    
 
+
+
+def get_linear_limb_darkening_coeff(logg, teff, filter):
+    """Function to compute the linear-limb darkening coefficients per
+    Claret and Bloemen 2011:
+    
+    http://adsabs.harvard.edu/abs/2011A%26A...529A..75C
+    
+    Paremeters
+    ----------
+    logg: float or float array
+        The stellar surface gravity
+        
+    teff: float or float array
+        The stellar effective temperature in Kelvin
+        
+    filter: string or string array
+        The filter bandpass to use
+        
+    Returns
+    -------
+    u_ld: float or floar array
+        The wavelength dependent linear limb-darkening coefficient
+        
+    u_ld_err: float or float array
+        The error on u_ld
+    """
+    file = "data/claret_bloemen_ld_grid.fits" 
+    
+    # Interpolate along logg and Teff for all entries for filter
+    
+    # Determine value for u given logg and teff
+    
+    # Return the results    
+    pass
+    
+    
 # -----------------------------------------------------------------------------
 # Photometry/Reddening
 # -----------------------------------------------------------------------------    
@@ -138,7 +204,7 @@ def convert_vtbt_to_vb(BTmag, VTmag):
     """
     # Load the stored colour relations table in from Bessell 2000 (Table 2)
     # Columns are: [BT-VT    V-VT    (B-V)-(BT-VT)    V-H_P]
-    bessell_2000_rel_file = "bessell_2000_bt_colour_relations.csv"
+    bessell_2000_rel_file = "data/bessell_2000_bt_colour_relations.csv"
     colour_rel = np.loadtxt(bessell_2000_rel_file, delimiter=",", skiprows=1)
     
     # Create cubic splines interpolators to predict (V-VT) and delta(V-T)
@@ -179,14 +245,14 @@ def create_spt_uv_grid(do_interpolate=True):
     """
     """
     # Import the relations to be used
-    m_colour_relations = "mamajek_dwarf_colours.csv"
-    sk_colour_relations = "schmidt-kaler_bv_colours.csv"
+    m_colour_relations = "data/EEM_dwarf_UBVIJHK_colors_Teff.txt"
+    sk_colour_relations = "data/schmidt-kaler_bv_colours.csv"
     
-    mcr = pd.read_csv("EEM_dwarf_UBVIJHK_colors_Teff.txt", comment="#", 
-                      nrows=123, delim_whitespace=True, engine="python", 
-                      index_col=0, na_values="...")
+    mcr = pd.read_csv(m_colour_relations, comment="#", nrows=123, 
+                      delim_whitespace=True, engine="python", index_col=0, 
+                      na_values="...")
     
-    skcr = pd.read_csv("schmidt-kaler_bv_colours.csv", sep=",", index_col=0)
+    skcr = pd.read_csv(sk_colour_relations, sep=",", index_col=0)
     
     # Initialise new pandas dataframe to store the entire grid. This should
     # be of the form:
@@ -276,10 +342,6 @@ def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
     e_bv: float
         Selective extinction, E(B-V) = (B-V) - (B-V)_0
     """
-    # Import the true stellar colours
-    m_colour_relations = "mamajek_dwarf_colours.csv"
-    sk_colour_relations = "schmidt-kaler_bv_colours.csv"
-    
     # Retrieve the true (B-V) colour of the star, interpolating as necessary
     classes = ["IV", "V", "III", "II", "Ib", "Iab", "Ia"]
     
@@ -305,8 +367,6 @@ def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
     return ebv
         
     
-    
-#def calculate_normalised_extinction(e_bv, r_v):
 def calculate_v_band_extinction(e_bv, r_v=3.1):
     """Calculate A(V) from: 
     
@@ -405,7 +465,8 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
     a_mags = np.zeros(ext_mag.shape)
     
     for star_i, star in enumerate(ext_mag.itertuples(index=False)):
-        a_mags[star_i,:] = extinction.ccm89(filter_eff_lambda, a_v[star_i], r_v)
+        a_mags[star_i,:] = extinction.ccm89(filter_eff_lambda, a_v[star_i], 
+                                            r_v)
     
     # Use the Cardelli, Clayton, & Mathis 1989 extinction model
     #a_mag = extinction.ccm89(filter_eff_lambda, a_v, r_v)
@@ -453,13 +514,13 @@ def summarise_sequences():
                                          target_list[tgt_i][1],
                                          target_list[tgt_i+3][1]]
     
-    pkl_sequences = open("sequences.pkl", "wb")
+    pkl_sequences = open("data/sequences.pkl", "wb")
     pickle.dump(sequences, pkl_sequences)
     pkl_sequences.close()
     
     return sequences
     
-def load_target_information(filepath="target_info.tsv"):
+def load_target_information(filepath="data/target_info.tsv"):
     """Loads in the target information tsv (tab separated) as a pandas 
     dataframne with appropriate column labels and rows labelled as each star.
     
@@ -491,8 +552,8 @@ def summarise_observations():
     pass
     
 def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
-                     base_path="/priv/mulga1/arains/pionier/complete_sequences/",
-                     dir_suffix="_v3.73_abcd"):
+                base_path="/priv/mulga1/arains/pionier/complete_sequences/",
+                dir_suffix="_v3.73_abcd", run_local=False):
     """This is a function to create and save the oiDiam.fits files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
@@ -549,7 +610,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         ids.sort()   
         
         # Construct the record
-        rec = tgt_info.loc[ids][["LDD_V_W3", "e_LDD_V_W3", "Hmag", "Kmag", 
+        rec = tgt_info.loc[ids][["LDD_VW3_dr", "e_LDD_VW3_dr", "Hmag", "Kmag", 
                                  "Vmag", "Science", "Ref_ID_1"]]
         
         # Invert, as column is for calibrator status
@@ -575,7 +636,10 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
                                  "name of this binary table extension")
     
         # Save the fits file to the night directory
-        dir = base_path + night + dir_suffix 
+        if not run_local:
+            dir = base_path + night + dir_suffix
+        else:
+            dir = "test/"
         
         if os.path.exists(dir):
             #fname = base_path + night + "_oiDiam.fits"

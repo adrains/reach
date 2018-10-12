@@ -13,14 +13,14 @@ def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr,
     plt.figure()
     plt.plot(diam_rel_1, diam_rel_2, "*", label="Reddened", alpha=0.5)
     plt.plot(diam_rel_1_dr, diam_rel_2_dr, "+", label="Corrected", alpha=0.5)
-    plt.title("Angular diameter comparison for reddened and corrected photometry")
+    plt.title("Angular diameter comparison for reddened/corrected photometry")
     plt.xlabel(diam_rel_1_label + "(mas)")
     plt.ylabel(diam_rel_2_label + "(mas)")
     plt.legend(loc="best")
     plt.xlim([0,5])
     plt.ylim([0,5])
     plt.gcf().set_size_inches(16, 9)
-    plt.savefig("angular_diameter_comp.pdf")
+    plt.savefig("plots/angular_diameter_comp.pdf")
     
 
 def plot_bv_intrinsic(grid):
@@ -57,7 +57,7 @@ def plot_bv_intrinsic(grid):
     plt.xlim([46000,2400])
     plt.xscale("log")
     plt.gcf().set_size_inches(16, 9)
-    plt.savefig("intrinsic_colours.pdf")
+    plt.savefig("plots/intrinsic_colours.pdf")
     
 def plot_extinction_hists(a_mags, tgt_info):
     """Function for plotting diagnostic extinction related plots.
@@ -68,7 +68,8 @@ def plot_extinction_hists(a_mags, tgt_info):
     mag_labels = ["B", "V", "J", "H", "K", "W1", "W2", "W3", "W4"]
     
     for mag_i, mag in enumerate(a_mags.T):
-        plt.hist(mag[~np.isnan(mag)], bins=25, label=mag_labels[mag_i], alpha=0.25)
+        plt.hist(mag[~np.isnan(mag)], bins=25, label=mag_labels[mag_i], 
+                 alpha=0.25)
     
     plt.title("Distribution of stellar extinction, B through W4 filters")
     plt.xlabel("Extinction (mags)")
@@ -102,7 +103,8 @@ def plot_distance_hists(tgt_info):
     plt.close("all")
     plt.figure()
     
-    plt.hist(1000/tgt_info["Plx"][~np.isnan(tgt_info["Plx"])], bins=25, alpha=0.75)
+    plt.hist(1000/tgt_info["Plx"][~np.isnan(tgt_info["Plx"])], bins=25, 
+             alpha=0.75)
     plt.xlabel("Distance (pc)")
     plt.ylabel("# Stars")
     
