@@ -216,11 +216,14 @@ pkl_sequences = open("data/sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
-if "wintermute" not in platform.node():
+do_diam_est = False
+
+if "wintermute" not in platform.node() and do_diam_est:
     nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
-else:
+elif do_diam_est:
     nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
-                                  run_local=True)
+                                  run_local=True, ldd_col="LDD_VK_dr", 
+                                  e_ldd_col="e_LDD_VK_dr")
 
 # -----------------------------------------------------------------------------
 # (8) Write YYYY-MM-DD_pndrsScript.i
@@ -238,7 +241,23 @@ pass
 # -----------------------------------------------------------------------------
 # (10) Fit angular diameters to vis^2 of all science targets
 # -----------------------------------------------------------------------------
-pass
+# Determine the linear LDD coefficents
+feh = -0.29
+teff = 7014
+logg = 4.04
+
+u_lld = rch.get_linear_limb_darkening_coeff(logg, teff, feh, "H")
+
+# Get the visibilities
+testfile = "results/2018-04-18_SCI_bet_TrA_oidataCalibrated.fits"
+#testdata = fits.open(testfile)
+
+vis2, e_vis2, baselines, wavelengths = rch.extract_vis2(testfile)
+
+popt, pcov = rch.fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, 
+                             tgt_info.loc["HD141891"]["LDD_VK_dr"])
+
+
 
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets

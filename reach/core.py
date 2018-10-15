@@ -8,11 +8,13 @@ import pickle
 import extinction
 import numpy as np
 import pandas as pd
+import reach.plotting as rplt
 import matplotlib.pylab as plt
 from astropy.io import fits
 from collections import OrderedDict
 from scipy.special import jv
-from scipy.interpolate import interp1d
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d, griddata, LinearNDInterpolator
 
 # -----------------------------------------------------------------------------
 # Angular Diameters
@@ -104,12 +106,16 @@ def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
     return log_ldd, log_ldd_err, ldd, ldd_err   
      
 
-def calculate_visibility(b_on_lambda, u_lld, ldd):
+def calculate_visibility(b_on_lambda, ldd, u_lld):
     """Calculates fringe visibility assuming a linearly limb-darkened disk. As 
     outlined in Hanbury Brown et al. 1974: 
         http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
         
     This function is used in fit_for_ldd.
+    
+    Lambda function per:
+        https://stackoverflow.com/questions/12208634/fitting-only-one-
+        parameter-of-a-function-with-many-parameters-in-python
         
     Parameters
     ----------
@@ -127,7 +133,7 @@ def calculate_visibility(b_on_lambda, u_lld, ldd):
     vis: float or float array
         Calibrated fringe visibility
     """
-    x = np.pi * b_on_lambda * ldd
+    x = np.pi * b_on_lambda * (ldd / 1000 / 3600 / 180 * np.pi)
     
     vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
           ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
@@ -135,14 +141,43 @@ def calculate_visibility(b_on_lambda, u_lld, ldd):
     return vis
           
           
-def fit_for_ldd():
+def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     """
     """
-    pass
+    n_bl = len(baselines)
+    n_wl = len(wavelengths)
+    bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
+    wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+    b_on_lambda = (bl_grid / wl_grid).flatten()
+    
+    vis = np.sqrt(vis2.flatten())
+    e_vis = np.abs(vis * 0.5 * e_vis2.flatten() / vis2.flatten())
+    
+    popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred: 
+                            calculate_visibility(b_on_lambda, ldd_pred, u_lld)), 
+                            b_on_lambda, vis, sigma=e_vis, bounds=(0.1, 10))
+
+    print("Predicted: %f, Actual: %f" % (ldd_pred, popt[0]))
+    rplt.plot_vis_fit(b_on_lambda, vis, e_vis, popt[0], ldd_pred, u_lld)
+                           
+    return popt, pcov
 
 
 
-def get_linear_limb_darkening_coeff(logg, teff, filter):
+def extract_vis2(oi_fits_file):
+    """
+    """
+    oidata = fits.open(oi_fits_file)[4].data
+    
+    vis2 = oidata["VIS2DATA"]
+    e_vis2 = oidata["VIS2ERR"]
+    baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+    wavelengths = fits.open(oi_fits_file)[2].data["EFF_WAVE"]
+    
+    return vis2, e_vis2, baselines, wavelengths
+
+
+def get_linear_limb_darkening_coeff(logg, teff, feh, filt, xi=2.0):
     """Function to compute the linear-limb darkening coefficients per
     Claret and Bloemen 2011:
     
@@ -167,14 +202,24 @@ def get_linear_limb_darkening_coeff(logg, teff, filter):
     u_ld_err: float or float array
         The error on u_ld
     """
-    file = "data/claret_bloemen_ld_grid.fits" 
+    filepath = "data/claret_bloemen_ld_grid.tsv" 
+    ldd_grid = pd.read_csv(filepath, delim_whitespace=True, comment="#", 
+                           header=0, dtype={"logg":np.float, "Teff":np.float, 
+                                            "Z":np.float, "xi":np.float, 
+                                            "u":np.float, "Filt":np.str, 
+                                            "Met":np.str, "Mod":np.str})
+    
+    subset = ldd_grid[(ldd_grid["Filt"]==filt) & (ldd_grid["xi"]==xi)]
     
     # Interpolate along logg and Teff for all entries for filter
+    #calc_u = griddata(subset[["logg", "Teff", "Z"]]
+    calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
     
     # Determine value for u given logg and teff
+    ldd_coeff = calc_u(logg, teff, feh)
     
     # Return the results    
-    pass
+    return ldd_coeff
     
     
 # -----------------------------------------------------------------------------
@@ -553,7 +598,8 @@ def summarise_observations():
     
 def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                 base_path="/priv/mulga1/arains/pionier/complete_sequences/",
-                dir_suffix="_v3.73_abcd", run_local=False):
+                dir_suffix="_v3.73_abcd", run_local=False, 
+                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr"):
     """This is a function to create and save the oiDiam.fits files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
@@ -610,7 +656,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         ids.sort()   
         
         # Construct the record
-        rec = tgt_info.loc[ids][["LDD_VW3_dr", "e_LDD_VW3_dr", "Hmag", "Kmag", 
+        rec = tgt_info.loc[ids][[ldd_col, e_ldd_col, "Hmag", "Kmag", 
                                  "Vmag", "Science", "Ref_ID_1"]]
         
         # Invert, as column is for calibrator status

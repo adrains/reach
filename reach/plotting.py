@@ -3,6 +3,7 @@
 from __future__ import division, print_function
 import numpy as np
 import pandas as pd
+import reach.core as rch
 import matplotlib.pyplot as plt
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
@@ -108,4 +109,26 @@ def plot_distance_hists(tgt_info):
     plt.xlabel("Distance (pc)")
     plt.ylabel("# Stars")
     
+    
+def plot_vis_fit(b_on_lambda, vis, e_vis, ldd_fit, ldd_pred, u_lld):
+    """
+    """
+    x = np.arange(1*10**7, 25*10**7, 10000)
+    y1 = rch.calculate_visibility(x, ldd_fit, u_lld)
+    y2 = rch.calculate_visibility(x, ldd_pred, u_lld)
+    
+    plt.close("all")
+    plt.figure()
+    plt.errorbar(b_on_lambda, vis, yerr=e_vis, fmt=".", label="Data")
+    plt.plot(x, y1, "--", label=r"Fit ($\theta_{\rm LDD}$=%f)" % ldd_fit)
+    plt.plot(x, y2, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f)" % ldd_pred)
+    
+    plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
+    plt.ylabel("Visibility")
+    plt.legend(loc="best")
+    plt.xlim([0.0,25E7])
+    plt.ylim([0.0,1.0])
+    plt.grid()
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("plots/vis_fit.pdf")
     
