@@ -7,8 +7,29 @@ import reach.core as rch
 import matplotlib.pyplot as plt
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
-                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
-    """
+                            diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
+    """Function to compare two different measures of angular diameter (e.g. two
+    different colour relations) before and after extinction correction.
+    
+    Parameters
+    ----------
+    diam_rel_1: float array
+        Diameters from the first relation *before* extinction correction (mas)
+    
+    diam_rel_2: float array
+        Diameters from the second relation *before* extinction correction (mas)
+        
+    diam_rel_1_dr: float array
+        Diameters from the first relation *after* extinction correction (mas)
+    
+    diam_rel_2_dr: float array
+        Diameters from the second relation *after* extinction correction (mas)
+        
+    diam_rel_1_label: string
+        Name/label of the first relation (for legend)
+        
+    diam_rel_2_label: string
+        Name/label of the second relation (for legend)
     """
     plt.close("all")
     plt.figure()
@@ -60,6 +81,7 @@ def plot_bv_intrinsic(grid):
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/intrinsic_colours.pdf")
     
+    
 def plot_extinction_hists(a_mags, tgt_info):
     """Function for plotting diagnostic extinction related plots.
     """
@@ -110,25 +132,27 @@ def plot_distance_hists(tgt_info):
     plt.ylabel("# Stars")
     
     
-def plot_vis_fit(b_on_lambda, vis, e_vis, ldd_fit, ldd_pred, u_lld):
-    """
+def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld):
+    """Function to plot squared calibrated visibilities, with curves for
+    predicted diameter and fitted diameter.
     """
     x = np.arange(1*10**7, 25*10**7, 10000)
-    y1 = rch.calculate_visibility(x, ldd_fit, u_lld)
-    y2 = rch.calculate_visibility(x, ldd_pred, u_lld)
+    y1 = rch.calculate_vis2(x, ldd_fit, u_lld)
+    y2 = rch.calculate_vis2(x, ldd_pred, u_lld)
     
     plt.close("all")
     plt.figure()
-    plt.errorbar(b_on_lambda, vis, yerr=e_vis, fmt=".", label="Data")
+    plt.errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
     plt.plot(x, y1, "--", label=r"Fit ($\theta_{\rm LDD}$=%f)" % ldd_fit)
-    plt.plot(x, y2, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f)" % ldd_pred)
+    plt.plot(x, y2, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f)" 
+                                 % ldd_pred)
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
-    plt.ylabel("Visibility")
+    plt.ylabel(r"Visibility$^2$")
     plt.legend(loc="best")
     plt.xlim([0.0,25E7])
     plt.ylim([0.0,1.0])
     plt.grid()
     plt.gcf().set_size_inches(16, 9)
-    plt.savefig("plots/vis_fit.pdf")
+    plt.savefig("plots/vis2_fit.pdf")
     

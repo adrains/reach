@@ -26,7 +26,7 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
                          colour_rel="V-W3"):
     """Calculate the limb darkened angular diameter as predicted by 
     colour-diameter relations from Boyajian et al. 2014:
-        http://adsabs.harvard.edu/abs/2014AJ....147...47B
+     - http://adsabs.harvard.edu/abs/2014AJ....147...47B
         
     Parameters
     ----------
@@ -91,7 +91,7 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
 def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
     """Calculate the limb darkened angular diameter as predicted by 
     colour-diameter relations from Kervella et al. 2004:
-        http://adsabs.harvard.edu/abs/2004A%26A...426..297K
+     - http://adsabs.harvard.edu/abs/2004A%26A...426..297K
     """
     # Calculate the LDD
     log_ldd = 0.0755 * (V_mag - K_mag) + 0.5170 - 0.2 * K_mag
@@ -106,66 +106,129 @@ def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
     return log_ldd, log_ldd_err, ldd, ldd_err   
      
 
-def calculate_visibility(b_on_lambda, ldd, u_lld):
-    """Calculates fringe visibility assuming a linearly limb-darkened disk. As 
-    outlined in Hanbury Brown et al. 1974: 
-        http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
+def calculate_vis2(b_on_lambda, ldd, u_lld):
+    """Calculates squared fringe visibility assuming a linearly limb-darkened 
+    disk. As outlined in Hanbury Brown et al. 1974: 
+     - http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
         
-    This function is used in fit_for_ldd.
-    
-    Lambda function per:
-        https://stackoverflow.com/questions/12208634/fitting-only-one-
-        parameter-of-a-function-with-many-parameters-in-python
+    This function is called from fit_for_ldd using scipy.optimize.curve_fit.
         
     Parameters
     ----------
     b_on_lambda: float or float array
         The projected baseline B (m), divided by the wavelength lambda (m)
     
-    u_lld: float or float array
-        The wavelength dependent linear limb-darkening coefficient
-    
     ldd: float or float array
         The limb-darkened angular diameter (mas)
+    
+    u_lld: float or float array
+        The wavelength dependent linear limb-darkening coefficient
         
     Returns
     -------
-    vis: float or float array
-        Calibrated fringe visibility
+    vis2: float or float array
+        Calibrated squared fringe visibility
     """
+    # Calculate x and convert ldd to radians (this serves two purposes: making
+    # the input/output more human readable, and the fitting function performs
+    # better
     x = np.pi * b_on_lambda * (ldd / 1000 / 3600 / 180 * np.pi)
     
     vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
           ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
-          
-    return vis
+    
+    # Square visibility and return       
+    return vis**2
           
           
 def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
+    """Fit to calibrated squared visibilities to obtain the measured limb-
+    darkened stellar diameter in mas.
+    
+    Lambda function per:
+     - https://stackoverflow.com/questions/12208634/fitting-only-one-
+        parameter-of-a-function-with-many-parameters-in-python
+        
+    Parameters
+    ----------
+    vis2: float array
+        Calibrated squared visibiity measurements
+        
+    e_vis2: float array
+        Error on the calibrated squared visibility measurements
+        
+    baseline: float array
+        Projected interferometric baselines (m)
+        
+    wavelengths: float array
+        Wavelengths the observations were taken at (m)
+        
+    u_lld: float
+         Wavelength dependent linear limb-darkening coefficient 
+         
+    ldd_pred: float
+        Predicted limb-darkened stellar angular diameter (mas)
+        
+    Returns
+    -------
+    ldd_opt: float
+        Optimal value for the limb-darkened diameter (mas)
+        
+    e_ldd_opt: float
+        Error (one standard deviation) of ldd_opt (mas)
     """
-    """
+    # Baseline/lambda should have dimensions [B,W], where B is the number of 
+    # baselines, and W is the number of wavelengths
     n_bl = len(baselines)
     n_wl = len(wavelengths)
     bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
     wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
     b_on_lambda = (bl_grid / wl_grid).flatten()
     
-    vis = np.sqrt(vis2.flatten())
-    e_vis = np.abs(vis * 0.5 * e_vis2.flatten() / vis2.flatten())
+    # Fit for LDD. The lambda function means that we can fix u_lld and not have
+    # to optimise for it too. Loose, but physically realistic bounds on LDD for
+    # science targets (LDD cannot be zero else the fitting/formula will fail) 
+    ldd_opt, ldd_cov = curve_fit((lambda b_on_lambda, ldd_pred: 
+                                 calculate_vis2(b_on_lambda, ldd_pred, u_lld)), 
+                                 b_on_lambda, vis2.flatten(), 
+                                 sigma=e_vis2.flatten(), bounds=(0.1, 10))
     
-    popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred: 
-                            calculate_visibility(b_on_lambda, ldd_pred, u_lld)), 
-                            b_on_lambda, vis, sigma=e_vis, bounds=(0.1, 10))
-
-    print("Predicted: %f, Actual: %f" % (ldd_pred, popt[0]))
-    rplt.plot_vis_fit(b_on_lambda, vis, e_vis, popt[0], ldd_pred, u_lld)
-                           
-    return popt, pcov
+    # Compute standard deviation of ldd 
+    e_ldd_opt = np.sqrt(np.diag(ldd_cov))
+    
+    # Diagnostic checks on fitting perfomance. 
+    # TODO: move out of this function later
+    print("Predicted: %f, Actual: %f" % (ldd_pred, ldd_opt[0]))
+    rplt.plot_vis2_fit(b_on_lambda, vis2.flatten(), e_vis2.flatten(), 
+                      ldd_opt[0], ldd_pred, u_lld)
+     
+    # Only estimating one parameter, so no need to send back N=1 array                       
+    return ldd_opt[0], e_ldd_opt[0]
 
 
 
 def extract_vis2(oi_fits_file):
-    """
+    """Read the calibrated squared visibility + errors, baseline, and 
+    wavelength information from a given oifits file.
+    
+    Parameters
+    ----------
+    oi_fits_file: string
+        Filepath to the oifits file
+        
+    Returns
+    -------
+    vis2: float array
+        Calibrated squared visibiity measurements
+        
+    e_vis2: float array
+        Error on the calibrated squared visibility measurements
+        
+    baseline: float array
+        Projected interferometric baselines (m)
+        
+    wavelengths: float array
+        Wavelengths the observations were taken at (m)
     """
     oidata = fits.open(oi_fits_file)[4].data
     
@@ -177,31 +240,38 @@ def extract_vis2(oi_fits_file):
     return vis2, e_vis2, baselines, wavelengths
 
 
-def get_linear_limb_darkening_coeff(logg, teff, feh, filt, xi=2.0):
-    """Function to compute the linear-limb darkening coefficients per
-    Claret and Bloemen 2011:
-    
-    http://adsabs.harvard.edu/abs/2011A%26A...529A..75C
+def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
+    """Function to interpolate the linear-limb darkening coefficients given 
+    values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
+    photometric filter. The interpolated grid is from Claret and Bloemen 2011:
+     - http://adsabs.harvard.edu/abs/2011A%26A...529A..75C
     
     Paremeters
     ----------
     logg: float or float array
-        The stellar surface gravity
+        Stellar surface gravity
         
     teff: float or float array
-        The stellar effective temperature in Kelvin
+        Stellar effective temperature in Kelvin
         
-    filter: string or string array
-        The filter bandpass to use
+    feh: float or float array
+        Stellar metallicity, [Fe/H] (relative to Solar)
+        
+    filt: string or string array
+        The filter bandpass to use (H for PIONIER observations)
+        
+    xi: float or float array
+        Microturbulent velocity (km/s)
         
     Returns
     -------
-    u_ld: float or floar array
+    u_lld: float or floar array
         The wavelength dependent linear limb-darkening coefficient
         
     u_ld_err: float or float array
-        The error on u_ld
+        The error on u_lld
     """
+    # Read the 
     filepath = "data/claret_bloemen_ld_grid.tsv" 
     ldd_grid = pd.read_csv(filepath, delim_whitespace=True, comment="#", 
                            header=0, dtype={"logg":np.float, "Teff":np.float, 
@@ -209,17 +279,18 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt, xi=2.0):
                                             "u":np.float, "Filt":np.str, 
                                             "Met":np.str, "Mod":np.str})
     
+    # Interpolate only over the portion of the grid with the relevant filter
+    # and assumed microturbulent velocity
     subset = ldd_grid[(ldd_grid["Filt"]==filt) & (ldd_grid["xi"]==xi)]
     
     # Interpolate along logg and Teff for all entries for filter
-    #calc_u = griddata(subset[["logg", "Teff", "Z"]]
     calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
     
     # Determine value for u given logg and teff
-    ldd_coeff = calc_u(logg, teff, feh)
+    u_lld = calc_u(logg, teff, feh)
     
     # Return the results    
-    return ldd_coeff
+    return u_lld
     
     
 # -----------------------------------------------------------------------------
@@ -228,7 +299,7 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt, xi=2.0):
 def convert_vtbt_to_vb(BTmag, VTmag):
     """Convert Tycho BT and VT band magnitudes to Cousins-Johnson B and V band  
     using relations from Bessell 2000:
-        http://adsabs.harvard.edu/abs/2000PASP..112..961B)
+     - http://adsabs.harvard.edu/abs/2000PASP..112..961B)
     
     Import the relation points from file, fit a cubic spline to them, and use
     that to predict the Cousins-Johnson B and V band magnitudes.
@@ -287,7 +358,29 @@ def convert_vtbt_to_vb(BTmag, VTmag):
 
 
 def create_spt_uv_grid(do_interpolate=True):
-    """
+    """Create a grid of stellar instrinic (B-V) colours across spectral types.
+    This is currently done for dwarfs using the following table, originally 
+    from Pecaut & Mamajek 2013: 
+     - http://www.pas.rochester.edu/~emamajek/EEM_dwarf_UBVIJHK_colors_Teff.txt 
+    
+    Colours for stars not on the main sequence come from Schmidt-Kaler 1982:
+     - http://adsabs.harvard.edu/abs/1982lbg6.conf.....A
+    Which does not list Teff (currently we assume dwarf SpT for non-MS stars,
+    which is not physically realistic), nor the subgiant branch (which is 
+    interpolated as simply being halway between dwarfs and giants). As such, 
+    this function is still a work in progress.
+    
+    Parameters
+    ----------
+    do_interpolate: boolean
+        Escape parameter to construct the grid with solely the information
+        provided in the input tables without interpolation.
+        
+    Returns
+    -------
+    grid: pandas dataframe
+        Pandas dataframe of instrinsic (B-V) colours of form:
+        [SpT, Teff, V, IV, III, Ib, Iab, Ia]
     """
     # Import the relations to be used
     m_colour_relations = "data/EEM_dwarf_UBVIJHK_colors_Teff.txt"
@@ -376,18 +469,29 @@ def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
     
     Parameters
     ----------
-    B_mag: float
+    B_mag: float array
         Apparent B band magnitude.
     
-    V_mag: float
+    V_mag: float array
         Apparent V band magnitude
+        
+    sptypes: string array
+        Spectral type/s
     
+    grid: pandas dataframe
+        Pandas dataframe of instrinsic (B-V) colours of form:
+        [SpT, Teff, V, IV, III, Ib, Iab, Ia]
+        
     Returns
     -------
-    e_bv: float
+    e_bv: float array
         Selective extinction, E(B-V) = (B-V) - (B-V)_0
     """
-    # Retrieve the true (B-V) colour of the star, interpolating as necessary
+    # In the order listed, look for the luminosity class of the star in its 
+    # full SpT. When a match is found, break from the look to avoid partial 
+    # matches (e.g. both IV and V are in G4IV). This is required as SpT is 
+    # typically written as a single string, whereas it is split over two
+    # dimensions in the (B-V) grid.
     classes = ["IV", "V", "III", "II", "Ib", "Iab", "Ia"]
     
     bv_0_all = np.zeros(len(B_mag))
@@ -404,7 +508,8 @@ def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
         assert lum_class_matched
         
         spt = spt_full.replace(lum_class, "")
-    
+        
+        # SpT has been identified and split, get (B-V) colour
         bv_0_all[spt_i] = grid.loc[spt, lum_class]
         
     ebv = (B_mag - V_mag) - bv_0_all
@@ -500,8 +605,9 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
         
     Returns
     -------
-    de_ext_mag: np.array of type float
-        The de-extincted magnitude.
+    a_mags: float array
+        Array of photometric extinction of form [W, S], where W is the number
+        of wavelengths, and S is the number of stars.
     
     de_ext_mag_err: np.array of type float
         Error in the de-extincted magnitude.
@@ -509,12 +615,11 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
     # Create grid of extinction
     a_mags = np.zeros(ext_mag.shape)
     
+    # Use the Cardelli, Clayton, & Mathis 1989 extinction model. The extinction
+    # module is not vectorised, so we have to work with one star at a time
     for star_i, star in enumerate(ext_mag.itertuples(index=False)):
         a_mags[star_i,:] = extinction.ccm89(filter_eff_lambda, a_v[star_i], 
                                             r_v)
-    
-    # Use the Cardelli, Clayton, & Mathis 1989 extinction model
-    #a_mag = extinction.ccm89(filter_eff_lambda, a_v, r_v)
     
     return a_mags
     
