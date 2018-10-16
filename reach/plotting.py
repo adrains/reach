@@ -3,7 +3,6 @@
 from __future__ import division, print_function
 import numpy as np
 import pandas as pd
-import reach.core as rch
 import matplotlib.pyplot as plt
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
@@ -136,6 +135,9 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld):
     """Function to plot squared calibrated visibilities, with curves for
     predicted diameter and fitted diameter.
     """
+    # Import here to avoid mutual imports
+    # TODO: remove dependency and need for this
+    import reach.core as rch
     x = np.arange(1*10**7, 25*10**7, 10000)
     y1 = rch.calculate_vis2(x, ldd_fit, u_lld)
     y2 = rch.calculate_vis2(x, ldd_pred, u_lld)
