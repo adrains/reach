@@ -5,12 +5,14 @@ from __future__ import division, print_function
 import os
 import csv
 import pickle
+import datetime
 import extinction
 import numpy as np
 import pandas as pd
 import reach.plotting as rplt
 import matplotlib.pylab as plt
 from astropy.io import fits
+from astropy.time import Time
 from collections import OrderedDict
 from scipy.special import jv
 from scipy.optimize import curve_fit
@@ -793,7 +795,6 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
             dir = "test/"
         
         if os.path.exists(dir):
-            #fname = base_path + night + "_oiDiam.fits"
             fname = dir + "/" + night + "_oiDiam.fits" 
             hdu.writeto(fname, output_verify="warn", overwrite=True)
             
@@ -806,7 +807,9 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
     return nights
 
 
-def save_nightly_pndrs_script():
+def save_nightly_pndrs_script(complete_sequences, tgt_info, 
+            base_path="/priv/mulga1/arains/pionier/complete_sequences/",
+            dir_suffix="_v3.73_abcd", run_local=False):
     """This is a function to create and save the pndrs script files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_pndrsScript.i containing a list
@@ -816,10 +819,62 @@ def save_nightly_pndrs_script():
         - Ignore some observations: oiFitsFlagOiData
         - Split the night: oiFitsSplitNight
     """
-    for night in all_nights:
-        # Initialise empty string for YYYY-MM-DD_pndrsScript.i
+    # Figure out what targets share nights
+    # Of the form nights[night] = [mjd1, mjd2, ..., mjdn]
+    sequence_times = {}
+    
+    for seq in complete_sequences.keys():
+        # Get the string representing the night, YYYY-MM-DD
+        night = complete_sequences[seq][0]
         
-        # Split the night if more than one sequence has been observed
+        # Get the datetime objects representing the first and last observations
+        # of each sequence, and add or subtract a small increment as to bracket
+        # the entire sequence between the time range. Convert these to MJD.
+        delta = datetime.timedelta(seconds=10)
+        first_ob = Time(complete_sequences[seq][2][0][4] - delta).mjd
+        last_ob = Time(complete_sequences[seq][2][-1][4] + delta).mjd
         
+        if night not in sequence_times:
+            sequence_times[night] = [first_ob, last_ob]
+        else:
+            sequence_times[night] += [first_ob, last_ob]
+            sequence_times[night].sort()
+    
+    # These lines are written to YYYY-MM-DD_pndrsScript.i alongside the MJD
+    # to split upon
+    log_line = 'yocoLogInfo, "Split the night to isolate SCI-CAL sequences";'
+    func_line = 'oiFitsSplitNight, oiWave, oiVis2, oiVis, oiT3, tsplit=cc;'
+    
+    for night in sequence_times:
         # Disqualify any bad calibrators
         pass
+        
+        # It is only meaningful to split the night if more than one sequence
+        # has been observed (i.e. there are 4 or more MJD entries).
+        if len(sequence_times[night]) <= 2:
+            continue 
+        
+        # Save the fits file to the night directory
+        if not run_local:
+            dir = base_path + night + dir_suffix
+        else:
+            dir = "test/"
+        
+        # This night has more than one sequence. When splitting the night, we
+        # can neglect the first and last times as there are no observations
+        # before or after these times respectively, and we only need one of any
+        # pair of star1 end MJD and star2 start MJD    
+        if os.path.exists(dir):
+            fname = dir + "/" + night + "_pndrsScript.i" 
+            
+            with open(fname, "a") as nightly_script:
+                nightly_script.write(log_line + "\n")
+                cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
+                nightly_script.write(cc)
+                nightly_script.write(func_line)
+            
+            # Done, move to the next night
+            print("...wrote %s, %s" % (night, sequence_times[night]))
+        else:
+            # The directory does not exist, flag
+            print("...directory '%s' does not exist" % dir)
