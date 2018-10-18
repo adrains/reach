@@ -4,6 +4,7 @@ Main location for reach functions
 from __future__ import division, print_function
 import os
 import csv
+import glob
 import pickle
 import datetime
 import extinction
@@ -11,11 +12,13 @@ import numpy as np
 import pandas as pd
 import reach.plotting as rplt
 import matplotlib.pylab as plt
+from shutil import copyfile
 from astropy.io import fits
 from astropy.time import Time
 from collections import OrderedDict
 from scipy.special import jv
 from scipy.optimize import curve_fit
+from matplotlib.backends.backend_pdf import PdfPages
 from scipy.interpolate import interp1d, griddata, LinearNDInterpolator
 
 # -----------------------------------------------------------------------------
@@ -23,6 +26,10 @@ from scipy.interpolate import interp1d, griddata, LinearNDInterpolator
 # -----------------------------------------------------------------------------
 class ColourOutOfBoundsException(Exception):
     pass
+    
+class UnknownOIFitsFileFormat(Exception):
+    pass
+
 
 def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, 
                          colour_rel="V-W3"):
@@ -200,13 +207,64 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     
     # Diagnostic checks on fitting perfomance. 
     # TODO: move out of this function later
-    print("Predicted: %f, Actual: %f" % (ldd_pred, ldd_opt[0]))
-    rplt.plot_vis2_fit(b_on_lambda, vis2.flatten(), e_vis2.flatten(), 
-                      ldd_opt[0], ldd_pred, u_lld)
+    #print("Predicted: %f, Actual: %f" % (ldd_pred, ldd_opt[0]))
+    #rplt.plot_vis2_fit(b_on_lambda, vis2.flatten(), e_vis2.flatten(), 
+    #                  ldd_opt[0], ldd_pred, u_lld)
      
     # Only estimating one parameter, so no need to send back N=1 array                       
     return ldd_opt[0], e_ldd_opt[0]
 
+
+def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
+    """
+    """
+    successful_fits = {}
+    print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
+    for sci in vis2.keys():
+        
+        sci_data = tgt_info[tgt_info["Primary"]==sci]
+        
+        if not sci_data["Science"].values:
+            print("%s is not science target, aborting fit" % sci)
+            continue
+        else:
+            print("Fitting linear LDD to %s" % sci, end="")
+            
+        #print(vis2[sci].shape, e_vis2[sci].shape, baselines[sci].shape, 
+              #len(wavelengths), sci_data["u_lld"].values[0], 
+              #sci_data["LDD_VW3_dr"].values[0])
+        try:
+            ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
+                                             baselines[sci], wavelengths, 
+                                             sci_data["u_lld"].values[0], 
+                                             sci_data["LDD_VW3_dr"].values[0])
+            print("...fit successful")
+            successful_fits[sci] = [ldd_opt, e_ldd_opt, 
+                                    sci_data["LDD_VW3_dr"].values[0],
+                                    sci_data["u_lld"].values[0]]
+            
+        except:
+            print("...exception, aborting fit")
+                                         
+                                         
+                                         
+    # All Done, create diagnostic plots
+    plt.close("all")
+    with PdfPages("plots/successful_fits.pdf") as pdf:
+        for sci in successful_fits:
+        
+            n_bl = len(baselines[sci])
+            n_wl = len(wavelengths)
+            bl_grid = np.tile(baselines[sci], n_wl).reshape([n_wl, n_bl]).T
+            wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+            
+            b_on_lambda = (bl_grid / wl_grid).flatten()
+            rplt.plot_vis2_fit(b_on_lambda, vis2[sci].flatten(), 
+                               e_vis2[sci].flatten(),  successful_fits[sci][0], 
+                               successful_fits[sci][2], 
+                               successful_fits[sci][3], sci)
+            pdf.savefig()
+            plt.close()
 
 
 def extract_vis2(oi_fits_file):
@@ -232,16 +290,59 @@ def extract_vis2(oi_fits_file):
     wavelengths: float array
         Wavelengths the observations were taken at (m)
     """
-    oidata = fits.open(oi_fits_file)[4].data
+    try: 
+        oidata = fits.open(oi_fits_file)[4].data
     
-    vis2 = oidata["VIS2DATA"]
-    e_vis2 = oidata["VIS2ERR"]
-    baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
-    wavelengths = fits.open(oi_fits_file)[2].data["EFF_WAVE"]
+        vis2 = oidata["VIS2DATA"]
+        e_vis2 = oidata["VIS2ERR"]
+        baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+        wavelengths = fits.open(oi_fits_file)[2].data["EFF_WAVE"]
+    
+    except:
+        raise UnknownOIFitsFileFormat("oiFits file not in standard format")
     
     return vis2, e_vis2, baselines, wavelengths
 
 
+def collate_vis2_from_file(results_path="/home/arains/code/reach/results/"):
+    """
+    """
+    all_vis2 = {}
+    all_e_vis2 = {}
+    all_baselines = {}
+    wavelengths = []
+    
+    all_results = glob.glob(results_path + "*SCI*oidataCalibrated.fits")
+    
+    print("\n", "-"*79, "\n", "\tCollating Calibrated vis2\n", "-"*79)
+    
+    for oifits in all_results:
+        # Get the target name from the file name
+        sci = oifits.split("/")[-1][15:-22].replace("_", "")
+        
+        print("Collating %s" % oifits, end="")
+        
+        # Open the file
+        try:
+            vis2, e_vis2, baselines, wavelengths = extract_vis2(oifits)
+            print("...success")
+        except:
+            print("...failure, unknown oifits format")
+            continue
+        
+        if sci not in all_vis2.keys():
+            all_vis2[sci] = vis2
+            all_e_vis2[sci] = e_vis2
+            all_baselines[sci] = baselines
+            
+        else:
+            all_vis2[sci] = np.vstack((all_vis2[sci], vis2))
+            all_e_vis2[sci] = np.vstack((all_e_vis2[sci], e_vis2))
+            all_baselines[sci] = np.hstack((all_baselines[sci], baselines))
+                                                   
+    return all_vis2, all_e_vis2, all_baselines, wavelengths
+    
+    
 def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
     """Function to interpolate the linear-limb darkening coefficients given 
     values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
@@ -713,7 +814,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
     empty primary HDU, and a fits table with LDD and e_LDD for each star listed
     alphabetically.
     """
-    
+    print("\n", "-"*79, "\n", "\tSaving Nightly oidiam files\n", "-"*79)
     nights = OrderedDict()
     
     # Get nightly sets of what targets have been observed
@@ -729,6 +830,8 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
             nights[night].update(sequence)
     
     print("Writing oiDiam.fits for %i nights" % len(nights))
+    
+    diam_files_written = 0
     
     # For every night, construct a record array/fits file of target diameters
     # This record array takes the form:
@@ -747,7 +850,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         ids = []
         # Grab the primary IDs
         for star in nights[night]:
-            prim_id = tgt_info[tgt_info.Primary==star].index
+            prim_id = tgt_info[tgt_info["Primary"]==star].index
             try:
                 assert len(prim_id) > 0
             except:
@@ -800,10 +903,11 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
             
             # Done, move to the next night
             print("...wrote %s, %s" % (night, nights[night]))
+            diam_files_written += 1
         else:
             # The directory does not exist, flag
             print("...directory '%s' does not exist" % dir)
-        
+    print("%i oiDiam.fits files written" % diam_files_written)    
     return nights
 
 
@@ -819,6 +923,8 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         - Ignore some observations: oiFitsFlagOiData
         - Split the night: oiFitsSplitNight
     """
+    print("\n", "-"*79, "\n", "\tSaving Nightly pndrs Scripts\n", "-"*79)
+    
     # Figure out what targets share nights
     # Of the form nights[night] = [mjd1, mjd2, ..., mjdn]
     sequence_times = {}
@@ -845,6 +951,9 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     log_line = 'yocoLogInfo, "Split the night to isolate SCI-CAL sequences";'
     func_line = 'oiFitsSplitNight, oiWave, oiVis2, oiVis, oiT3, tsplit=cc;'
     
+    pndrs_scripts_written = 0
+    single_seq_nights = 0
+    
     for night in sequence_times:
         # Disqualify any bad calibrators
         pass
@@ -852,6 +961,7 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         # It is only meaningful to split the night if more than one sequence
         # has been observed (i.e. there are 4 or more MJD entries).
         if len(sequence_times[night]) <= 2:
+            single_seq_nights += 1
             continue 
         
         # Save the fits file to the night directory
@@ -875,6 +985,41 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
             
             # Done, move to the next night
             print("...wrote %s, %s" % (night, sequence_times[night]))
+            pndrs_scripts_written += 1
         else:
             # The directory does not exist, flag
             print("...directory '%s' does not exist" % dir)
+            
+    print("%i pndrs.i scripts written" % pndrs_scripts_written)
+    print("%i single sequence nights (i.e. no split)" % single_seq_nights)        
+
+
+def calibrate_all_observations(reduced_data_folders):
+    """
+    """
+    # Run the PIONIER calibration pipeline for every folder with reduced data
+    # TODO: capture the output and inspect for errors
+    for ob_folder in reduced_data_folders:
+        night = ob_folder.split("/")[-2].split("_")[0]
+        print("\n", "-"*79, "\n", "\tCalibrating %s\n" % night, "-"*79)
+        os.system("(cd %s; pndrsCalibrate)" % ob_folder)
+        
+    print("Done!\n")
+        
+
+def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
+                    new_path="/home/arains/code/reach/results/"):
+    """
+    """
+    sci_oi_fits = glob.glob(obs_path + "*/*SCI*oidataCalibrated.fits")
+    
+    print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
+    files_copied = 0
+    
+    for oifits in sci_oi_fits:
+        if os.path.exists(new_path):
+            print("...copying %s" % oifits.split("/")[-1])
+            copyfile(oifits, new_path + oifits.split("/")[-1])
+            files_copied += 1
+    
+    print("%i files copied" % files_copied)

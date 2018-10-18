@@ -82,6 +82,9 @@ import platform
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
 
+# Parameter to run a subset of the pipeline
+already_calibrated = False
+
 # -----------------------------------------------------------------------------
 # (1) Import target details
 # -----------------------------------------------------------------------------
@@ -216,11 +219,10 @@ pkl_sequences = open("data/sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
-do_diam_est = False
-
-if "wintermute" not in platform.node() and do_diam_est:
+if "wintermute" not in platform.node() and not already_calibrated:
     nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
-elif do_diam_est:
+    
+elif not already_calibrated:
     nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                                   run_local=True, ldd_col="LDD_VK_dr", 
                                   e_ldd_col="e_LDD_VK_dr")
@@ -231,17 +233,41 @@ elif do_diam_est:
 # Do the following:
 #  i)  Exclude bad calibrators (informed by 5)
 #  ii) Split nights between sequences
-pass
+if "wintermute" not in platform.node() and not already_calibrated:
+    rch.save_nightly_pndrs_script(complete_sequences, tgt_info)
+elif not already_calibrated:
+    rch.save_nightly_pndrs_script(complete_sequences, tgt_info, run_local=True)
 
 # -----------------------------------------------------------------------------
 # (9) Run pndrsCalibrate for each night of observing
 # -----------------------------------------------------------------------------
-pass
+base_path = "/priv/mulga1/arains/pionier/complete_sequences/@_v3.73_abcd/"
 
+if "wintermute" not in platform.node() and not already_calibrated:
+    obs_folders = [base_path.replace("@", night) for night in nights.keys()]
+    rch.calibrate_all_observations(obs_folders)
+
+    # Move oifits files back to central location (reach/results/ by default)
+    rch.move_sci_oifits()
+
+# Collate calibrated vis2 data
+if "wintermute" not in platform.node():
+    vis2, e_vis2, baselines, wavelengths = rch.collate_vis2_from_file()
+else:
+    path = "/Users/adamrains/code/reach/results/"
+    vis2, e_vis2, baselines, wavelengths = rch.collate_vis2_from_file(path)
+    
 # -----------------------------------------------------------------------------
 # (10) Fit angular diameters to vis^2 of all science targets
 # -----------------------------------------------------------------------------
 # Determine the linear LDD coefficents
+tgt_info["u_lld"] = rch.get_linear_limb_darkening_coeff(tgt_info["logg"],
+                                                        tgt_info["Teff"],
+                                                        tgt_info["FeH_rel"], 
+                                                        "H")
+
+rch.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+"""
 feh = -0.29
 teff = 7014
 logg = 4.04
@@ -249,16 +275,40 @@ logg = 4.04
 u_lld = rch.get_linear_limb_darkening_coeff(logg, teff, feh, "H")
 
 # Get the visibilities
-testfile = "results/2018-04-18_SCI_bet_TrA_oidataCalibrated.fits"
-#testdata = fits.open(testfile)
+faint_seq = "results/2018-04-18_SCI_bet_TrA_oidataCalibrated.fits"
+bright_seq = "results/2018-08-07_SCI_bet_TrA_oidataCalibrated.fits"
 
-vis2, e_vis2, baselines, wavelengths = rch.extract_vis2(testfile)
+vis2_f, e_vis2_f, baselines_f, wavelengths = rch.extract_vis2(faint_seq)
+vis2_b, e_vis2_b, baselines_b, wavelengths = rch.extract_vis2(bright_seq)
+
+vis2 = np.vstack((vis2_f, vis2_b))
+e_vis2 = np.vstack((e_vis2_f, e_vis2_b))
+baselines = np.hstack((baselines_f, baselines_b))
+#wavelengths = np.hstack((wavelengths_f, wavelengths_b))
 
 popt, pcov = rch.fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, 
                              tgt_info.loc["HD141891"]["LDD_VK_dr"])
+                             
+# Tau Cet
+feh = -0.55
+teff = 5227
+logg = 4.2
 
+u_lld = rch.get_linear_limb_darkening_coeff(logg, teff, feh, "H")
 
+faint_seq = "results/2018-08-07_SCI_Tau_Cet_oidataCalibrated.fits"
+bright_seq = "results/2018-08-06_SCI_Tau_Cet_oidataCalibrated.fits"
 
+vis2_f, e_vis2_f, baselines_f, wavelengths = rch.extract_vis2(faint_seq)
+vis2_b, e_vis2_b, baselines_b, wavelengths = rch.extract_vis2(bright_seq)
+
+vis2 = np.vstack((vis2_f, vis2_b))
+e_vis2 = np.vstack((e_vis2_f, e_vis2_b))
+baselines = np.hstack((baselines_f, baselines_b))
+
+popt, pcov = rch.fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, 
+                             tgt_info.loc["HD10700"]["LDD_VK_dr"])
+"""
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets
 # -----------------------------------------------------------------------------

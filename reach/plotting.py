@@ -131,7 +131,7 @@ def plot_distance_hists(tgt_info):
     plt.ylabel("# Stars")
     
     
-def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld):
+def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld, target):
     """Function to plot squared calibrated visibilities, with curves for
     predicted diameter and fitted diameter.
     """
@@ -142,7 +142,7 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld):
     y1 = rch.calculate_vis2(x, ldd_fit, u_lld)
     y2 = rch.calculate_vis2(x, ldd_pred, u_lld)
     
-    plt.close("all")
+    #plt.close("all")
     plt.figure()
     plt.errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
     plt.plot(x, y1, "--", label=r"Fit ($\theta_{\rm LDD}$=%f)" % ldd_fit)
@@ -151,6 +151,7 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld):
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
     plt.ylabel(r"Visibility$^2$")
+    plt.title(target + r"(%i vis$^2$ points)" % len(vis2))
     plt.legend(loc="best")
     plt.xlim([0.0,25E7])
     plt.ylim([0.0,1.0])
