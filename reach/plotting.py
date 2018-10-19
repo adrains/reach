@@ -151,7 +151,7 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld, target):
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
     plt.ylabel(r"Visibility$^2$")
-    plt.title(target + r"(%i vis$^2$ points)" % len(vis2))
+    plt.title(target + r" (%i vis$^2$ points)" % len(vis2))
     plt.legend(loc="best")
     plt.xlim([0.0,25E7])
     plt.ylim([0.0,1.0])

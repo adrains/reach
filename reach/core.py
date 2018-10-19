@@ -94,6 +94,11 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     # error given in the paper, and does not treat errors in either magnitude
     e_ldd = ldd * diam_rel_coeff[colour_rel][-1]/100
     
+    # Return zeroes rather than nans
+    # NOTE: This should be considered placeholder code only
+    ldd[np.isnan(ldd)] = 1    
+    e_ldd[np.isnan(e_ldd)] = 0.1 
+    
     return ldd, e_ldd
     
     
@@ -216,7 +221,22 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
-    """
+    """Fits limb-darkened diameters to all science targets using all available
+    vis^2, e_vis^2, and projected baseline data.
+    
+    Parameters
+    ----------
+    vis2: dict
+        Dictionary mapping science target ID to all vis^2 values
+    
+    e_vis2: dict
+        Dictionary mapping science target ID to all e_vis^2 values
+        
+    baselines: dict
+        Dictionary mapping science target ID to all projected baselines (m)
+    
+    wavelengths: list
+        List recording the wavelengths observed at (m)
     """
     successful_fits = {}
     print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
@@ -244,9 +264,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
                                     sci_data["u_lld"].values[0]]
             
         except:
-            print("...exception, aborting fit")
-                                         
-                                         
+            print("...exception, aborting fit")                              
                                          
     # All Done, create diagnostic plots
     plt.close("all")
@@ -305,8 +323,30 @@ def extract_vis2(oi_fits_file):
 
 
 def collate_vis2_from_file(results_path="/home/arains/code/reach/results/"):
+    """Collates calibrated squared visibilities, errors, baselines, and 
+    wavelengths for each science target in the specified results folder.
+    
+    Parameters
+    ----------
+    results_path: string
+        Directory where the calibrated oifits results files are stored.
+        
+    Returns
+    -------
+    all_vis2: dict
+        Dictionary mapping science target ID to all vis^2 values
+    
+    all_e_vis2: dict
+        Dictionary mapping science target ID to all e_vis^2 values
+        
+    all_baselines: dict
+        Dictionary mapping science target ID to all projected baselines (m)
+    
+    wavelengths: list
+        List recording the wavelengths observed at (m)
     """
-    """
+    # Initialise data structures to store calibrated results, where dict keys
+    # are the science target IDs. Note that the wavelengths are common to all.
     all_vis2 = {}
     all_e_vis2 = {}
     all_baselines = {}
@@ -788,9 +828,13 @@ def load_target_information(filepath="data/target_info.tsv"):
     # Note that the tilde is a bitwise not operation on the mask
     tgt_info = tgt_info[~tgt_info.index.duplicated(keep="first")]
     
-    # Force primary IDs to standard no-space format
-    tgt_info.Primary = [pid.replace(" ", "").replace(".", "").replace("_","")
-                           for pid in tgt_info.Primary]
+    # Force primary and Bayer IDs to standard no-space format
+    tgt_info["Primary"] = [id.replace(" ", "").replace(".", "").replace("_","")
+                           for id in tgt_info["Primary"]]
+                           
+    tgt_info["Bayer_ID"] = [id.replace(" ", "").replace("_","") 
+                            if type(id)==str else None
+                            for id in tgt_info["Bayer_ID"]]
     
     # Return result
     return tgt_info
@@ -807,7 +851,8 @@ def summarise_observations():
 def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                 base_path="/priv/mulga1/arains/pionier/complete_sequences/",
                 dir_suffix="_v3.73_abcd", run_local=False, 
-                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr"):
+                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr", 
+                nones_to_zero=True):
     """This is a function to create and save the oiDiam.fits files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
@@ -849,8 +894,17 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         
         ids = []
         # Grab the primary IDs
+        # Note that several stars are observed multiple times under different
+        # primary IDs, so we need to check HD and Bayer IDs as well
         for star in nights[night]:
             prim_id = tgt_info[tgt_info["Primary"]==star].index
+            
+            if len(prim_id)==0:
+                prim_id = tgt_info[tgt_info["Bayer_ID"]==star].index
+                
+            if len(prim_id)==0:
+                prim_id = tgt_info[tgt_info["HD_ID"]==star].index
+            
             try:
                 assert len(prim_id) > 0
             except:
@@ -977,7 +1031,7 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         if os.path.exists(dir):
             fname = dir + "/" + night + "_pndrsScript.i" 
             
-            with open(fname, "a") as nightly_script:
+            with open(fname, "w") as nightly_script:
                 nightly_script.write(log_line + "\n")
                 cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
                 nightly_script.write(cc)
@@ -995,28 +1049,60 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
 
 
 def calibrate_all_observations(reduced_data_folders):
+    """Calls the PIONIER data reduction pipeline for each folder of reduced
+    data from within Python.
+    
+    Parameters
+    ----------
+    reduced_data_folders: string array
+        List of folder paths to run the calibration pipeline on
     """
-    """
+    # List to record times for the start and end of each night to calibrate
+    times = []
+    
     # Run the PIONIER calibration pipeline for every folder with reduced data
     # TODO: capture the output and inspect for errors
-    for ob_folder in reduced_data_folders:
+    for night_i, ob_folder in enumerate(reduced_data_folders):
+        # Record the start time
+        times.append(datetime.datetime.now())    
+    
+        # Navigate to the night folder and call pndrsCalibrate from terminal
         night = ob_folder.split("/")[-2].split("_")[0]
-        print("\n", "-"*79, "\n", "\tCalibrating %s\n" % night, "-"*79)
+        print("\n", "-"*79, "\n", "\tCalibrating %s, night %i/%i\n" % (night, 
+              night_i+1, len(reduced_data_folders)), "-"*79)
         os.system("(cd %s; pndrsCalibrate)" % ob_folder)
         
-    print("Done!\n")
+        # Record and the end time and print duration
+        times.append(datetime.datetime.now()) 
+        cal_time = (times[-1] - times[-2]).total_seconds() 
+        print("\n\nNight calibrated in %02d:%04.1f\n" 
+              % (int(np.floor(cal_time/60.)), cal_time % 60.))
+    
+    # All nights finished, print summary          
+    total_time = (times[-1] - times[0]).total_seconds()    
+    print("Calibration finished, %i nights in %02d:%04.1f\n" 
+          % (len(reduced_data_folders),int(np.floor(total_time/60.)), 
+             total_time % 60.))
         
 
 def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
                     new_path="/home/arains/code/reach/results/"):
-    """
+    """Used to collect the calibrated oiFits files of all science targets after
+    running the PIONIER data reduction pipeline. 
+    
+    Parameters
+    ----------
+    obs_path: string
+        Base directory, will move any SCI_oifits files one directory deeper.
+    
+    new_path: string
+        Folder to move the results to.
     """
     sci_oi_fits = glob.glob(obs_path + "*/*SCI*oidataCalibrated.fits")
     
     print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
-    files_copied = 0
     
-    for oifits in sci_oi_fits:
+    for files_copied, oifits in enumerate(sci_oi_fits):
         if os.path.exists(new_path):
             print("...copying %s" % oifits.split("/")[-1])
             copyfile(oifits, new_path + oifits.split("/")[-1])

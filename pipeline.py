@@ -267,48 +267,7 @@ tgt_info["u_lld"] = rch.get_linear_limb_darkening_coeff(tgt_info["logg"],
                                                         "H")
 
 rch.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
-"""
-feh = -0.29
-teff = 7014
-logg = 4.04
 
-u_lld = rch.get_linear_limb_darkening_coeff(logg, teff, feh, "H")
-
-# Get the visibilities
-faint_seq = "results/2018-04-18_SCI_bet_TrA_oidataCalibrated.fits"
-bright_seq = "results/2018-08-07_SCI_bet_TrA_oidataCalibrated.fits"
-
-vis2_f, e_vis2_f, baselines_f, wavelengths = rch.extract_vis2(faint_seq)
-vis2_b, e_vis2_b, baselines_b, wavelengths = rch.extract_vis2(bright_seq)
-
-vis2 = np.vstack((vis2_f, vis2_b))
-e_vis2 = np.vstack((e_vis2_f, e_vis2_b))
-baselines = np.hstack((baselines_f, baselines_b))
-#wavelengths = np.hstack((wavelengths_f, wavelengths_b))
-
-popt, pcov = rch.fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, 
-                             tgt_info.loc["HD141891"]["LDD_VK_dr"])
-                             
-# Tau Cet
-feh = -0.55
-teff = 5227
-logg = 4.2
-
-u_lld = rch.get_linear_limb_darkening_coeff(logg, teff, feh, "H")
-
-faint_seq = "results/2018-08-07_SCI_Tau_Cet_oidataCalibrated.fits"
-bright_seq = "results/2018-08-06_SCI_Tau_Cet_oidataCalibrated.fits"
-
-vis2_f, e_vis2_f, baselines_f, wavelengths = rch.extract_vis2(faint_seq)
-vis2_b, e_vis2_b, baselines_b, wavelengths = rch.extract_vis2(bright_seq)
-
-vis2 = np.vstack((vis2_f, vis2_b))
-e_vis2 = np.vstack((e_vis2_f, e_vis2_b))
-baselines = np.hstack((baselines_f, baselines_b))
-
-popt, pcov = rch.fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, 
-                             tgt_info.loc["HD10700"]["LDD_VK_dr"])
-"""
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets
 # -----------------------------------------------------------------------------
