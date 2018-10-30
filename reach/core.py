@@ -835,7 +835,15 @@ def load_target_information(filepath="data/target_info.tsv"):
     tgt_info["Bayer_ID"] = [id.replace(" ", "").replace("_","") 
                             if type(id)==str else None
                             for id in tgt_info["Bayer_ID"]]
-    
+                            
+    # Use None as empty value for IDs
+    # Note: this is possibly unnecessary since dataframes have a notnull method
+    tgt_info["Ref_ID_1"].where(tgt_info["Ref_ID_1"].notnull(), None, 
+                               inplace=True)
+    tgt_info["Ref_ID_2"].where(tgt_info["Ref_ID_2"].notnull(), None, 
+                               inplace=True)
+    tgt_info["Ref_ID_3"].where(tgt_info["Ref_ID_3"].notnull(), None, 
+                               inplace=True)
     # Return result
     return tgt_info
     
@@ -919,18 +927,34 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         # Sort the IDs
         ids.sort()   
         
-        # Construct the record
-        rec = tgt_info.loc[ids][[ldd_col, e_ldd_col, "Hmag", "Kmag", 
-                                 "Vmag", "Science", "Ref_ID_1"]]
+        # We need to compile entries for multiple targets with the same name
+        # due to the non-unique/inconsistent IDs initially sent to ESO. These
+        # are stored in the following columns of the input table.
+        ref_ids = ["Ref_ID_1", "Ref_ID_2", "Ref_ID_3"]
         
+        recs = []
+        
+        # For each non-null reference ID, collate magnitude, LDD, and sci/cal
+        # Rename the reference ID column in the pandas dataframe, then stack
+        for ref_id in ref_ids:
+            rec = tgt_info.loc[ids][tgt_info.loc[ids][ref_id].notnull()]
+            rec = rec[[ldd_col, e_ldd_col, "Hmag", "Kmag", "Vmag", "Science", 
+                       ref_id]]
+            rec.rename(columns={ref_id:"Ref_ID"}, inplace=True)
+            
+            if len(rec) > 0:
+                recs.append(rec.copy(deep=True))
+
+        rec = pd.concat(recs)
+
         # Invert, as column is for calibrator status
         rec.Science =  np.abs(rec.Science - 1)
         rec["INFO"] = np.repeat("(V-W3) diameter from Boyajian et al. 2014",
                                 len(rec))
+
+        rec.insert(0,"TARGET_ID", np.arange(1,len(rec)+1))
         
-        rec.insert(0,"TARGET_ID", np.arange(1,len(nights[night])+1))
-        
-        max_id = np.max([len(id) for id in rec["Ref_ID_1"]])
+        max_id = np.max([len(id) for id in rec["Ref_ID"]])
         max_info = np.max([len(info) for info in rec["INFO"]])
         
         formats = "int16,float64,float64,float64,float64,float64,int32,a%s,a%s"
