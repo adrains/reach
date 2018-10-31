@@ -266,6 +266,9 @@ tgt_info["u_lld"] = rch.get_linear_limb_darkening_coeff(tgt_info["logg"],
                                                         tgt_info["FeH_rel"], 
                                                         "H")
 
+# Don't have parameters for HD187289, assume u_lld=0.5 for now
+tgt_info.loc["HD187289", "u_lld"] = 0.5
+
 rch.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
 
 # -----------------------------------------------------------------------------

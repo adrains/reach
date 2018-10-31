@@ -199,13 +199,17 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
     b_on_lambda = (bl_grid / wl_grid).flatten()
     
+    # Don't consider bad data during fitting process
+    valid_i = (vis2.flatten() >= 0) & (e_vis2.flatten() > 0)
+    
     # Fit for LDD. The lambda function means that we can fix u_lld and not have
     # to optimise for it too. Loose, but physically realistic bounds on LDD for
     # science targets (LDD cannot be zero else the fitting/formula will fail) 
     ldd_opt, ldd_cov = curve_fit((lambda b_on_lambda, ldd_pred: 
                                  calculate_vis2(b_on_lambda, ldd_pred, u_lld)), 
-                                 b_on_lambda, vis2.flatten(), 
-                                 sigma=e_vis2.flatten(), bounds=(0.1, 10))
+                                 b_on_lambda[valid_i], vis2.flatten()[valid_i], 
+                                 sigma=e_vis2.flatten()[valid_i], 
+                                 bounds=(0.1, 10))
     
     # Compute standard deviation of ldd 
     e_ldd_opt = np.sqrt(np.diag(ldd_cov))
@@ -263,8 +267,8 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
                                     sci_data["LDD_VW3_dr"].values[0],
                                     sci_data["u_lld"].values[0]]
             
-        except:
-            print("...exception, aborting fit")                              
+        except Exception, err:
+            print("...exception, aborting fit - %s" % err)                              
                                          
     # All Done, create diagnostic plots
     plt.close("all")
@@ -308,16 +312,37 @@ def extract_vis2(oi_fits_file):
     wavelengths: float array
         Wavelengths the observations were taken at (m)
     """
-    try: 
-        oidata = fits.open(oi_fits_file)[4].data
+    # The format of the oiFits file varies depending on how many CAL-SCI
+    # CAL-SCI-CAL-SCI-CAL sequences were observed in the same night. For a
+    # single sequence, the fits extensions are as follows:
+    # [imageHDU, target info, wavelengths, telescopes, vis^2, t3phi]
+    # When multiple sequences are observed, there are extra extensions for
+    # each wavelength, vis^2, and t3phi set (e.g. two observed sequences 
+    # would have two of each of these in a row)
+    oifits = fits.open(oi_fits_file)
+    n_extra_seq = (len(oifits) - 6) // 3
     
-        vis2 = oidata["VIS2DATA"]
-        e_vis2 = oidata["VIS2ERR"]
-        baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
-        wavelengths = fits.open(oi_fits_file)[2].data["EFF_WAVE"]
+    vis2 = []
+    e_vis2 = []
+    baselines = []
     
-    except:
-        raise UnknownOIFitsFileFormat("oiFits file not in standard format")
+    # Retrieve visibility and baseline information for an arbitrary (>=1) 
+    # number of sequences within a given night
+    for seq_i in xrange(0, n_extra_seq+1):
+        oidata = oifits[4 + n_extra_seq + seq_i].data
+        
+        if len(vis2)==0 and len(e_vis2)==0 and len(baselines)==0:
+            vis2 = oidata["VIS2DATA"]
+            e_vis2 = oidata["VIS2ERR"]
+            baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+        else:
+            vis2 = np.vstack((vis2, oidata["VIS2DATA"]))
+            e_vis2 = np.vstack((e_vis2, oidata["VIS2ERR"]))
+            baselines = np.hstack((baselines, np.sqrt(oidata["UCOORD"]**2 
+                                                   + oidata["VCOORD"]**2)))
+    
+    # Assume that we'll always be using the same wavelength mode within a night      
+    wavelengths = oifits[2].data["EFF_WAVE"]
     
     return vis2, e_vis2, baselines, wavelengths
 

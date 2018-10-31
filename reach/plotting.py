@@ -138,7 +138,7 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld, target):
     # Import here to avoid mutual imports
     # TODO: remove dependency and need for this
     import reach.core as rch
-    x = np.arange(1*10**7, 25*10**7, 10000)
+    x = np.arange(1*10**6, 25*10**7, 10000)
     y1 = rch.calculate_vis2(x, ldd_fit, u_lld)
     y2 = rch.calculate_vis2(x, ldd_pred, u_lld)
     
