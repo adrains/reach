@@ -72,11 +72,13 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     
     diam_rel = np.loadtxt(boyajian_2014_rel_file, delimiter=",", 
                           skiprows=1, dtype="str")
-    # Create dictionary for coefficients
+    # Create dictionary for coefficients and for error on relation
     diam_rel_coeff = {}
+    diam_rel_err = {}
     
     for rel in diam_rel:
         diam_rel_coeff[rel[0]] = rel[3:11].astype(float)
+        diam_rel_err[rel[0]] = rel[-1].astype(float)
     
     # Calculate diameters
     # Relationship is log_diam = Sigma(i=0) a_i * (F1_mag-F2_mag) ** i
@@ -92,7 +94,7 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     
     # Calculate the error. Currently this is done solely using the percentage
     # error given in the paper, and does not treat errors in either magnitude
-    e_ldd = ldd * diam_rel_coeff[colour_rel][-1]/100
+    e_ldd = ldd * diam_rel_err[colour_rel]/100
     
     # Return zeroes rather than nans
     # NOTE: This should be considered placeholder code only
@@ -265,6 +267,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
             print("...fit successful")
             successful_fits[sci] = [ldd_opt, e_ldd_opt, 
                                     sci_data["LDD_VW3_dr"].values[0],
+                                    sci_data["e_LDD_VW3_dr"].values[0],
                                     sci_data["u_lld"].values[0]]
             
         except Exception, err:
@@ -283,8 +286,10 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
             b_on_lambda = (bl_grid / wl_grid).flatten()
             rplt.plot_vis2_fit(b_on_lambda, vis2[sci].flatten(), 
                                e_vis2[sci].flatten(),  successful_fits[sci][0], 
+                               successful_fits[sci][1], 
                                successful_fits[sci][2], 
-                               successful_fits[sci][3], sci)
+                               successful_fits[sci][3],
+                               successful_fits[sci][4], sci)
             pdf.savefig()
             plt.close()
 

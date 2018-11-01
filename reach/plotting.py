@@ -131,7 +131,8 @@ def plot_distance_hists(tgt_info):
     plt.ylabel("# Stars")
     
     
-def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld, target):
+def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred, 
+                  e_ldd_pred, u_lld, target):
     """Function to plot squared calibrated visibilities, with curves for
     predicted diameter and fitted diameter.
     """
@@ -139,15 +140,27 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, ldd_pred, u_lld, target):
     # TODO: remove dependency and need for this
     import reach.core as rch
     x = np.arange(1*10**6, 25*10**7, 10000)
-    y1 = rch.calculate_vis2(x, ldd_fit, u_lld)
-    y2 = rch.calculate_vis2(x, ldd_pred, u_lld)
+    y_fit = rch.calculate_vis2(x, ldd_fit, u_lld)
+    y_fit_low = rch.calculate_vis2(x, ldd_fit - e_ldd_fit, u_lld)
+    y_fit_high = rch.calculate_vis2(x, ldd_fit + e_ldd_fit, u_lld)    
+    
+    y_pred = rch.calculate_vis2(x, ldd_pred, u_lld)
+    y_pred_low = rch.calculate_vis2(x, ldd_pred - e_ldd_pred, u_lld)
+    y_pred_high = rch.calculate_vis2(x, ldd_pred + e_ldd_pred, u_lld)
     
     #plt.close("all")
     plt.figure()
+    
+    # Plot the data points and best fit curve
     plt.errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
-    plt.plot(x, y1, "--", label=r"Fit ($\theta_{\rm LDD}$=%f)" % ldd_fit)
-    plt.plot(x, y2, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f)" 
-                                 % ldd_pred)
+    plt.plot(x, y_fit, "--", label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f)" 
+                                 % (ldd_fit, e_ldd_fit))
+    plt.fill_between(x, y_fit_low, y_fit_high, alpha=0.25)
+    
+    # Plot the predicted diameter with error
+    plt.plot(x, y_pred, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f $\pm$ %f)" 
+                                 % (ldd_pred, e_ldd_pred))
+    plt.fill_between(x, y_pred_low, y_pred_high, alpha=0.25)
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
     plt.ylabel(r"Visibility$^2$")
