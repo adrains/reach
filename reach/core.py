@@ -1056,11 +1056,21 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     
     # These lines are written to YYYY-MM-DD_pndrsScript.i alongside the MJD
     # to split upon
-    log_line = 'yocoLogInfo, "Split the night to isolate SCI-CAL sequences";'
-    func_line = 'oiFitsSplitNight, oiWave, oiVis2, oiVis, oiT3, tsplit=cc;'
+    line_split_1 = 'yocoLogInfo, "Split night to isolate SCI-CAL sequences";'
+    line_split_2 = 'oiFitsSplitNight, oiWave, oiVis2, oiVis, oiT3, tsplit=cc;'
+    
+    # These lines are written to exclude bad calibrators, with the variable
+    # startend being a list with an MJD range to exclude
+    line_exclude_1 = 'yocoLogInfo,"Ignore bad calibrators";'
+    line_exclude_2 = ('oiFitsFlagOiData, oiWave, oiArray, oiVis2, oiT3, oiVis,' 
+                      'tlimit=startend;')
     
     pndrs_scripts_written = 0
     single_seq_nights = 0
+    
+    # Get a list of the target durations
+    durations = calculate_target_durations(complete_sequences)
+    bad_durations = select_only_bad_target_durations(durations, tgt_info)
     
     for night in sequence_times:
         # Disqualify any bad calibrators
@@ -1068,7 +1078,7 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         
         # It is only meaningful to split the night if more than one sequence
         # has been observed (i.e. there are 4 or more MJD entries).
-        if len(sequence_times[night]) <= 2:
+        if len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1:
             single_seq_nights += 1
             continue 
         
@@ -1086,10 +1096,20 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
             fname = dir + "/" + night + "_pndrsScript.i" 
             
             with open(fname, "w") as nightly_script:
-                nightly_script.write(log_line + "\n")
-                cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
-                nightly_script.write(cc)
-                nightly_script.write(func_line)
+                # Split the night
+                if len(sequence_times[night]) > 2:
+                    nightly_script.write(line_split_1 + "\n")
+                    cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
+                    nightly_script.write(cc)
+                    nightly_script.write(line_split_2)
+                
+                # Rule out bad calibrators
+                if len(bad_durations[night]) >= 1:
+                    for star_i, bad_cal in enumerate(bad_durations[night]):
+                        nightly_script.write(line_exclude_1 + "\n")
+                        startend = "startend = %s;\n" % bad_cal[1:]
+                        nightly_script.write(startend)
+                        nightly_script.write(line_exclude_2 + "\n")
             
             # Done, move to the next night
             print("...wrote %s, %s" % (night, sequence_times[night]))
@@ -1101,6 +1121,86 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     print("%i pndrs.i scripts written" % pndrs_scripts_written)
     print("%i single sequence nights (i.e. no split)" % single_seq_nights)        
 
+
+
+def calculate_target_durations(complete_sequences):
+    """For each night of observations, return the start and end time of 
+    *sequential* observations associated with a given target.
+    
+    A typical CAL1-SCI1-CAL2-SCI2-CAL3 sequence observes each target 5 times 
+    before moving on to the next target in the sequence. This function gets
+    the first and last times of each block for the purpose of later excluding 
+    bad calibrators.
+    
+    Parameters
+    ----------
+    complete_sequence
+    
+    Returns
+    -------
+    sequence_durations
+    """
+    sequence_durations = {}
+    
+    delta = datetime.timedelta(seconds=10)
+    
+    for seq in complete_sequences.keys():
+        # Get a mapping of all target IDs to their times
+        times = [(ob[2], ob[4]) for ob in complete_sequences[seq][2]]
+        
+        durations = [[times[0][0], Time(times[0][1] - delta).mjd, 0]]
+        
+        night = complete_sequences[seq][0]
+        
+        tgt_i = 0
+        
+        for (tgt, time) in times:
+            # Same target
+            if tgt == durations[tgt_i][0]:
+                # Update the end time
+                durations[tgt_i][2] = Time(time - delta).mjd
+            
+            # We've moved on
+            else:
+                tgt_i += 1
+                durations.append([tgt, Time(time - delta).mjd, 0])
+            
+        # All done
+        sequence_durations[night] = durations
+        
+    return sequence_durations
+
+
+def select_only_bad_target_durations(sequence_durations, tgt_info):
+    """
+    """
+    bad_durations = {}
+    
+    for night in sequence_durations:
+        bad_durations[night] = []
+        
+        for star in sequence_durations[night]:
+            # Get the star info
+            prim_id = tgt_info[tgt_info["Primary"]==star[0]].index
+        
+            if len(prim_id)==0:
+                prim_id = tgt_info[tgt_info["Bayer_ID"]==star[0]].index
+            
+            if len(prim_id)==0:
+                prim_id = tgt_info[tgt_info["HD_ID"]==star[0]].index
+        
+            try:
+                assert len(prim_id) > 0
+            except:
+                print("...failed on %s, %s" % (night, star))
+            
+
+            # Check if it is a bad calibrator
+            if tgt_info.loc[prim_id[0]]["Quality"] == "BAD":
+                bad_durations[night].append(star)
+                
+    return bad_durations
+    
 
 def calibrate_all_observations(reduced_data_folders):
     """Calls the PIONIER data reduction pipeline for each folder of reduced
