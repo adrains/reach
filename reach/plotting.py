@@ -153,13 +153,16 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     
     # Plot the data points and best fit curve
     plt.errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
-    plt.plot(x, y_fit, "--", label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f)" 
-                                 % (ldd_fit, e_ldd_fit))
+    
+    plt.plot(x, y_fit, "--", 
+             label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
+                   % (ldd_fit, e_ldd_fit, e_ldd_fit/ldd_fit*100))
     plt.fill_between(x, y_fit_low, y_fit_high, alpha=0.25)
     
     # Plot the predicted diameter with error
-    plt.plot(x, y_pred, "--", label=r"Predicted ($\theta_{\rm LDD}$=%f $\pm$ %f)" 
-                                 % (ldd_pred, e_ldd_pred))
+    plt.plot(x, y_pred, "--", 
+             label=r"Predicted ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
+                   % (ldd_pred, e_ldd_pred, e_ldd_pred/ldd_pred*100))
     plt.fill_between(x, y_pred_low, y_pred_high, alpha=0.25)
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")

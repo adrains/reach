@@ -889,13 +889,42 @@ def summarise_observations():
 def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                 base_path="/priv/mulga1/arains/pionier/complete_sequences/",
                 dir_suffix="_v3.73_abcd", run_local=False, 
-                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr", 
-                nones_to_zero=True):
+                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr"):
     """This is a function to create and save the oiDiam.fits files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
     empty primary HDU, and a fits table with LDD and e_LDD for each star listed
     alphabetically.
+    
+    Parameters
+    ----------
+    sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        lists of the targets in said CAL1-SCI1-CAL2-SCI2-CAL3 sequence. 
+    
+    complete_sequence: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
+    
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+    
+    base_path: str
+        String filepath where the calibrated data is stored.
+    
+    dir_suffix: str
+        String suffix on the end of each folder of calibrated data
+    
+    run_local: bool
+        Boolean indicating whether the pipeline is being run locally, and to
+        save files instead within reach/test/ for inspection.
+    
+    ldd_col: str
+        Column of predicted LDD from tgt_info to use.
+    
+    e_ldd_col:
+        Column of predicted e_LDD from tgt_info to use.
     """
     print("\n", "-"*79, "\n", "\tSaving Nightly oidiam files\n", "-"*79)
     nights = OrderedDict()
@@ -1030,6 +1059,26 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     Important here are the following commands:
         - Ignore some observations: oiFitsFlagOiData
         - Split the night: oiFitsSplitNight
+
+    Parameters
+    ----------
+    complete_sequence: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
+    
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+    
+    base_path: str
+        String filepath where the calibrated data is stored.
+    
+    dir_suffix: str
+        String suffix on the end of each folder of calibrated data
+    
+    run_local: bool
+        Boolean indicating whether the pipeline is being run locally, and to
+        save files instead within reach/test/ for inspection.
     """
     print("\n", "-"*79, "\n", "\tSaving Nightly pndrs Scripts\n", "-"*79)
     
@@ -1060,26 +1109,24 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     line_split_2 = 'oiFitsSplitNight, oiWave, oiVis2, oiVis, oiT3, tsplit=cc;'
     
     # These lines are written to exclude bad calibrators, with the variable
-    # startend being a list with an MJD range to exclude
+    # 'startend' being a list with an MJD range to exclude
     line_exclude_1 = 'yocoLogInfo,"Ignore bad calibrators";'
     line_exclude_2 = ('oiFitsFlagOiData, oiWave, oiArray, oiVis2, oiT3, oiVis,' 
                       'tlimit=startend;')
     
     pndrs_scripts_written = 0
-    single_seq_nights = 0
+    no_script_nights = 0
     
     # Get a list of the target durations
     durations = calculate_target_durations(complete_sequences)
     bad_durations = select_only_bad_target_durations(durations, tgt_info)
     
     for night in sequence_times:
-        # Disqualify any bad calibrators
-        pass
-        
-        # It is only meaningful to split the night if more than one sequence
-        # has been observed (i.e. there are 4 or more MJD entries).
+        # It is only meaningful to write a script if we need to split the night
+        # (i.e. if more than one sequence has been observed, that is there are
+        # 4 or more MJD entries) or we have bad calibrators to exclude 
         if len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1:
-            single_seq_nights += 1
+            no_script_nights += 1
             continue 
         
         # Save the fits file to the night directory
@@ -1088,8 +1135,8 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         else:
             dir = "test/"
         
-        # This night has more than one sequence. When splitting the night, we
-        # can neglect the first and last times as there are no observations
+        # This night requires a script to be written. When splitting the night,
+        # we can neglect the first and last times as there are no observations
         # before or after these times respectively, and we only need one of any
         # pair of star1 end MJD and star2 start MJD    
         if os.path.exists(dir):
@@ -1104,6 +1151,8 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
                     nightly_script.write(line_split_2)
                 
                 # Rule out bad calibrators
+                # Note that this currently assumes only one bad calibrator per
+                # science target - fix is to use star_i in string formatting
                 if len(bad_durations[night]) >= 1:
                     for star_i, bad_cal in enumerate(bad_durations[night]):
                         nightly_script.write(line_exclude_1 + "\n")
@@ -1112,14 +1161,17 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
                         nightly_script.write(line_exclude_2 + "\n")
             
             # Done, move to the next night
-            print("...wrote %s, %s" % (night, sequence_times[night]))
+            print("...wrote %s, night split into %s, bad calibrators: %s" 
+                  % (night, len(sequence_times[night])//2, 
+                     len(bad_durations[night])))
             pndrs_scripts_written += 1
+            
         else:
             # The directory does not exist, flag
             print("...directory '%s' does not exist" % dir)
             
     print("%i pndrs.i scripts written" % pndrs_scripts_written)
-    print("%i single sequence nights (i.e. no split)" % single_seq_nights)        
+    print("%i no script nights" % no_script_nights)        
 
 
 
@@ -1134,14 +1186,22 @@ def calculate_target_durations(complete_sequences):
     
     Parameters
     ----------
-    complete_sequence
+    complete_sequence: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
     
     Returns
     -------
-    sequence_durations
+    sequence_durations: dict
+        Output from calculate_target_durations, a dict mapping nights to start
+        and end times for each target: durations[night] = [target, start, end]
     """
+    # Initialise results dict
     sequence_durations = {}
     
+    # Time difference to go before start of first observations, or after end of
+    # last observation
     delta = datetime.timedelta(seconds=10)
     
     for seq in complete_sequences.keys():
@@ -1158,7 +1218,7 @@ def calculate_target_durations(complete_sequences):
             # Same target
             if tgt == durations[tgt_i][0]:
                 # Update the end time
-                durations[tgt_i][2] = Time(time - delta).mjd
+                durations[tgt_i][2] = Time(time + delta).mjd
             
             # We've moved on
             else:
@@ -1172,15 +1232,34 @@ def calculate_target_durations(complete_sequences):
 
 
 def select_only_bad_target_durations(sequence_durations, tgt_info):
+    """Takes the output of calculate_target_durations, and compares to the 
+    target quality values in tgt_info, returning only durations for only those
+    targets which we wish to exclude from the calibration process.
+    
+    Parameters
+    ----------
+    sequence_durations: dict
+        Output from calculate_target_durations, a dict mapping nights to start
+        and end times for each target: durations[night] = [target, start, end]
+        
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    Returns
+    -------
+    bad_durations: dict
+        Dict of same form as sequence_durations, but containing only the 
+        calibrators we wish to exclude.
     """
-    """
+    # Initialise results dict
     bad_durations = {}
     
     for night in sequence_durations:
         bad_durations[night] = []
         
         for star in sequence_durations[night]:
-            # Get the star info
+            # Get the star info, making sure to check primary, bayer, and HD
+            # IDs given the non-unique IDs used
             prim_id = tgt_info[tgt_info["Primary"]==star[0]].index
         
             if len(prim_id)==0:
@@ -1194,8 +1273,7 @@ def select_only_bad_target_durations(sequence_durations, tgt_info):
             except:
                 print("...failed on %s, %s" % (night, star))
             
-
-            # Check if it is a bad calibrator
+            # Check if it is a bad calibrator, and if so add to return dict
             if tgt_info.loc[prim_id[0]]["Quality"] == "BAD":
                 bad_durations[night].append(star)
                 
