@@ -75,8 +75,11 @@ from __future__ import division, print_function
 
 import numpy as np
 import pandas as pd
-import reach.core as rch
+import reach.diameters as rdiam
 import reach.plotting as rplt
+import reach.photometry as rphot
+import reach.pndrs as rpndrs
+import reach.utils as rutils
 import pickle
 import platform
 from astroquery.simbad import Simbad
@@ -90,7 +93,7 @@ already_calibrated = False
 # -----------------------------------------------------------------------------
 # Targets information is loaded into a pandas dataframe, with column labels for
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
-tgt_info = rch.load_target_information()
+tgt_info = rutils.load_target_information()
 
 # -----------------------------------------------------------------------------
 # (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
@@ -103,7 +106,7 @@ tgt_info = tgt_info.drop(["GJ551","HD133869"])
 
 # Convert VT and BT to V and B
 # TODO: proper treatment of magnitude errors
-Bmag, Vmag = rch.convert_vtbt_to_vb(tgt_info["BTmag"], tgt_info["VTmag"])
+Bmag, Vmag = rphot.convert_vtbt_to_vb(tgt_info["BTmag"], tgt_info["VTmag"])
 
 tgt_info["Bmag"] = Bmag   
 tgt_info["e_Bmag"] = tgt_info["e_BTmag"]
@@ -123,28 +126,28 @@ filter_eff_lambda = np.array([4450., 5510., 12200., 16300., 21900., 34000.,
                               46000., 120000., 220000.])
 
 # Import/create the SpT vs B-V grid
-grid = rch.create_spt_uv_grid()
+grid = rphot.create_spt_uv_grid()
                      
 # Calculate selective extinction (i.e. (B-V) colour excess)
-tgt_info["eb_v"] = rch.calculate_selective_extinction(tgt_info["Bmag"], 
-                                                      tgt_info["Vmag"], 
-                                                      tgt_info["SpT_simple"],
-                                                      grid)
+tgt_info["eb_v"] = rphot.calculate_selective_extinction(tgt_info["Bmag"], 
+                                                        tgt_info["Vmag"], 
+                                                        tgt_info["SpT_simple"],
+                                                        grid)
 
 # Calculate V band extinction
-tgt_info["A_V"] = rch.calculate_v_band_extinction(tgt_info["eb_v"])
+tgt_info["A_V"] = rphot.calculate_v_band_extinction(tgt_info["eb_v"])
 
 # Calculate the filter effective wavelength *considering* spectral type
 #eff_lambda = rch.calculate_effective_wavelength(tgt_info["SpT"], filter_list)
 
 # Determine extinction
-a_mags = rch.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
-                                           "Kmag", "W1mag","W2mag", "W3mag", 
-                                           "W4mag"]], 
-                                 tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
-                                           "e_Hmag", "e_Kmag", "e_W1mag",  
-                                           "e_W2mag", "e_W3mag", "e_W4mag"]], 
-                                 filter_eff_lambda, tgt_info["A_V"])
+a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
+                                            "Kmag", "W1mag","W2mag", "W3mag", 
+                                            "W4mag"]], 
+                                  tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
+                                            "e_Hmag", "e_Kmag", "e_W1mag",  
+                                            "e_W2mag", "e_W3mag", "e_W4mag"]], 
+                                  filter_eff_lambda, tgt_info["A_V"])
                                  
 # Correct magnitudes for extinction
 # TODO: Only correct the magnitudes if the star is beyond the local bubble
@@ -163,22 +166,22 @@ tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4]
 # -----------------------------------------------------------------------------
 # Estimate angular diameters using colour relations. We want to do this using 
 # as many colour combos as is feasible, as this can be a useful diagnostic
-ldd_vk, e_ldd_vk = rch.predict_ldd_boyajian(tgt_info["Vmag"], 
-                                            tgt_info["e_VTmag"], 
-                                            tgt_info["Kmag"], 
-                                            tgt_info["e_Kmag"], "V-K")
-                                            
-ldd_vw3, e_ldd_vw3 = rch.predict_ldd_boyajian(tgt_info["Vmag"], 
+ldd_vk, e_ldd_vk = rdiam.predict_ldd_boyajian(tgt_info["Vmag"], 
                                               tgt_info["e_VTmag"], 
-                                              tgt_info["W3mag"], 
-                                              tgt_info["e_W3mag"], "V-W3")
+                                              tgt_info["Kmag"], 
+                                              tgt_info["e_Kmag"], "V-K")
                                             
-ldd_vk_dr, e_ldd_vk_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
-                                                  tgt_info["e_VTmag"], 
-                                                  tgt_info["Kmag_dr"], 
-                                                  tgt_info["e_Kmag"], "V-K")
+ldd_vw3, e_ldd_vw3 = rdiam.predict_ldd_boyajian(tgt_info["Vmag"], 
+                                                tgt_info["e_VTmag"], 
+                                                tgt_info["W3mag"], 
+                                                tgt_info["e_W3mag"], "V-W3")
+                                            
+ldd_vk_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+                                                    tgt_info["e_VTmag"], 
+                                                    tgt_info["Kmag_dr"], 
+                                                    tgt_info["e_Kmag"], "V-K")
                                                   
-ldd_vw3_dr, e_ldd_vw3_dr = rch.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+ldd_vw3_dr, e_ldd_vw3_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
                                                     tgt_info["e_VTmag"], 
                                                     tgt_info["W3mag"], 
                                                     tgt_info["e_W3mag"],"V-W3")                                            
@@ -220,12 +223,12 @@ sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
 if "wintermute" not in platform.node() and not already_calibrated:
-    nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info)
+    nights = rpndrs.save_nightly_ldd(sequences, complete_sequences, tgt_info)
     
 elif not already_calibrated:
-    nights = rch.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
-                                  run_local=True, ldd_col="LDD_VK_dr", 
-                                  e_ldd_col="e_LDD_VK_dr")
+    nights = rpndrs.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
+                                    run_local=True, ldd_col="LDD_VK_dr", 
+                                    e_ldd_col="e_LDD_VK_dr")
 
 # -----------------------------------------------------------------------------
 # (8) Write YYYY-MM-DD_pndrsScript.i
@@ -234,9 +237,10 @@ elif not already_calibrated:
 #  i)  Exclude bad calibrators (informed by 5)
 #  ii) Split nights between sequences
 if "wintermute" not in platform.node() and not already_calibrated:
-    rch.save_nightly_pndrs_script(complete_sequences, tgt_info)
+    rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info)
 elif not already_calibrated:
-    rch.save_nightly_pndrs_script(complete_sequences, tgt_info, run_local=True)
+    rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info, 
+                                     run_local=True)
 
 # -----------------------------------------------------------------------------
 # (9) Run pndrsCalibrate for each night of observing
@@ -245,31 +249,31 @@ base_path = "/priv/mulga1/arains/pionier/complete_sequences/@_v3.73_abcd/"
 
 if "wintermute" not in platform.node() and not already_calibrated:
     obs_folders = [base_path.replace("@", night) for night in nights.keys()]
-    rch.calibrate_all_observations(obs_folders)
+    rpndrs.calibrate_all_observations(obs_folders)
 
     # Move oifits files back to central location (reach/results/ by default)
-    rch.move_sci_oifits()
+    rpndrs.move_sci_oifits()
 
 # Collate calibrated vis2 data
 if "wintermute" not in platform.node():
-    vis2, e_vis2, baselines, wavelengths = rch.collate_vis2_from_file()
+    vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file()
 else:
     path = "/Users/adamrains/code/reach/results/"
-    vis2, e_vis2, baselines, wavelengths = rch.collate_vis2_from_file(path)
+    vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
     
 # -----------------------------------------------------------------------------
 # (10) Fit angular diameters to vis^2 of all science targets
 # -----------------------------------------------------------------------------
 # Determine the linear LDD coefficents
-tgt_info["u_lld"] = rch.get_linear_limb_darkening_coeff(tgt_info["logg"],
-                                                        tgt_info["Teff"],
-                                                        tgt_info["FeH_rel"], 
-                                                        "H")
+tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
+                                                          tgt_info["Teff"],
+                                                          tgt_info["FeH_rel"], 
+                                                          "H")
 
 # Don't have parameters for HD187289, assume u_lld=0.5 for now
 tgt_info.loc["HD187289", "u_lld"] = 0.5
 
-rch.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
 
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets

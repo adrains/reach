@@ -138,15 +138,16 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     """
     # Import here to avoid mutual imports
     # TODO: remove dependency and need for this
-    import reach.core as rch
-    x = np.arange(1*10**6, 25*10**7, 10000)
-    y_fit = rch.calculate_vis2(x, ldd_fit, u_lld)
-    y_fit_low = rch.calculate_vis2(x, ldd_fit - e_ldd_fit, u_lld)
-    y_fit_high = rch.calculate_vis2(x, ldd_fit + e_ldd_fit, u_lld)    
+    import reach.diameters as rdiam
     
-    y_pred = rch.calculate_vis2(x, ldd_pred, u_lld)
-    y_pred_low = rch.calculate_vis2(x, ldd_pred - e_ldd_pred, u_lld)
-    y_pred_high = rch.calculate_vis2(x, ldd_pred + e_ldd_pred, u_lld)
+    x = np.arange(1*10**6, 25*10**7, 10000)
+    y_fit = rdiam.calculate_vis2(x, ldd_fit, u_lld)
+    y_fit_low = rdiam.calculate_vis2(x, ldd_fit - e_ldd_fit, u_lld)
+    y_fit_high = rdiam.calculate_vis2(x, ldd_fit + e_ldd_fit, u_lld)    
+    
+    y_pred = rdiam.calculate_vis2(x, ldd_pred, u_lld)
+    y_pred_low = rdiam.calculate_vis2(x, ldd_pred - e_ldd_pred, u_lld)
+    y_pred_high = rdiam.calculate_vis2(x, ldd_pred + e_ldd_pred, u_lld)
     
     #plt.close("all")
     plt.figure()
@@ -174,4 +175,3 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     plt.grid()
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/vis2_fit.pdf")
-    
