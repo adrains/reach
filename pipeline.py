@@ -85,8 +85,16 @@ import platform
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
 
-# Parameter to run a subset of the pipeline
+# -----------------------------------------------------------------------------
+# (0) Parameters
+# -----------------------------------------------------------------------------
+# TODO: move to parameter file
+run_local = True
 already_calibrated = False
+n_bootstraps = 0
+pred_ldd_col = "LDD_VW3_dr"
+e_pred_ldd_col = "e_LDD_VW3_dr"
+base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
 
 # -----------------------------------------------------------------------------
 # (1) Import target details
@@ -166,16 +174,12 @@ tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4]
 # -----------------------------------------------------------------------------
 # Estimate angular diameters using colour relations. We want to do this using 
 # as many colour combos as is feasible, as this can be a useful diagnostic
-ldd_vk, e_ldd_vk = rdiam.predict_ldd_boyajian(tgt_info["Vmag"], 
-                                              tgt_info["e_VTmag"], 
-                                              tgt_info["Kmag"], 
-                                              tgt_info["e_Kmag"], "V-K")
-                                            
-ldd_vw3, e_ldd_vw3 = rdiam.predict_ldd_boyajian(tgt_info["Vmag"], 
-                                                tgt_info["e_VTmag"], 
-                                                tgt_info["W3mag"], 
-                                                tgt_info["e_W3mag"], "V-W3")
-                                            
+"""
+ldd_bv_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Bmag_dr"], 
+                                                    tgt_info["e_BTmag"], 
+                                                    tgt_info["Vmag_dr"], 
+                                                    tgt_info["e_VTmag"], "B-V")
+"""                                            
 ldd_vk_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
                                                     tgt_info["e_VTmag"], 
                                                     tgt_info["Kmag_dr"], 
@@ -186,10 +190,9 @@ ldd_vw3_dr, e_ldd_vw3_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"],
                                                     tgt_info["W3mag"], 
                                                     tgt_info["e_W3mag"],"V-W3")                                            
                                                      
-#tgt_info["LDD_VK"] = ldd_vk
-#tgt_info["e_LDD_VK"] = e_ldd_vk
-#tgt_info["LDD_VW3"] = ldd_vw3
-#tgt_info["e_LDD_VK"] = e_ldd_vk
+#tgt_info["LDD_BV_dr"] = ldd_bv_dr
+#tgt_info["e_LDD_BV_dr"] = e_ldd_bv_dr
+
 tgt_info["LDD_VK_dr"] = ldd_vk_dr
 tgt_info["e_LDD_VK_dr"] = e_ldd_vk_dr
 
@@ -198,6 +201,21 @@ tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
 
 #rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", 
                                #"(V-W3)")
+
+# Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
+n_guassian_ldd, e_pred_ldd = rdiam.sample_n_gaussian_ldd(tgt_info, n_bootstraps, 
+                                                 pred_ldd_col, e_pred_ldd_col)
+                                       
+
+
+# Determine the linear LDD coefficents
+tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
+                                                          tgt_info["Teff"],
+                                                          tgt_info["FeH_rel"], 
+                                                          "H")
+
+# Don't have parameters for HD187289, assume u_lld=0.5 for now
+tgt_info.loc["HD187289", "u_lld"] = 0.5
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
@@ -208,72 +226,40 @@ pkl_obslog = open("data/pionier_observing_log.pkl", "r")
 complete_sequences = pickle.load(pkl_obslog)
 pkl_obslog.close()
 
+pkl_sequences = open("data/sequences.pkl", "r")
+sequences = pickle.load(pkl_sequences)
+pkl_sequences.close()
+
 # -----------------------------------------------------------------------------
 # (6) Inspect reduced data
 # -----------------------------------------------------------------------------
 # Check visibilities for anything unusual (?) or potential saturated data
 pass
 
-# -----------------------------------------------------------------------------
-# (7) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
-# -----------------------------------------------------------------------------
-# Fits file with two HDUs: [0] is (empty) primary image, [1] is table of diams
-pkl_sequences = open("data/sequences.pkl", "r")
-sequences = pickle.load(pkl_sequences)
-pkl_sequences.close()
-
-if "wintermute" not in platform.node() and not already_calibrated:
-    nights = rpndrs.save_nightly_ldd(sequences, complete_sequences, tgt_info)
-    
-elif not already_calibrated:
-    nights = rpndrs.save_nightly_ldd(sequences, complete_sequences, tgt_info, 
-                                    run_local=True, ldd_col="LDD_VK_dr", 
-                                    e_ldd_col="e_LDD_VK_dr")
 
 # -----------------------------------------------------------------------------
-# (8) Write YYYY-MM-DD_pndrsScript.i
+# (7) Write YYYY-MM-DD_pndrsScript.i
 # -----------------------------------------------------------------------------
 # Do the following:
 #  i)  Exclude bad calibrators (informed by 5)
 #  ii) Split nights between sequences
-if "wintermute" not in platform.node() and not already_calibrated:
+if not run_local and not already_calibrated:
     rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info)
 elif not already_calibrated:
     rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info, 
-                                     run_local=True)
+                                     run_local=run_local)
 
-# -----------------------------------------------------------------------------
-# (9) Run pndrsCalibrate for each night of observing
-# -----------------------------------------------------------------------------
-base_path = "/priv/mulga1/arains/pionier/complete_sequences/@_v3.73_abcd/"
-
-if "wintermute" not in platform.node() and not already_calibrated:
-    obs_folders = [base_path.replace("@", night) for night in nights.keys()]
-    rpndrs.calibrate_all_observations(obs_folders)
-
-    # Move oifits files back to central location (reach/results/ by default)
-    rpndrs.move_sci_oifits()
-
-# Collate calibrated vis2 data
-if "wintermute" not in platform.node():
-    vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file()
-else:
-    path = "/Users/adamrains/code/reach/results/"
-    vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
-    
-# -----------------------------------------------------------------------------
-# (10) Fit angular diameters to vis^2 of all science targets
-# -----------------------------------------------------------------------------
-# Determine the linear LDD coefficents
-tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
-                                                          tgt_info["Teff"],
-                                                          tgt_info["FeH_rel"], 
-                                                          "H")
-
-# Don't have parameters for HD187289, assume u_lld=0.5 for now
-tgt_info.loc["HD187289", "u_lld"] = 0.5
-
-rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+# =============================================================================
+# =============================================================================
+# =============================================================================
+# Below here is to be wrapped in bootstrapping code
+# =============================================================================
+# =============================================================================
+# =============================================================================
+rpndrs.run_one_calibration_set(sequences, complete_sequences, base_path, 
+                               tgt_info, n_guassian_ldd.iloc[0], e_pred_ldd, 
+                               run_local=run_local, 
+                               already_calibrated=already_calibrated)
 
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets

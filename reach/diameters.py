@@ -451,3 +451,36 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
     
     # Return the results    
     return u_lld
+    
+
+def sample_n_gaussian_ldd(tgt_info, n_bootstraps, pred_ldd_col, 
+                          e_pred_ldd_col):
+    """
+    """
+    # Get the IDs
+    ids = tgt_info.index.values
+    
+    e_ldd = pd.DataFrame([tgt_info[e_pred_ldd_col].values], columns=ids)
+    
+    # If n_bootstraps = 0, return the actual predicted LDD
+    if n_bootstraps < 1:
+        print("No bootstrapping, using actual predicted LDD")
+        n_gaussian_ldd = pd.DataFrame([tgt_info[pred_ldd_col].values], 
+                                      columns=ids)
+        return n_gaussian_ldd, e_ldd
+        
+    # n_bootstraps is >= 1, draw LDD from a Gaussian distribution.
+    # Make a new pandas dataframe with columns representing an individual star,
+    # and each row being the predicted LDD (pulled from a Gaussian 
+    # distribution) for the ith bootstrapping iteration
+    print("%s bootstrap iterations, drawing LDD from Gaussian distributions" 
+          % n_bootstraps)
+    ldds = np.zeros([n_bootstraps, len(ids)])
+    
+    n_guassian_ldd = pd.DataFrame(ldds, columns=ids)
+    
+    for id in ids:
+        n_guassian_ldd[id] = np.random.normal(tgt_info.loc[id, pred_ldd_col],
+                                              tgt_info.loc[id, e_pred_ldd_col],
+                                              n_bootstraps)                                           
+    return n_guassian_ldd, e_ldd

@@ -6,6 +6,7 @@ import glob
 import datetime
 import numpy as np
 import pandas as pd
+import reach.diameters as rdiam
 from shutil import copyfile
 from astropy.io import fits
 from astropy.time import Time
@@ -15,9 +16,9 @@ from collections import OrderedDict
 # pndrs Affiliated Functions
 # -----------------------------------------------------------------------------
 def save_nightly_ldd(sequences, complete_sequences, tgt_info, 
+                pred_ldd, e_pred_ldd,
                 base_path="/priv/mulga1/arains/pionier/complete_sequences/",
-                dir_suffix="_v3.73_abcd", run_local=False, 
-                ldd_col="LDD_VW3_dr", e_ldd_col="e_LDD_VW3_dr"):
+                dir_suffix="_v3.73_abcd", run_local=False):
     """This is a function to create and save the oiDiam.fits files referenced
     by pndrs during calibration. Each night of observations has a single such
     file with the name formatted per YYYY-MM-DD_oiDiam.fits containing an
@@ -124,9 +125,19 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         # For each non-null reference ID, collate magnitude, LDD, and sci/cal
         # Rename the reference ID column in the pandas dataframe, then stack
         for ref_id in ref_ids:
+            
             rec = tgt_info.loc[ids][tgt_info.loc[ids][ref_id].notnull()]
-            rec = rec[[ldd_col, e_ldd_col, "Hmag", "Kmag", "Vmag", "Science", 
-                       ref_id]]
+            rec = rec[["Hmag", "Kmag", "Vmag", "Science", ref_id]]
+            
+            # Insert the diameters - these are now coming from a separate data
+            # structure to facilitate potential bootstrapping. The variable
+            # appropriate_ids are only those IDs found to have the given ref_id
+            # since the ldd data structures don't know about this
+            appropriate_ids = rec.index.values
+
+            rec.insert(0,"pred_LDD", pred_ldd[appropriate_ids].values)    
+            rec.insert(1,"e_pred_LDD", e_pred_ldd[appropriate_ids].values[0])     
+                       
             rec.rename(columns={ref_id:"Ref_ID"}, inplace=True)
             
             if len(rec) > 0:
@@ -469,3 +480,56 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
             files_copied += 1
     
     print("%i files copied" % files_copied)
+    
+
+def initialise_interferograms():
+    """
+    """    
+    # Randomly sample, move, rename
+    pass
+    
+    
+def run_one_calibration_set(sequences, complete_sequences, base_path, 
+                            tgt_info, pred_ldd, e_pred_ldd,
+                            run_local=False, already_calibrated=False):
+    """
+    (8) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
+    (9) Run pndrsCalibrate for each night of observing
+    (10) Fit angular diameters to vis^2 of all science targets
+    """
+    # Intialise interferograms
+    
+    
+    if not run_local and not already_calibrated:
+        # Save oiDiam files
+        nights = save_nightly_ldd(sequences, complete_sequences, tgt_info,
+                                  pred_ldd, e_pred_ldd)
+        
+        # Run Calibration
+        obs_folders = [base_path % night for night in nights.keys()]
+        calibrate_all_observations(obs_folders)
+
+        # Move oifits files back to central location (reach/results/ by default)
+        move_sci_oifits()
+    
+    elif run_local and not already_calibrated:
+        # Save oiDiam files for local inspection
+        nights = save_nightly_ldd(sequences, complete_sequences, tgt_info, 
+                                  pred_ldd, e_pred_ldd, 
+                                  run_local=run_local)
+    
+    # Collate calibrated vis2 data
+    if not run_local:
+        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file()
+    else:
+        path = "/Users/adamrains/code/reach/results/"
+        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
+    
+    # Fit LDD
+    rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+    
+    
+def run_n_bootstraps():
+    """
+    """
+    pass
