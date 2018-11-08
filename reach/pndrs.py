@@ -441,7 +441,7 @@ def calibrate_all_observations(reduced_data_folders):
         night = ob_folder.split("/")[-2].split("_")[0]
         print("\n", "-"*79, "\n", "\tCalibrating %s, night %i/%i\n" % (night, 
               night_i+1, len(reduced_data_folders)), "-"*79)
-        os.system("(cd %s; pndrsCalibrate)" % ob_folder)
+        os.system("(cd %s; pndrsCalibrate >> cal_log.txt)" % ob_folder)
         
         # Record and the end time and print duration
         times.append(datetime.datetime.now()) 
@@ -498,7 +498,8 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     (10) Fit angular diameters to vis^2 of all science targets
     """
     # Intialise interferograms
-    
+    # Select the reduced interferograms which should be used for calibration
+    initialise_interferograms()
     
     if not run_local and not already_calibrated:
         # Save oiDiam files
@@ -509,7 +510,7 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
         obs_folders = [base_path % night for night in nights.keys()]
         calibrate_all_observations(obs_folders)
 
-        # Move oifits files back to central location (reach/results/ by default)
+        # Move oifits files back to central location (reach/results by default)
         move_sci_oifits()
     
     elif run_local and not already_calibrated:
@@ -526,10 +527,67 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
         vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
     
     # Fit LDD
-    rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+    ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+    
+    return vis2, e_vis2, baselines, wavelengths, ldd_fits
     
     
-def run_n_bootstraps():
+def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
+                     n_guassian_ldd, e_pred_ldd, n_bootstraps,
+                     run_local=False, already_calibrated=False):
     """
     """
-    pass
+    # Initialise data structures for results
+    n_vis2 = {}
+    n_baselines = {}
+    n_ldd_fit = {}
+    
+    times = []
+    
+    # Bootstrap n times
+    for b_i in np.arange(0, n_bootstraps):
+        times.append(datetime.datetime.now())  
+        print("\nBootstrapping iteration %i\n" % b_i)
+        
+        # Run a single calibration run
+        vis2, e_vis2, baselines, wavelengths, ldd_fits = \
+            run_one_calibration_set(sequences, complete_sequences, base_path, 
+                                    tgt_info, n_guassian_ldd.iloc[b_i], 
+                                    e_pred_ldd, run_local=run_local, 
+                                    already_calibrated=already_calibrated)
+                                    
+        # Collate results
+        for sci in vis2.keys():
+            if sci in n_vis2.keys():
+                n_vis2[sci].append(vis2[sci])
+                n_baselines[sci].append(baselines[sci])
+                n_ldd_fit[sci].append(ldd_fits[sci][0])
+            else:
+                n_vis2[sci] = [vis2[sci]]
+                n_baselines[sci] = [baselines[sci]]
+                n_ldd_fit[sci] = [ldd_fits[sci][0]]
+                
+        times.append(datetime.datetime.now())  
+        b_i_time = (times[-1] - times[-2]).total_seconds() 
+        print("\n\nBoostrap %i done in %02d:%04.1f\n" 
+              % (b_i, int(np.floor(b_i_time/60.)), b_i_time % 60.))
+                
+    # All done
+    print("\n", "-"*79, "\n", "\tBootstrapping Complete\n", "-"*79)
+    
+    for sci in n_ldd_fit.keys():
+        # Predicted results
+        #sci_ldd_pred = tgt_info
+        #sci_e_ldd_pred = np.std(n_ldd_fit[sci])
+        #sci_percent_pred = sci_e_ldd_fit / sci_ldd_fit * 100
+        
+        # Fitting results
+        sci_ldd_fit = np.mean(n_ldd_fit[sci])
+        sci_e_ldd_fit = np.std(n_ldd_fit[sci])
+        sci_percent_fit = sci_e_ldd_fit / sci_ldd_fit * 100
+        
+        print("%-12s\tLDD = %f +/- %f (%0.2f%%)" % (sci, sci_ldd_fit, 
+                                                      sci_e_ldd_fit,
+                                                      sci_percent_fit))
+                                                      
+    return n_vis2, n_baselines, n_ldd_fit, wavelengths

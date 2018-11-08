@@ -89,9 +89,10 @@ from astroquery.vizier import Vizier
 # (0) Parameters
 # -----------------------------------------------------------------------------
 # TODO: move to parameter file
-run_local = True
+run_local = False
 already_calibrated = False
-n_bootstraps = 0
+test_one_seq_only = True
+n_bootstraps = 5
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
@@ -204,9 +205,7 @@ tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
 
 # Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
 n_guassian_ldd, e_pred_ldd = rdiam.sample_n_gaussian_ldd(tgt_info, n_bootstraps, 
-                                                 pred_ldd_col, e_pred_ldd_col)
-                                       
-
+                                             pred_ldd_col, e_pred_ldd_col)
 
 # Determine the linear LDD coefficents
 tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
@@ -256,12 +255,41 @@ elif not already_calibrated:
 # =============================================================================
 # =============================================================================
 # =============================================================================
-rpndrs.run_one_calibration_set(sequences, complete_sequences, base_path, 
-                               tgt_info, n_guassian_ldd.iloc[0], e_pred_ldd, 
-                               run_local=run_local, 
-                               already_calibrated=already_calibrated)
+# For testing purposes, only consider one star
+if test_one_seq_only:
+    seq1 = (99, 'epsEri', 'faint')
+    seq2 = (99, 'epsEri', 'bright')
+    complete_sequences = {seq2:complete_sequences[seq2]}
+                      
+    sequences = {seq2:sequences[seq2]}
 
+n_vis2, n_baselines, n_ldd_fit, wavelengths = \
+    rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
+                     n_guassian_ldd, e_pred_ldd, n_bootstraps,
+                     run_local=run_local, 
+                     already_calibrated=already_calibrated)
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets
 # -----------------------------------------------------------------------------
-pass
+vis2 = {}
+e_vis2 = {}
+ldd_fit = {}
+e_ldd_fit = {}
+baselines = {}
+
+# Combine bootstrapped data
+for sci in n_vis2.keys():
+    vis2[sci] = np.mean(n_vis2[sci], axis=0)
+    e_vis2[sci] = np.std(n_vis2[sci], axis=0)
+    
+    ldd_fit[sci] = np.mean(n_ldd_fit[sci])
+    e_ldd_fit[sci] = np.std(n_ldd_fit[sci])
+    
+    assert np.all([np.array_equal(n_baselines[sci][0], n_baselines[sci][i]) 
+                   for i in np.arange(0, len(n_baselines[sci]))])
+                   
+    baselines[sci] = n_baselines[sci][0]
+    
+# Now generate plots
+rplt.plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit, 
+                        e_ldd_fit, tgt_info, pred_ldd_col, e_pred_ldd_col)

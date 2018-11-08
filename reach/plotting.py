@@ -4,6 +4,7 @@ from __future__ import division, print_function
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
@@ -175,3 +176,27 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     plt.grid()
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/vis2_fit.pdf")
+    
+    
+def plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit, 
+                       e_ldd_fit, tgt_info, pred_ldd_col, e_pred_ldd_col):
+    """Plot a single multi-page pdf of all fits using plot_vis2_fit
+    """
+    plt.close("all")
+    with PdfPages("plots/bootstrapped_fits.pdf") as pdf:
+        for sci in vis2:
+            pid = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+        
+            n_bl = len(baselines[sci])
+            n_wl = len(wavelengths)
+            bl_grid = np.tile(baselines[sci], n_wl).reshape([n_wl, n_bl]).T
+            wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+            
+            b_on_lambda = (bl_grid / wl_grid).flatten()
+            plot_vis2_fit(b_on_lambda, vis2[sci].flatten(), 
+                          e_vis2[sci].flatten(),  ldd_fit[sci], 
+                          e_ldd_fit[sci], tgt_info.loc[pid, pred_ldd_col],
+                          tgt_info.loc[pid, e_pred_ldd_col], 
+                          tgt_info.loc[pid, "u_lld"], sci)
+            pdf.savefig()
+            plt.close()

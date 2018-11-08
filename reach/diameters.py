@@ -10,7 +10,6 @@ import matplotlib.pylab as plt
 from astropy.io import fits
 from scipy.special import jv
 from scipy.optimize import curve_fit
-from matplotlib.backends.backend_pdf import PdfPages
 from scipy.interpolate import LinearNDInterpolator
 
 
@@ -213,7 +212,7 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     return ldd_opt[0], e_ldd_opt[0]
 
 
-def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
+def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -261,24 +260,11 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info):
             print("...exception, aborting fit - %s" % err)                              
                                          
     # All Done, create diagnostic plots
-    plt.close("all")
-    with PdfPages("plots/successful_fits.pdf") as pdf:
-        for sci in successful_fits:
-        
-            n_bl = len(baselines[sci])
-            n_wl = len(wavelengths)
-            bl_grid = np.tile(baselines[sci], n_wl).reshape([n_wl, n_bl]).T
-            wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+    if do_plot:
+        rplt.plot_all_vis2_fits(successful_fits, baselines, wavelengths, vis2, 
+                                e_vis2)
             
-            b_on_lambda = (bl_grid / wl_grid).flatten()
-            rplt.plot_vis2_fit(b_on_lambda, vis2[sci].flatten(), 
-                               e_vis2[sci].flatten(),  successful_fits[sci][0], 
-                               successful_fits[sci][1], 
-                               successful_fits[sci][2], 
-                               successful_fits[sci][3],
-                               successful_fits[sci][4], sci)
-            pdf.savefig()
-            plt.close()
+    return successful_fits
 
 
 def extract_vis2(oi_fits_file):
@@ -460,14 +446,14 @@ def sample_n_gaussian_ldd(tgt_info, n_bootstraps, pred_ldd_col,
     # Get the IDs
     ids = tgt_info.index.values
     
-    e_ldd = pd.DataFrame([tgt_info[e_pred_ldd_col].values], columns=ids)
+    e_pred_ldd = pd.DataFrame([tgt_info[e_pred_ldd_col].values], columns=ids)
     
     # If n_bootstraps = 0, return the actual predicted LDD
     if n_bootstraps < 1:
         print("No bootstrapping, using actual predicted LDD")
         n_gaussian_ldd = pd.DataFrame([tgt_info[pred_ldd_col].values], 
                                       columns=ids)
-        return n_gaussian_ldd, e_ldd
+        return n_gaussian_ldd, e_pred_ldd
         
     # n_bootstraps is >= 1, draw LDD from a Gaussian distribution.
     # Make a new pandas dataframe with columns representing an individual star,
@@ -483,4 +469,4 @@ def sample_n_gaussian_ldd(tgt_info, n_bootstraps, pred_ldd_col,
         n_guassian_ldd[id] = np.random.normal(tgt_info.loc[id, pred_ldd_col],
                                               tgt_info.loc[id, e_pred_ldd_col],
                                               n_bootstraps)                                           
-    return n_guassian_ldd, e_ldd
+    return n_guassian_ldd, e_pred_ldd
