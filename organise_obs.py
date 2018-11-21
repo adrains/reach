@@ -56,6 +56,9 @@ for obs_log in all_logs:
     # Get the night of observation by way of subfolder
     night = obs_log.split("/")[-2]
     
+    # 
+    ob_type = None
+    
     # Extract the relevant information
     for row in content:
         # Night grade
@@ -76,13 +79,38 @@ for obs_log in all_logs:
         # Run - the ESO period
         elif row[:4] == "Run:":
             run = row.split(" ")[-1]
+        # ---------------------------------------
+        # The following are to extract whether the data is of type fringe, 
+        # dark, or kappa matrix (i.e. flux splitting ratio). There will be 
+        # multiple lines for fringe and kappa in the file, as the text log
+        # records on the level of the sequence/target, rather than just listing
+        # what it specifically is. As such, we then need to compare the file
+        # name and assign a label accordingly
+        elif row[:18] == "PIONIER_OBS_FRINGE":
+            obfname = row.split("\t")[1]
+            
+            if obfname in obs_log:
+                ob_type = "FRINGE"
+        
+        elif row[:16] == "PIONIER_GEN_DARK":
+            obfname = row.split("\t")[1]
+            
+            if obfname in obs_log:
+                ob_type = "DARK"
+        
+        elif row[:17] == "PIONIER_GEN_KAPPA":
+            obfname = row.split("\t")[1]
+            
+            if obfname in obs_log:
+                ob_type = "KAPPA"
             
     # In addition to the text file, grab the fits file of the data itself, 
     # which has the same path bar ".fits.Z" instead of ".NL.txt"
     ob_fits = obs_log.replace("NL.txt", "fits.Z")
     
     # Select details of observation to save
-    ob_details = [container, OB, target, grade, ob_time, obs_log, run, ob_fits]
+    ob_details = [container, OB, target, grade, ob_time, obs_log, run, ob_fits,
+                  ob_type]
     
     # Now store the observation details in the dictionary
     # If night entry exists, append observation
@@ -104,8 +132,8 @@ np.savetxt("ref_ids.csv", list(ref_ids), fmt="%s")
 # Read in and separate out the bright and faint sci-cal sequences
 # -----------------------------------------------------------------------------
 # Read in each sequence
-bright_list_files = ["p99_bright.txt", "p101_bright.txt"]
-faint_list_files = ["p99_faint.txt", "p101_faint.txt"]
+bright_list_files = ["data/p99_bright.txt", "data/p101_bright.txt"]
+faint_list_files = ["data/p99_faint.txt", "data/p101_faint.txt"]
 
 bright_list = []
 faint_list = []
@@ -229,7 +257,21 @@ for night in night_log.keys():
                     
                 else:
                     sequence_added_to = False
-                
+                    
+                # Do a check here to see if we're now on the last ob/target
+                # Without this, we would have previously incremented ob_i and
+                # head straight into the next if statement, exiting before we
+                # can properly handle the final observation of the night 
+                # (typically a dark)
+                if (len(concatenation) > 0 
+                    and sequence[sci][tgt_i] in obs_tar
+                    and is_good_grade(grade)
+                    and ob_i + 1 == len(night_log[night])):
+                    # No need to increment here, as we'll exit straight away
+                    # once we enter the next if statement
+                    concatenation.append(night_log[night][ob_i])
+                    print(3, end="")
+                    
                 # Now we should either have finished a sequence, or found a
                 # broken sequence. Two ways to complete a sequence, otherwise
                 # we consider it broken and move on:
@@ -238,11 +280,11 @@ for night in night_log.keys():
                 # If the last target in the sequence, and we either did not add
                 # to anything or we are at the end of the night
                 if (tgt_i + 1 == len(sequence[sci]) 
-                    and (not sequence_added_to 
+                    and (not sequence_added_to
                     or ob_i + 1 == len(night_log[night]))):
                     # Note that there is the case where the grade is bad on the
                     # final target
-                    print(3, end="")
+                    print(4, end="")
                     
                     all_grades = [ob[3] for ob in concatenation]
                     grade = "".join(all_grades)
@@ -320,10 +362,17 @@ for night in night_log.keys():
 # and what are marked as good per the ESO grades (i.e. A or B). The HR7732 data
 # is fine per the logs, but marked as C. Ignore the first saturated del Pav
 # sequence, but take everything else, mindful that the guiding was lost during
-# the final del Pav exposure and we have 4x the number of observations required
-# (but don't currently know how to assess them as good or bad).
+# the final del Pav exposure and we have to remove those observations where it
+# was lost for all telescopes/baselines
+
+# First calibrator, HR7732 --> keep
 concatenation = night_log["2017-08-27"][:6]
-concatenation.extend(night_log["2017-08-27"][16:])
+
+# Take kappa matrix and darks of first del Pav exposure, but not the science
+# Then take everything else except seven exposures where the guiding was lost
+# (np.mean(vis2.flatten()) == 0), and everything in between
+concatenation.extend(night_log["2017-08-27"][11:40])
+concatenation.extend(night_log["2017-08-27"][47:])
 
 # Determine grades, period, and end time, then save to dict as usual
 grade = "".join([observation[3] for observation in concatenation])
@@ -448,6 +497,10 @@ print("Finished! %i files (%0.2f GB) copied" % (n_files_copied,
 # -----------------------------------------------------------------------------
 # Save details
 # -----------------------------------------------------------------------------
-pkl_obslog = open("pionier_observing_log.pkl", "wb")
+pkl_nightlog = open("data/pionier_night_log.pkl", "wb")
+pickle.dump(night_log, pkl_nightlog)
+pkl_nightlog.close()
+
+pkl_obslog = open("data/pionier_observing_log.pkl", "wb")
 pickle.dump(complete_sequences, pkl_obslog)
 pkl_obslog.close()
