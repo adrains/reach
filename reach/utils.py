@@ -85,3 +85,24 @@ def load_target_information(filepath="data/target_info.tsv"):
                                inplace=True)
     # Return result
     return tgt_info
+    
+    
+#def get_hd_id_from_prim
+
+def complete_obs_diagnostics(complete_sequences):
+    """
+    """
+    for seq in complete_sequences.keys():
+        print("-"*30)
+        print(seq,len(complete_sequences[seq][2]))
+        for i, yy in enumerate(complete_sequences[seq][2]):
+            print("%02i" % i, yy[2], yy[3], yy[-1])
+            
+def night_log_diagnostics(night_log):
+    """
+    """
+    for night in night_log.keys():
+        print("-"*30)
+        print(night, len(night_log[night]))
+        for i, yy in enumerate(night_log[night]):
+            print("%02i" % i, yy[2], yy[3], yy[-1])

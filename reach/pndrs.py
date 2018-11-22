@@ -2,12 +2,13 @@
 """
 from __future__ import division, print_function
 import os
+import sys
 import glob
 import datetime
 import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
-from shutil import copyfile
+from shutil import copyfile, rmtree
 from astropy.io import fits
 from astropy.time import Time
 from collections import OrderedDict
@@ -169,7 +170,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
     
         # Save the fits file to the night directory
         if not run_local:
-            dir = base_path + night + dir_suffix
+            dir = base_path + "%s%s/%s/" % (night, dir_suffix, night)
         else:
             dir = "test/"
         
@@ -270,44 +271,43 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         
         # Save the fits file to the night directory
         if not run_local:
-            dir = base_path + night + dir_suffix
+            dir = base_path + "%s%s/%s/" % (night, dir_suffix, night)
         else:
-            dir = "test/"
+            dir = "test"
+        
+        # Make the directory if it does not exist
+        if not os.path.exists(dir):
+            os.mkdir(dir)
         
         # This night requires a script to be written. When splitting the night,
         # we can neglect the first and last times as there are no observations
         # before or after these times respectively, and we only need one of any
-        # pair of star1 end MJD and star2 start MJD    
-        if os.path.exists(dir):
-            fname = dir + "/" + night + "_pndrsScript.i" 
+        # pair of star1 end MJD and star2 start MJD              
+        fname = dir + "/" + night + "_pndrsScript.i" 
+        
+        with open(fname, "w") as nightly_script:
+            # Split the night
+            if len(sequence_times[night]) > 2:
+                nightly_script.write(line_split_1 + "\n")
+                cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
+                nightly_script.write(cc)
+                nightly_script.write(line_split_2)
             
-            with open(fname, "w") as nightly_script:
-                # Split the night
-                if len(sequence_times[night]) > 2:
-                    nightly_script.write(line_split_1 + "\n")
-                    cc = "cc = %s;\n" % sequence_times[night][1:-1:2]
-                    nightly_script.write(cc)
-                    nightly_script.write(line_split_2)
-                
-                # Rule out bad calibrators
-                # Note that this currently assumes only one bad calibrator per
-                # science target - fix is to use star_i in string formatting
-                if len(bad_durations[night]) >= 1:
-                    for star_i, bad_cal in enumerate(bad_durations[night]):
-                        nightly_script.write(line_exclude_1 + "\n")
-                        startend = "startend = %s;\n" % bad_cal[1:]
-                        nightly_script.write(startend)
-                        nightly_script.write(line_exclude_2 + "\n")
-            
-            # Done, move to the next night
-            print("...wrote %s, night split into %s, bad calibrators: %s" 
-                  % (night, len(sequence_times[night])//2, 
-                     len(bad_durations[night])))
-            pndrs_scripts_written += 1
-            
-        else:
-            # The directory does not exist, flag
-            print("...directory '%s' does not exist" % dir)
+            # Rule out bad calibrators
+            # Note that this currently assumes only one bad calibrator per
+            # science target - fix is to use star_i in string formatting
+            if len(bad_durations[night]) >= 1:
+                for star_i, bad_cal in enumerate(bad_durations[night]):
+                    nightly_script.write(line_exclude_1 + "\n")
+                    startend = "startend = %s;\n" % bad_cal[1:]
+                    nightly_script.write(startend)
+                    nightly_script.write(line_exclude_2 + "\n")
+        
+        # Done, move to the next night
+        print("...wrote %s, night split into %s, bad calibrators: %s" 
+              % (night, len(sequence_times[night])//2, 
+                 len(bad_durations[night])))
+        pndrs_scripts_written += 1
             
     print("%i pndrs.i scripts written" % pndrs_scripts_written)
     print("%i no script nights" % no_script_nights)        
@@ -417,7 +417,36 @@ def select_only_bad_target_durations(sequence_durations, tgt_info):
                 bad_durations[night].append(star)
                 
     return bad_durations
+
+
+def reduce_all_observations(base_path=("/priv/mulga1/arains/pionier/"
+                                       "complete_sequences/")):
+    """Removes existing reduced and calibrated data, then runs pndrsReduce.
     
+    Parameters
+    ----------
+    base_path: string
+        Base directory housing the data.
+    """
+    print("\n", "-"*79, "\n", "\tDeleting old reduced/calibrated data\n", 
+          "-"*79)
+          
+    # Delete existing reduced/calibrated data
+    to_delete = glob.glob(base_path + "*_*/")
+    to_delete.sort()
+    
+    for folder in to_delete:
+        os.system("rm -rf %s" % folder)
+        print("Deleted %s" % folder)
+        
+    # Run reduction using pndrsReduce
+    to_reduce = glob.glob(base_path + "*/")
+    to_reduce.sort()
+    
+    for folder in to_reduce:
+        print("\n", "-"*79, "\n", "Reducing %s\n" % folder, "-"*79)
+        os.system("cd %s; pndrsReduce" % folder)
+        
 
 def calibrate_all_observations(reduced_data_folders):
     """Calls the PIONIER data reduction pipeline for each folder of reduced
@@ -439,25 +468,27 @@ def calibrate_all_observations(reduced_data_folders):
     
         # Navigate to the night folder and call pndrsCalibrate from terminal
         night = ob_folder.split("/")[-2].split("_")[0]
-        print("\n", "-"*79, "\n", "\tCalibrating %s, night %i/%i\n" % (night, 
-              night_i+1, len(reduced_data_folders)), "-"*79)
+        print("Calibrating %s, night %i/%i..." 
+              % (night, night_i+1, len(reduced_data_folders)), end="")
+        sys.stdout.flush()
         os.system("(cd %s; pndrsCalibrate >> cal_log.txt)" % ob_folder)
         
         # Record and the end time and print duration
         times.append(datetime.datetime.now()) 
         cal_time = (times[-1] - times[-2]).total_seconds() 
-        print("\n\nNight calibrated in %02d:%04.1f\n" 
+        print("calibrated in %02d:%04.1f min" 
               % (int(np.floor(cal_time/60.)), cal_time % 60.))
     
     # All nights finished, print summary          
     total_time = (times[-1] - times[0]).total_seconds()    
-    print("Calibration finished, %i nights in %02d:%04.1f\n" 
+    print("\nCalibration finished, %i nights in %02d:%04.1f\n" 
           % (len(reduced_data_folders),int(np.floor(total_time/60.)), 
              total_time % 60.))
         
 
 def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
-                    new_path="/home/arains/code/reach/results/"):
+                    new_path="/home/arains/code/reach/results/",
+                    bootstrap_i=None):
     """Used to collect the calibrated oiFits files of all science targets after
     running the PIONIER data reduction pipeline. 
     
@@ -469,49 +500,142 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     new_path: string
         Folder to move the results to.
     """
-    sci_oi_fits = glob.glob(obs_path + "*/*SCI*oidataCalibrated.fits")
+    sci_oi_fits = glob.glob(obs_path + "*_v3.73_abcd/*/*SCI*oidataCalibrated.fits")
     
     print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
     
     for files_copied, oifits in enumerate(sci_oi_fits):
         if os.path.exists(new_path):
             print("...copying %s" % oifits.split("/")[-1])
-            copyfile(oifits, new_path + oifits.split("/")[-1])
+            
+            # Update the filename to keep copies of all potential bootstraps
+            if bootstrap_i:
+                fname = oifits.split("/")[-1].replace(".fits", 
+                                                      "_%i.fits" % bootstrap_i)
+            else:
+                fname = oifits.split("/")[-1]
+                
+            copyfile(oifits, new_path + fname)
             files_copied += 1
     
     print("%i files copied" % files_copied)
     
 
-def initialise_interferograms():
+def initialise_interferograms(complete_sequences, base_path, n_ifg=5):
+    """Randomly sample, move, rename
     """
-    """    
-    # Randomly sample, move, rename
-    pass
+    # For every sequence, perform bootstrapping at the interferogram level
+    for seq in complete_sequences.keys():
+        night = complete_sequences[seq][0]
+        night_folder = base_path % night
+        bootstrapping_folder = night_folder + "/%s/" % night
+        
+        # Remove all files in bootstrapping_folder (i.e. remnants of previous 
+        # bootstrapping runs) as to start anew
+        old_files = glob.glob(bootstrapping_folder + "PIONI*")
+        
+        for old_file in old_files:
+            os.remove(old_file)
+            
+        print("Removed %i old files" % len(old_files))
+
+        # Re/make the bootstrapping folder
+        #print("Making directory:\t%s" % bootstrapping_folder)
+        #os.mkdir(bootstrapping_folder)
+        
+        # Collect interferograms of the same target together, select N randomly
+        # with repeats from these, copy to the subdirectory and rename, then
+        # proceed to the next target
+        ifgs = select_random_interferograms(complete_sequences[seq][2], n_ifg)
+        
+        for i_ifg, ifg in enumerate(ifgs):
+            fn = ifg.split("/")[-1]
+            old_fn = fn.replace(".fits.Z", "_oidata.fits")
+            new_fn = old_fn.replace("_oidata", "_i%02i_oidata" % i_ifg)
+            
+            copyfile(night_folder + old_fn, bootstrapping_folder + new_fn)
+            
+        print("Moved %i interferograms" % i_ifg)
+            
+
+def select_random_interferograms(obs_sequence, n_ifg=5, validate_mode=False):
+    """
+    """
+    selected_ifgs = []
+    ifg_i = 0
+    
+    # Initialise the current target/sequence
+    current_tgt = obs_sequence[0][2]
+    
+    current_ifgs = []
+    
+    while ifg_i < len(obs_sequence):
+        # Get the current target
+        new_tgt = obs_sequence[ifg_i][2]
+        ifg_filename = obs_sequence[ifg_i][7]
+        ifg_type = obs_sequence[ifg_i][8]
+        
+        # See if it matches the previous target, and if so record the filename
+        # for the interferogram and continue the loop
+        if new_tgt == current_tgt:
+            # Only add file if it is a fringe
+            if ifg_type == "FRINGE" and validate_mode:
+                # In validate mode, append easier to read star names/data types
+                # and numbers rather than filenames
+                current_ifgs.append("%s_%s_%i" % (new_tgt, ifg_type, ifg_i))
+                
+            elif ifg_type == "FRINGE":
+                current_ifgs.append(ifg_filename)
+                
+            ifg_i += 1
+        
+        # Does not match, means we've moved onto the next target in the seq.
+        # Now we should randomly sample n_ifg times, and reset
+        if new_tgt != current_tgt or ifg_i == len(obs_sequence):
+            # Randomly sample
+            #selected_ifgs.extend(current_ifgs)
+            selected_ifgs.extend(np.random.choice(current_ifgs, n_ifg))
+            
+            # Reset, but don't increment counter (will just go through the loop
+            # again and hit the first if statement)
+            current_tgt = new_tgt
+            current_ifgs = []
+            
+    return selected_ifgs
     
     
 def run_one_calibration_set(sequences, complete_sequences, base_path, 
-                            tgt_info, pred_ldd, e_pred_ldd,
+                            tgt_info, pred_ldd, e_pred_ldd, cal_i,
                             run_local=False, already_calibrated=False):
     """
     (8) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
     (9) Run pndrsCalibrate for each night of observing
     (10) Fit angular diameters to vis^2 of all science targets
+    
+    Parameters
+    ----------
+    
+    Returns
+    -------
     """
     # Intialise interferograms
     # Select the reduced interferograms which should be used for calibration
-    initialise_interferograms()
+    initialise_interferograms(complete_sequences, base_path, n_ifg=5)
     
     if not run_local and not already_calibrated:
         # Save oiDiam files
         nights = save_nightly_ldd(sequences, complete_sequences, tgt_info,
                                   pred_ldd, e_pred_ldd)
         
+        print("\n", "-"*79, "\n", "\tCalibrating %i night/s, bootstrap %i\n" 
+              % (len(nights), cal_i), "-"*79)
+        
         # Run Calibration
-        obs_folders = [base_path % night for night in nights.keys()]
+        obs_folders = [base_path % night + "%s/" % night for night in nights.keys()]
         calibrate_all_observations(obs_folders)
 
         # Move oifits files back to central location (reach/results by default)
-        move_sci_oifits()
+        move_sci_oifits(bootstrap_i=cal_i)
     
     elif run_local and not already_calibrated:
         # Save oiDiam files for local inspection
@@ -553,7 +677,7 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         vis2, e_vis2, baselines, wavelengths, ldd_fits = \
             run_one_calibration_set(sequences, complete_sequences, base_path, 
                                     tgt_info, n_guassian_ldd.iloc[b_i], 
-                                    e_pred_ldd, run_local=run_local, 
+                                    e_pred_ldd, b_i, run_local=run_local, 
                                     already_calibrated=already_calibrated)
                                     
         # Collate results
@@ -571,6 +695,10 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         b_i_time = (times[-1] - times[-2]).total_seconds() 
         print("\n\nBoostrap %i done in %02d:%04.1f\n" 
               % (b_i, int(np.floor(b_i_time/60.)), b_i_time % 60.))
+    
+    total_t = (times[-1] - times[0]).total_seconds() 
+    print("\n%i bootstraps done in %02d:%04.1f\n" 
+              % (n_bootstraps, int(np.floor(total_t/60.)), total_t % 60.))
                 
     # All done
     print("\n", "-"*79, "\n", "\tBootstrapping Complete\n", "-"*79)

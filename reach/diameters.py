@@ -356,6 +356,7 @@ def collate_vis2_from_file(results_path="/home/arains/code/reach/results/"):
     wavelengths = []
     
     all_results = glob.glob(results_path + "*SCI*oidataCalibrated.fits")
+    all_results.sort()
     
     print("\n", "-"*79, "\n", "\tCollating Calibrated vis2\n", "-"*79)
     
