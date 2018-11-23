@@ -91,6 +91,7 @@ from astroquery.vizier import Vizier
 # TODO: move to parameter file
 run_local = False
 already_calibrated = False
+do_random_ifg_sampling = False
 test_one_seq_only = True
 n_bootstraps = 3
 pred_ldd_col = "LDD_VW3_dr"
@@ -267,7 +268,8 @@ n_vis2, n_baselines, n_ldd_fit, wavelengths = \
     rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                      n_gaussian_ldd, e_pred_ldd, n_bootstraps,
                      run_local=run_local, 
-                     already_calibrated=already_calibrated)
+                     already_calibrated=already_calibrated,
+                     do_random_ifg_sampling=do_random_ifg_sampling)
 
 # Save the results                     
 pkl_bootstrap_raw = open("results/bootstrap_raw.pkl", "wb")

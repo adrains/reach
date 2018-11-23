@@ -506,14 +506,14 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     
     for files_copied, oifits in enumerate(sci_oi_fits):
         if os.path.exists(new_path):
-            print("...copying %s" % oifits.split("/")[-1])
-            
             # Update the filename to keep copies of all potential bootstraps
-            if bootstrap_i:
+            if bootstrap_i is not None:
                 fname = oifits.split("/")[-1].replace(".fits", 
-                                                      "_%i.fits" % bootstrap_i)
+                                                      "_%02i.fits" % bootstrap_i)
             else:
                 fname = oifits.split("/")[-1]
+                
+            print("...copying %s as %s" % (oifits.split("/")[-1], fname))
                 
             copyfile(oifits, new_path + fname)
             files_copied += 1
@@ -521,9 +521,12 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     print("%i files copied" % files_copied)
     
 
-def initialise_interferograms(complete_sequences, base_path, n_ifg=5):
+def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
+                              do_random_ifg_sampling=True):
     """Randomly sample, move, rename
     """
+    print("\n", "-"*79, "\n", "\tInitialising Interferograms\n", "-"*79)
+    
     # For every sequence, perform bootstrapping at the interferogram level
     for seq in complete_sequences.keys():
         night = complete_sequences[seq][0]
@@ -546,7 +549,8 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5):
         # Collect interferograms of the same target together, select N randomly
         # with repeats from these, copy to the subdirectory and rename, then
         # proceed to the next target
-        ifgs = select_random_interferograms(complete_sequences[seq][2], n_ifg)
+        ifgs = sample_interferograms(complete_sequences[seq][2], n_ifg, 
+                                     do_random_ifg_sampling)
         
         for i_ifg, ifg in enumerate(ifgs):
             fn = ifg.split("/")[-1]
@@ -558,7 +562,8 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5):
         print("Moved %i interferograms" % i_ifg)
             
 
-def select_random_interferograms(obs_sequence, n_ifg=5, validate_mode=False):
+def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
+                          validate_mode=False):
     """
     """
     selected_ifgs = []
@@ -584,29 +589,35 @@ def select_random_interferograms(obs_sequence, n_ifg=5, validate_mode=False):
                 # and numbers rather than filenames
                 current_ifgs.append("%s_%s_%i" % (new_tgt, ifg_type, ifg_i))
                 
-            elif ifg_type == "FRINGE":
+            if ifg_type == "FRINGE":
                 current_ifgs.append(ifg_filename)
                 
             ifg_i += 1
         
         # Does not match, means we've moved onto the next target in the seq.
-        # Now we should randomly sample n_ifg times, and reset
+        # Now we should sample n_ifg times, and reset
         if new_tgt != current_tgt or ifg_i == len(obs_sequence):
-            # Randomly sample
-            #selected_ifgs.extend(current_ifgs)
-            selected_ifgs.extend(np.random.choice(current_ifgs, n_ifg))
+            # Either sample randomly with repeats, or use all data
+            if do_random_ifg_sampling:
+                selected_ifgs.extend(np.random.choice(current_ifgs, n_ifg))
+            else:
+                selected_ifgs.extend(current_ifgs)
             
             # Reset, but don't increment counter (will just go through the loop
             # again and hit the first if statement)
             current_tgt = new_tgt
             current_ifgs = []
-            
+    
+    for ifg_i, ifg in enumerate(selected_ifgs):
+        print("%i\t%s" % (ifg_i, ifg))
+     
     return selected_ifgs
     
     
 def run_one_calibration_set(sequences, complete_sequences, base_path, 
-                            tgt_info, pred_ldd, e_pred_ldd, cal_i,
-                            run_local=False, already_calibrated=False):
+                            tgt_info, pred_ldd, e_pred_ldd, bs_i,
+                            run_local=False, already_calibrated=False,
+                            do_random_ifg_sampling=True):
     """
     (8) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
     (9) Run pndrsCalibrate for each night of observing
@@ -620,7 +631,8 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     """
     # Intialise interferograms
     # Select the reduced interferograms which should be used for calibration
-    initialise_interferograms(complete_sequences, base_path, n_ifg=5)
+    initialise_interferograms(complete_sequences, base_path, n_ifg=5, 
+                              do_random_ifg_sampling=do_random_ifg_sampling)
     
     if not run_local and not already_calibrated:
         # Save oiDiam files
@@ -628,14 +640,14 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
                                   pred_ldd, e_pred_ldd)
         
         print("\n", "-"*79, "\n", "\tCalibrating %i night/s, bootstrap %i\n" 
-              % (len(nights), cal_i), "-"*79)
+              % (len(nights), bs_i), "-"*79)
         
         # Run Calibration
         obs_folders = [base_path % night + "%s/" % night for night in nights.keys()]
         calibrate_all_observations(obs_folders)
 
         # Move oifits files back to central location (reach/results by default)
-        move_sci_oifits(bootstrap_i=cal_i)
+        move_sci_oifits(bootstrap_i=bs_i)
     
     elif run_local and not already_calibrated:
         # Save oiDiam files for local inspection
@@ -645,7 +657,7 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     
     # Collate calibrated vis2 data
     if not run_local:
-        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file()
+        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(bs_i=bs_i)
     else:
         path = "/Users/adamrains/code/reach/results/"
         vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
@@ -658,7 +670,8 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     
 def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                      n_guassian_ldd, e_pred_ldd, n_bootstraps,
-                     run_local=False, already_calibrated=False):
+                     run_local=False, already_calibrated=False, 
+                     do_random_ifg_sampling=True):
     """
     """
     # Initialise data structures for results
@@ -668,17 +681,24 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
     
     times = []
     
+    print("\nBeginning calibration and fitting run. Parameters set as follow:")
+    print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
+    print(" - run_local\t\t\t=\t%s" % run_local)
+    print(" - already_calibrated\t\t=\t%s" % already_calibrated)
+    print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
+    
     # Bootstrap n times
-    for b_i in np.arange(0, n_bootstraps):
+    for bs_i in np.arange(0, n_bootstraps):
         times.append(datetime.datetime.now())  
-        print("\nBootstrapping iteration %i\n" % b_i)
+        print("\n", "|"*79, "\n\tBootstrapping iteration %i\n" % bs_i, "|"*79)
         
         # Run a single calibration run
         vis2, e_vis2, baselines, wavelengths, ldd_fits = \
             run_one_calibration_set(sequences, complete_sequences, base_path, 
-                                    tgt_info, n_guassian_ldd.iloc[b_i], 
-                                    e_pred_ldd, b_i, run_local=run_local, 
-                                    already_calibrated=already_calibrated)
+                                    tgt_info, n_guassian_ldd.iloc[bs_i], 
+                                    e_pred_ldd, bs_i, run_local=run_local, 
+                                    already_calibrated=already_calibrated,
+                                    do_random_ifg_sampling=do_random_ifg_sampling)
                                     
         # Collate results
         for sci in vis2.keys():
@@ -694,7 +714,7 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         times.append(datetime.datetime.now())  
         b_i_time = (times[-1] - times[-2]).total_seconds() 
         print("\n\nBoostrap %i done in %02d:%04.1f\n" 
-              % (b_i, int(np.floor(b_i_time/60.)), b_i_time % 60.))
+              % (bs_i, int(np.floor(b_i_time/60.)), b_i_time % 60.))
     
     total_t = (times[-1] - times[0]).total_seconds() 
     print("\n%i bootstraps done in %02d:%04.1f\n" 

@@ -325,7 +325,8 @@ def extract_vis2(oi_fits_file):
     return vis2, e_vis2, baselines, wavelengths
 
 
-def collate_vis2_from_file(results_path="/home/arains/code/reach/results/"):
+def collate_vis2_from_file(results_path="/home/arains/code/reach/results/",
+                           bs_i=None):
     """Collates calibrated squared visibilities, errors, baselines, and 
     wavelengths for each science target in the specified results folder.
     
@@ -355,14 +356,20 @@ def collate_vis2_from_file(results_path="/home/arains/code/reach/results/"):
     all_baselines = {}
     wavelengths = []
     
-    all_results = glob.glob(results_path + "*SCI*oidataCalibrated.fits")
+    all_results = glob.glob(results_path + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
     all_results.sort()
     
-    print("\n", "-"*79, "\n", "\tCollating Calibrated vis2\n", "-"*79)
+    print("\n", "-"*79, "\n", 
+          "\tCollating Calibrated vis2 for bootstrap %i\n" % bs_i, "-"*79)
+    
+    print("%i oifits file/s found for this iteration" % len(all_results))
     
     for oifits in all_results:
-        # Get the target name from the file name
-        sci = oifits.split("/")[-1][15:-22].replace("_", "")
+        # Get the target name from the file name - this is clunky, but more
+        # robust than the former method of slicing using static indices which
+        # inherently assumes a constant file length (which changes when we
+        # begin bootstrapping)
+        sci = oifits.split("SCI")[1].split("oidata")[0].replace("_", "")
         
         print("Collating %s" % oifits, end="")
         
