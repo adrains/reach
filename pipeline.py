@@ -91,12 +91,20 @@ from astroquery.vizier import Vizier
 # TODO: move to parameter file
 run_local = False
 already_calibrated = False
-do_random_ifg_sampling = False
-test_one_seq_only = True
+do_random_ifg_sampling = True
+do_gaussian_diam_sampling = True
+test_one_seq_only = False
 n_bootstraps = 3
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
+
+print("\nBeginning calibration and fitting run. Parameters set as follow:")
+print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
+print(" - run_local\t\t\t=\t%s" % run_local)
+print(" - already_calibrated\t\t=\t%s" % already_calibrated)
+print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
+print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
 
 # -----------------------------------------------------------------------------
 # (1) Import target details
@@ -205,8 +213,9 @@ tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
                                #"(V-W3)")
 
 # Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
-n_gaussian_ldd, e_pred_ldd = rdiam.sample_n_gaussian_ldd(tgt_info, n_bootstraps, 
-                                             pred_ldd_col, e_pred_ldd_col)
+n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps, 
+                                                 pred_ldd_col, e_pred_ldd_col,
+                                                 do_gaussian_diam_sampling)
 
 # Determine the linear LDD coefficents
 tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
@@ -266,10 +275,10 @@ if test_one_seq_only:
 
 n_vis2, n_baselines, n_ldd_fit, wavelengths = \
     rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
-                     n_gaussian_ldd, e_pred_ldd, n_bootstraps,
-                     run_local=run_local, 
-                     already_calibrated=already_calibrated,
-                     do_random_ifg_sampling=do_random_ifg_sampling)
+                            n_pred_ldd, e_pred_ldd, n_bootstraps,
+                            run_local=run_local, 
+                            already_calibrated=already_calibrated,
+                            do_random_ifg_sampling=do_random_ifg_sampling)
 
 # Save the results                     
 pkl_bootstrap_raw = open("results/bootstrap_raw.pkl", "wb")

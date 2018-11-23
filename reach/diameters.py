@@ -447,8 +447,8 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
     return u_lld
     
 
-def sample_n_gaussian_ldd(tgt_info, n_bootstraps, pred_ldd_col, 
-                          e_pred_ldd_col):
+def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
+                      do_gaussian_diam_sampling=True):
     """
     """
     # Get the IDs
@@ -456,25 +456,27 @@ def sample_n_gaussian_ldd(tgt_info, n_bootstraps, pred_ldd_col,
     
     e_pred_ldd = pd.DataFrame([tgt_info[e_pred_ldd_col].values], columns=ids)
     
-    # If n_bootstraps = 0, return the actual predicted LDD
-    if n_bootstraps < 1:
-        print("No bootstrapping, using actual predicted LDD")
-        n_gaussian_ldd = pd.DataFrame([tgt_info[pred_ldd_col].values], 
+    # If not running second stage of bootstrapping on calibrator predicted 
+    # diameters create a dataframe with duplicate rows simply as the predicted
+    # calibrator diameters, rather than drawing from a Gaussian distribution
+    if not do_gaussian_diam_sampling:
+        print("No calibrator bootstrapping --> using actual predicted LDD")
+        n_pred_ldd = pd.DataFrame([tgt_info[pred_ldd_col].values], 
                                       columns=ids)
-        return n_gaussian_ldd, e_pred_ldd
+        n_pred_ldd = pd.concat([n_pred_ldd]*n_bootstraps, ignore_index=True)
+        return n_pred_ldd, e_pred_ldd
         
-    # n_bootstraps is >= 1, draw LDD from a Gaussian distribution.
+    # Otherwise we are running cal bootstrapping, draw LDD from a Gaussian dist
     # Make a new pandas dataframe with columns representing an individual star,
     # and each row being the predicted LDD (pulled from a Gaussian 
     # distribution) for the ith bootstrapping iteration
-    print("%s bootstrap iterations, drawing LDD from Gaussian distributions" 
-          % n_bootstraps)
+    print("Calibrator bootstrapping --> drawing LDD from Gaussian dist")
     ldds = np.zeros([n_bootstraps, len(ids)])
     
-    n_guassian_ldd = pd.DataFrame(ldds, columns=ids)
+    n_pred_ldd = pd.DataFrame(ldds, columns=ids)
     
     for id in ids:
-        n_guassian_ldd[id] = np.random.normal(tgt_info.loc[id, pred_ldd_col],
+        n_pred_ldd[id] = np.random.normal(tgt_info.loc[id, pred_ldd_col],
                                               tgt_info.loc[id, e_pred_ldd_col],
                                               n_bootstraps)                                           
-    return n_guassian_ldd, e_pred_ldd
+    return n_pred_ldd, e_pred_ldd

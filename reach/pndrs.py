@@ -262,13 +262,6 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     bad_durations = select_only_bad_target_durations(durations, tgt_info)
     
     for night in sequence_times:
-        # It is only meaningful to write a script if we need to split the night
-        # (i.e. if more than one sequence has been observed, that is there are
-        # 4 or more MJD entries) or we have bad calibrators to exclude 
-        if len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1:
-            no_script_nights += 1
-            continue 
-        
         # Save the fits file to the night directory
         if not run_local:
             dir = base_path + "%s%s/%s/" % (night, dir_suffix, night)
@@ -278,6 +271,13 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
         # Make the directory if it does not exist
         if not os.path.exists(dir):
             os.mkdir(dir)
+            
+        # It is only meaningful to write a script if we need to split the night
+        # (i.e. if more than one sequence has been observed, that is there are
+        # 4 or more MJD entries) or we have bad calibrators to exclude 
+        if len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1:
+            no_script_nights += 1
+            continue     
         
         # This night requires a script to be written. When splitting the night,
         # we can neglect the first and last times as there are no observations
@@ -559,7 +559,7 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
             
             copyfile(night_folder + old_fn, bootstrapping_folder + new_fn)
             
-        print("Moved %i interferograms" % i_ifg)
+        print("Moved %i interferograms" % (i_ifg+1))
             
 
 def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
@@ -571,6 +571,8 @@ def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
     
     # Initialise the current target/sequence
     current_tgt = obs_sequence[0][2]
+    
+    night = obs_sequence[0][5].split("/")[-2]
     
     current_ifgs = []
     
@@ -599,7 +601,15 @@ def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
         if new_tgt != current_tgt or ifg_i == len(obs_sequence):
             # Either sample randomly with repeats, or use all data
             if do_random_ifg_sampling:
-                selected_ifgs.extend(np.random.choice(current_ifgs, n_ifg))
+                # In some cases where sequences have not been completed as 
+                # CAL1-SCI1-CAL2-SCI2-CAL3 (e.g. out of order) we may end up
+                # with a block that does not contain any fringes, specifically
+                # a block containing only kappa files. These should be ignored.
+                if len(current_ifgs) > 0:
+                    selected_ifgs.extend(np.random.choice(current_ifgs, n_ifg))
+                else:
+                    print("Found block of entirely non-fringe files for",
+                          "%s on night %s" % (current_tgt, night)) 
             else:
                 selected_ifgs.extend(current_ifgs)
             
@@ -681,12 +691,6 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
     
     times = []
     
-    print("\nBeginning calibration and fitting run. Parameters set as follow:")
-    print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
-    print(" - run_local\t\t\t=\t%s" % run_local)
-    print(" - already_calibrated\t\t=\t%s" % already_calibrated)
-    print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
-    
     # Bootstrap n times
     for bs_i in np.arange(0, n_bootstraps):
         times.append(datetime.datetime.now())  
@@ -714,7 +718,7 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         times.append(datetime.datetime.now())  
         b_i_time = (times[-1] - times[-2]).total_seconds() 
         print("\n\nBoostrap %i done in %02d:%04.1f\n" 
-              % (bs_i, int(np.floor(b_i_time/60.)), b_i_time % 60.))
+              % (bs_i+1, int(np.floor(b_i_time/60.)), b_i_time % 60.))
     
     total_t = (times[-1] - times[0]).total_seconds() 
     print("\n%i bootstraps done in %02d:%04.1f\n" 
