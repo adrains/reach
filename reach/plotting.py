@@ -200,3 +200,38 @@ def plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit,
                           tgt_info.loc[pid, "u_lld"], sci)
             pdf.savefig()
             plt.close()
+            
+
+def plot_ldd_hists(n_ldd_fit, n_bins=10):
+    """
+    """
+    plt.close("all")
+    fig, axes = plt.subplots(4, 4)
+    axes = axes.flatten()
+
+    for sci_i, sci in enumerate(n_ldd_fit.keys()):
+        ldd_percentiles = np.percentile(n_ldd_fit[sci], [50, 84.1, 15.9]) 
+        err_ldd = np.abs(ldd_percentiles[1:] - ldd_percentiles[0])
+    
+        axes[sci_i].hist(n_ldd_fit[sci], n_bins)
+        
+        text_x = ldd_percentiles[0]
+        text_y = axes[sci_i].get_ylim()[1] * 0.95
+        
+        axes[sci_i].set_title(sci)
+        y_height = axes[sci_i].get_ylim()[1]
+        axes[sci_i].vlines(ldd_percentiles[0], 0, y_height, 
+                           linestyles="dashed")
+        axes[sci_i].vlines(ldd_percentiles[1], 0, y_height, 
+                           colors="red", linestyles="dotted")
+        axes[sci_i].vlines(ldd_percentiles[2], 0, y_height, 
+                           colors="red", linestyles="dotted")
+        axes[sci_i].text(text_x, text_y, 
+                         r"$\theta_{\rm LDD}=$%0.4f +%0.4f / -%0.4f" 
+                         % (ldd_percentiles[0], err_ldd[0], err_ldd[1]),
+                         horizontalalignment="center", fontsize=7)
+        #axes[sci_i].set_xlabel("LDD (mas)")
+        
+    fig.tight_layout()
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("plots/ldd_hists.pdf")

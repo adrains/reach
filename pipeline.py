@@ -281,7 +281,7 @@ n_vis2, n_baselines, n_ldd_fit, wavelengths = \
                             do_random_ifg_sampling=do_random_ifg_sampling)
 
 # Save the results                     
-pkl_bootstrap_raw = open("results/bootstrap_raw.pkl", "wb")
+pkl_bootstrap_raw = open("results/bootstrap_raw_%i.pkl" % n_bootstraps, "wb")
 pickle.dump([n_vis2, n_baselines, n_ldd_fit, wavelengths], pkl_bootstrap_raw)
 pkl_bootstrap_raw.close()
 # -----------------------------------------------------------------------------

@@ -297,30 +297,31 @@ def extract_vis2(oi_fits_file):
     # When multiple sequences are observed, there are extra extensions for
     # each wavelength, vis^2, and t3phi set (e.g. two observed sequences 
     # would have two of each of these in a row)
-    oifits = fits.open(oi_fits_file)
-    n_extra_seq = (len(oifits) - 6) // 3
+    with fits.open(oi_fits_file, memmap=False) as oifits:
+        #oifits = fits.open(oi_fits_file)
+        n_extra_seq = (len(oifits) - 6) // 3
     
-    vis2 = []
-    e_vis2 = []
-    baselines = []
+        vis2 = []
+        e_vis2 = []
+        baselines = []
     
-    # Retrieve visibility and baseline information for an arbitrary (>=1) 
-    # number of sequences within a given night
-    for seq_i in xrange(0, n_extra_seq+1):
-        oidata = oifits[4 + n_extra_seq + seq_i].data
+        # Retrieve visibility and baseline information for an arbitrary (>=1) 
+        # number of sequences within a given night
+        for seq_i in xrange(0, n_extra_seq+1):
+            oidata = oifits[4 + n_extra_seq + seq_i].data
         
-        if len(vis2)==0 and len(e_vis2)==0 and len(baselines)==0:
-            vis2 = oidata["VIS2DATA"]
-            e_vis2 = oidata["VIS2ERR"]
-            baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
-        else:
-            vis2 = np.vstack((vis2, oidata["VIS2DATA"]))
-            e_vis2 = np.vstack((e_vis2, oidata["VIS2ERR"]))
-            baselines = np.hstack((baselines, np.sqrt(oidata["UCOORD"]**2 
-                                                   + oidata["VCOORD"]**2)))
+            if len(vis2)==0 and len(e_vis2)==0 and len(baselines)==0:
+                vis2 = oidata["VIS2DATA"]
+                e_vis2 = oidata["VIS2ERR"]
+                baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+            else:
+                vis2 = np.vstack((vis2, oidata["VIS2DATA"]))
+                e_vis2 = np.vstack((e_vis2, oidata["VIS2ERR"]))
+                baselines = np.hstack((baselines, np.sqrt(oidata["UCOORD"]**2 
+                                                       + oidata["VCOORD"]**2)))
     
-    # Assume that we'll always be using the same wavelength mode within a night      
-    wavelengths = oifits[2].data["EFF_WAVE"]
+        # Assume that we'll always be using same wavelength mode within a night      
+        wavelengths = oifits[2].data["EFF_WAVE"]
     
     return vis2, e_vis2, baselines, wavelengths
 
