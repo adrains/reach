@@ -87,7 +87,36 @@ def load_target_information(filepath="data/target_info.tsv"):
     return tgt_info
     
     
-#def get_hd_id_from_prim
+def combine_independent_boostrap_runs(pkl_list):
+    """Function to combine LDD realisations from independent bootstrapping runs
+    for the purpose of plotting histograms/estimating uncertainties.
+    
+    Parameters
+    ----------
+    pkl_list: list
+        List of pickle files to combine.
+        
+    Returns
+    -------
+    n_ldd_fit_all: dict
+        Dictionary of all LDD fits from each bootstrapping run. Key is the 
+        science target, values stored in list.
+    """
+    n_ldd_fit_all = {}
+    
+    # Open each pickle and join together into n_ldd_fit_all
+    for pkl_fn in pkl_list:
+        pkl = open(pkl_fn)
+        [n_vis2, n_baselines, n_ldd_fit, wavelengths] = pickle.load(pkl)
+        pkl.close()
+        
+        for sci in n_ldd_fit.keys():
+            if sci in n_ldd_fit_all.keys():
+                n_ldd_fit_all[sci].extend(n_ldd_fit[sci])
+            else:
+                n_ldd_fit_all[sci] = n_ldd_fit[sci]
+                
+    return n_ldd_fit_all
 
 def complete_obs_diagnostics(complete_sequences):
     """

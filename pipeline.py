@@ -73,6 +73,8 @@ Required Catalogues
 """
 from __future__ import division, print_function
 
+import time
+import glob
 import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
@@ -94,7 +96,7 @@ already_calibrated = False
 do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
-n_bootstraps = 3
+n_bootstraps = 50
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
@@ -105,6 +107,8 @@ print(" - run_local\t\t\t=\t%s" % run_local)
 print(" - already_calibrated\t\t=\t%s" % already_calibrated)
 print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
 print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
+
+print("<i>Strap in</i> for bootstrapping.")
 
 # -----------------------------------------------------------------------------
 # (1) Import target details
@@ -245,7 +249,6 @@ pkl_sequences.close()
 # Check visibilities for anything unusual (?) or potential saturated data
 pass
 
-
 # -----------------------------------------------------------------------------
 # (7) Write YYYY-MM-DD_pndrsScript.i
 # -----------------------------------------------------------------------------
@@ -258,13 +261,14 @@ elif not already_calibrated:
     rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info, 
                                      run_local=run_local)
 
-# =============================================================================
-# =============================================================================
-# =============================================================================
-# Below here is to be wrapped in bootstrapping code
-# =============================================================================
-# =============================================================================
-# =============================================================================
+# -----------------------------------------------------------------------------
+# (8+) Bootstrap the calibration pipeline
+# -----------------------------------------------------------------------------
+# Run N bootstrapping iterations of the following:
+# - Write YYYY-MM-DD_oiDiam.fits files for each night of observing
+# - Run pndrsCalibrate for each night of observing
+# - Collate vis^2 and fit angular diameters for all science targets
+
 # For testing purposes, only consider one star
 if test_one_seq_only:
     seq1 = (99, 'epsEri', 'faint')
@@ -280,13 +284,22 @@ n_vis2, n_baselines, n_ldd_fit, wavelengths = \
                             already_calibrated=already_calibrated,
                             do_random_ifg_sampling=do_random_ifg_sampling)
 
-# Save the results                     
-pkl_bootstrap_raw = open("results/bootstrap_raw_%i.pkl" % n_bootstraps, "wb")
+# Save the results
+str_date = time.strftime("%y-%m-%d")                     
+pkl_bootstrap_raw = open("results/bootstrap_%s_n%i.pkl" 
+                         % (str_date, n_bootstraps), "wb")
 pickle.dump([n_vis2, n_baselines, n_ldd_fit, wavelengths], pkl_bootstrap_raw)
 pkl_bootstrap_raw.close()
+
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets
 # -----------------------------------------------------------------------------
+pkl_list = glob.glob("results/*pkl")
+n_ldd_fit_all = rutils.combine_independent_boostrap_runs(pkl_list)
+rplt.plot_ldd_hists(n_ldd_fit_all, 25)
+
+# Below is currently broken until a the visibility plotting code is fixed
+"""
 vis2 = {}
 e_vis2 = {}
 ldd_fit = {}
@@ -311,3 +324,4 @@ rplt.plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit,
                         e_ldd_fit, tgt_info, pred_ldd_col, e_pred_ldd_col)
                         
 # Save the results
+"""

@@ -233,7 +233,9 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
                          % (ldd_percentiles[0], err_ldd[0], err_ldd[1]),
                          horizontalalignment="center", fontsize=7)
         #axes[sci_i].set_xlabel("LDD (mas)")
-        
+    
+    n_bs = len(n_ldd_fit[sci])
+    fig.suptitle("LDD histograms for %i bootstrapping iterations" % n_bs)
     fig.tight_layout()
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/ldd_hists.pdf")
