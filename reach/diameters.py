@@ -450,7 +450,44 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
 
 def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
                       do_gaussian_diam_sampling=True):
-    """
+    """Prepares a pandas dataframe of predicted target diameters for 
+    bootstrapping over. Each row will either be sampled from a Gaussian 
+    distribution if doing calibrator bootstrapping, otherwise will simply be N
+    repeats of the actual predicted diameters.
+    
+    Parameters
+    ----------
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    n_bootstraps: int
+        The number of bootstrapping iterations to run.
+        
+    pred_ldd_col: string
+        The column to use from tgt_info for the predicted diameters.
+        
+    e_pred_ldd_col: string
+        The column to use from tgt_info for the predicted diameter 
+        uncertainties.
+        
+    do_gaussian_diam_sampling: bool
+        Boolean indicating whether to sample the n_bootstraps LDD from a 
+        Gaussian distribution constructed from pred_ldd_col and e_pred_ldd_col,
+        or simply make n_bootstraps repeats of the predicted diameters without
+        sampling.
+        
+    Returns
+    -------
+    n_pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and each row being a set of
+        LDD for a given bootstrapping iteration. If not doing calibrator 
+        bootstrapping (do_gaussian_diam_sampling=False), each row will be the 
+        same, but otherwise the calibrator angular diameters are drawn from a 
+        Gaussian distribution as part of the bootstrapping.
+    
+    e_pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and the values being the 
+        uncertainties corresponding to n_pred_ldd. Only one row.    
     """
     # Get the IDs
     ids = tgt_info.index.values

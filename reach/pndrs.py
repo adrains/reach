@@ -32,7 +32,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         Dictionary mapping sequences (period, science target, bright/faint) to
         lists of the targets in said CAL1-SCI1-CAL2-SCI2-CAL3 sequence. 
     
-    complete_sequence: dict
+    complete_sequences: dict
         Dictionary mapping sequences (period, science target, bright/faint) to
         [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
                          ob_fits],...]
@@ -325,7 +325,7 @@ def calculate_target_durations(complete_sequences):
     
     Parameters
     ----------
-    complete_sequence: dict
+    complete_sequences: dict
         Dictionary mapping sequences (period, science target, bright/faint) to
         [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
                          ob_fits],...]
@@ -499,6 +499,9 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     
     new_path: string
         Folder to move the results to.
+        
+    bootstrap_i: int
+        Integer count for the ith bootstrapping iteration
     """
     sci_oi_fits = glob.glob(obs_path + "*_v3.73_abcd/*/*SCI*oidataCalibrated.fits")
     
@@ -523,7 +526,28 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
 
 def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
                               do_random_ifg_sampling=True):
-    """Randomly sample, move, rename
+    """Initialises interferograms for calibration by sampling from available 
+    files and moving those selected to a subdirectory where pndrsCalibrate will
+    be run. This involves random sampling with repeats, and renaming of files
+    to account for there now potentially being duplicates.
+    
+    Parameters
+    ----------
+    complete_sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
+    
+    base_path: str
+        String filepath where the calibrated data is stored.
+        
+    n_ifg: int
+        Number of random samples with repeats to make of each target. Defaults
+        to 5.
+    
+    do_random_ifg_sampling: bool
+        Boolean indicating whether to randomly sample from the interferograms 
+        or to use all data available.
     """
     print("\n", "-"*79, "\n", "\tInitialising Interferograms\n", "-"*79)
     
@@ -541,10 +565,6 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
             os.remove(old_file)
             
         print("Removed %i old files" % len(old_files))
-
-        # Re/make the bootstrapping folder
-        #print("Making directory:\t%s" % bootstrapping_folder)
-        #os.mkdir(bootstrapping_folder)
         
         # Collect interferograms of the same target together, select N randomly
         # with repeats from these, copy to the subdirectory and rename, then
@@ -564,7 +584,36 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
 
 def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
                           validate_mode=False):
-    """
+    """Samples from among the available interferograms and returns a list of
+    filenames.
+    
+    If do_random_ifg_sampling is True, n_ifg interferograms will be selected
+    for each star for each appearance in the CAL1-SCI1-CAL2-SCI2-CAL3 sequence
+    at random with repeats. If false, all available data from the sequence will
+    be used.
+    
+    Parameters
+    ----------
+    obs_sequence: list
+        List of all *raw* observations taken for this sequence originally from
+        complete_sequences. Note that raw observations include DARK and KAPPA
+        (flux splitting) exposures, and that these are ignored.
+        
+    n_ifg: int
+        Number of random samples with repeats to make of each target. Defaults
+        to 5.
+    
+    do_random_ifg_sampling: bool
+        Boolean indicating whether to randomly sample from the interferograms 
+        or to use all data available.
+        
+    validate_mode: bool
+        Boolean used for testing purposes to inspect random sampling.
+        
+    Returns
+    -------
+    selected_ifgs: list
+        List of sampled *raw* files of type FRINGE.
     """
     selected_ifgs = []
     ifg_i = 0
@@ -628,16 +677,67 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
                             tgt_info, pred_ldd, e_pred_ldd, bs_i,
                             run_local=False, already_calibrated=False,
                             do_random_ifg_sampling=True):
-    """
-    (8) Write YYYY-MM-DD_oiDiam.fits files for each night of observing
-    (9) Run pndrsCalibrate for each night of observing
-    (10) Fit angular diameters to vis^2 of all science targets
+    """Runs a single bootstrapping iteration, completing the following steps: 
+        - Write YYYY-MM-DD_oiDiam.fits files for each night of observing
+        - Run pndrsCalibrate for each night of observing
+        - Collate vis^2 and fit angular diameters for all science targets
     
     Parameters
     ----------
+    sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        lists of the targets in said CAL1-SCI1-CAL2-SCI2-CAL3 sequence. 
     
+    complete_sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
+    
+    base_path: str
+        String filepath where the calibrated data is stored.
+    
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and the values being LDD for
+        a given bootstrapping iteration. Only one row.
+    
+    e_pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and the values being the 
+        uncertainties corresponding to e_pred_ldd. Only one row.
+        
+    bs_i: int
+        Integer count for the ith bootstrapping iteration
+    
+    run_local: bool
+        Boolean indicating whether the pipeline is being run locally, and to
+        save files instead within reach/test/ for inspection.
+    
+    already_calibrated: bool
+        Boolean to skip calibration and proceed straight to result collation
+        for testing purposes when results remain.
+    
+    do_random_ifg_sampling: bool
+        Boolean indicating whether to randomly sample from the interferograms 
+        or to use all data available.
+        
     Returns
     -------
+    vis2: list
+        List of all calibrated visibilities from bootstrapping run.
+    
+    e_vis2: list
+        List of errors on calibrated visibilities from bootstrapping run.
+    
+    baselines: list
+        List of all n_baselines from bootstrapping run. 
+    
+    wavelengths: list
+        List of wavelengths observed at. Assumed constant for all observations.
+        
+    ldd_fits: list
+        List of all LDD fits from bootstrapping run. 
     """
     # Intialise interferograms
     # Select the reduced interferograms which should be used for calibration
@@ -653,7 +753,8 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
               % (len(nights), bs_i), "-"*79)
         
         # Run Calibration
-        obs_folders = [base_path % night + "%s/" % night for night in nights.keys()]
+        obs_folders = [base_path % night + "%s/" % night 
+                       for night in nights.keys()]
         calibrate_all_observations(obs_folders)
 
         # Move oifits files back to central location (reach/results by default)
@@ -667,22 +768,85 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     
     # Collate calibrated vis2 data
     if not run_local:
-        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(bs_i=bs_i)
+        vis2, e_vis2, baselines, wavelengths = \
+            rdiam.collate_vis2_from_file(bs_i=bs_i)
     else:
         path = "/Users/adamrains/code/reach/results/"
-        vis2, e_vis2, baselines, wavelengths = rdiam.collate_vis2_from_file(path)
+        vis2, e_vis2, baselines, wavelengths = \
+            rdiam.collate_vis2_from_file(path)
     
     # Fit LDD
-    ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info)
+    ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, 
+                                 tgt_info)
     
     return vis2, e_vis2, baselines, wavelengths, ldd_fits
     
     
 def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
-                     n_guassian_ldd, e_pred_ldd, n_bootstraps,
+                     n_pred_ldd, e_pred_ldd, n_bootstraps,
                      run_local=False, already_calibrated=False, 
                      do_random_ifg_sampling=True):
-    """
+    """Runs N bootstrapping iterations, collating and return the results.
+    
+    Parameters
+    ----------
+    sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        lists of the targets in said CAL1-SCI1-CAL2-SCI2-CAL3 sequence. 
+    
+    complete_sequences: dict
+        Dictionary mapping sequences (period, science target, bright/faint) to
+        [night, grade, [[container, OB, target, grade, ob_time, obs_log, run, 
+                         ob_fits],...]
+    
+    base_path: str
+        String filepath where the calibrated data is stored.
+    
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    n_pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and each row being a set of
+        LDD for a given bootstrapping iteration. If not doing calibrator 
+        bootstrapping, each row will be the same, but otherwise the calibrator
+        angular diameters are drawn from a Gaussian distribution as part of the
+        bootstrapping.
+    
+    e_pred_ldd: pandas dataframe
+        Pandas dataframe with columns being stars, and the values being the 
+        uncertainties corresponding to n_pred_ldd. Only one row.
+        
+    n_bootstraps: int
+        The number of bootstrapping iterations to run.
+    
+    run_local: bool
+        Boolean indicating whether the pipeline is being run locally, and to
+        save files instead within reach/test/ for inspection.
+    
+    already_calibrated: bool
+        Boolean to skip calibration and proceed straight to result collation
+        for testing purposes when results remain.
+    
+    do_random_ifg_sampling: bool
+        Boolean indicating whether to randomly sample from the interferograms 
+        or to use all data available.
+        
+    Returns
+    -------
+    n_vis2: dict
+        Dictionary of all calibrated visibilities from each bootstrapping run.
+        Key is the science target, values stored in list.
+    
+    n_baselines: dict
+        Dictionary of all n_baselines from each bootstrapping run. Key is the 
+        science target, values stored in list.
+    
+    n_ldd_fit: dict
+        Dictionary of all LDD fits from each bootstrapping run. Key is the 
+        science target, values stored in list.
+    
+    wavelengths: list
+        List of wavelengths observed at. Assumed constant for all observations.
     """
     # Initialise data structures for results
     n_vis2 = {}
@@ -699,7 +863,7 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         # Run a single calibration run
         vis2, e_vis2, baselines, wavelengths, ldd_fits = \
             run_one_calibration_set(sequences, complete_sequences, base_path, 
-                                    tgt_info, n_guassian_ldd.iloc[bs_i], 
+                                    tgt_info, n_pred_ldd.iloc[bs_i], 
                                     e_pred_ldd, bs_i, run_local=run_local, 
                                     already_calibrated=already_calibrated,
                                     do_random_ifg_sampling=do_random_ifg_sampling)

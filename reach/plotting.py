@@ -203,12 +203,14 @@ def plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit,
             
 
 def plot_ldd_hists(n_ldd_fit, n_bins=10):
-    """
+    """Function to plot a grid of histogram for LDD realisations from each 
+    bootstrapping run.
     """
     plt.close("all")
     fig, axes = plt.subplots(4, 4)
     axes = axes.flatten()
-
+    
+    # For each science target, plot a histogram of N LDD realisations
     for sci_i, sci in enumerate(n_ldd_fit.keys()):
         ldd_percentiles = np.percentile(n_ldd_fit[sci], [50, 84.1, 15.9]) 
         err_ldd = np.abs(ldd_percentiles[1:] - ldd_percentiles[0])
