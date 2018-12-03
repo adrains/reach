@@ -33,11 +33,10 @@ def run_vis2_diagnostics(complete_sequences, base_path):
         fringe_files = [ff.replace("/PIONI", "_v3.73_abcd/PIONI") for ff in fringe_files]
         fringe_files.sort()                     
         
-        #import pdb
-        #pdb.set_trace()
-        
         # Create empty dataframe, and pre-allocate memory
-        cols = ["MJD", "AT1-AT2", "AT1-AT3", "AT1-AT4", "AT2-AT3", "AT2-AT4", "AT3-AT4"] 
+        cols = ["MJD", "AT1-AT2", "BL 1-2", "AT1-AT3", "BL 1-3", 
+                "AT1-AT4", "BL 1-4", "AT2-AT3", "BL 2-3", "AT2-AT4", "BL 2-4",
+                "AT3-AT4", "BL 3-4"] 
         seq_recs = pd.DataFrame(index=np.arange(0, len(fringe_files)), columns=cols)
         
         # Extract from each one
@@ -54,17 +53,18 @@ def run_vis2_diagnostics(complete_sequences, base_path):
                     # Save MJD data
                     seq_recs.loc[ff_i, "MJD"] = baseline_data[2]
                     
-                    #uv = np.sqrt(baseline_data[6]**2 + baseline_data[7]**2)
-                    
                     # Get column name, and save vis2 data
-                    sta_index = baseline_data[8] - [1,1]
+                    tel_index = baseline_data[8] - [1,1]
                     
-                    #import pdb
-                    #pdb.set_trace()
-                    
-                    sta_str = "%s-%s" % (tels[sta_index[0]][0], tels[sta_index[1]][0])
+                    tel_col = "%s-%s" % (tels[tel_index[0]][0], 
+                                         tels[tel_index[1]][0])
                    
-                    seq_recs.loc[ff_i, sta_str] = baseline_data[4]
+                    seq_recs.loc[ff_i, tel_col] = baseline_data[4]
+                    
+                    # Save the UV baseline data
+                    uv = np.sqrt(baseline_data[6]**2 + baseline_data[7]**2)
+                    bl_col = "BL %i-%i" % (baseline_data[8][0], baseline_data[8][1])
+                    seq_recs.loc[ff_i, bl_col] = uv
                     
         # Save the pandas array and move on
         vis2_per_bl[seq] = seq_recs
@@ -78,18 +78,38 @@ def plot_vis2_diagnostics(vis2_per_bl):
     fig, axes = plt.subplots(6, 7)
     axes = axes.flatten()
     
+    vis2_cols = ["AT1-AT2", "AT1-AT3", "AT1-AT4", "AT2-AT3", "AT2-AT4", 
+                "AT3-AT4"] 
+    bl_cols = ["BL 1-2", "BL 1-3", "BL 1-4", "BL 2-3", "BL 2-4", "BL 3-4"] 
+    
     for seq_i, seq in enumerate(vis2_per_bl.keys()):
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT1-AT2"].values),axis=1), ".-", label="AT1-AT2")
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT1-AT3"].values),axis=1), ".-", label="AT1-AT3")
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT1-AT4"].values),axis=1), ".-", label="AT1-AT4")
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT2-AT3"].values),axis=1), ".-", label="AT2-AT3")
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT2-AT4"].values),axis=1), ".-", label="AT2-AT4")
-        axes[seq_i].plot(vis2_per_bl[seq]["MJD"], np.mean(np.vstack(vis2_per_bl[seq]["AT3-AT4"].values),axis=1), ".-", label="AT3-AT4")
+        for vis2_col, bl_col in zip(vis2_cols, bl_cols):
+            # Average the vis2 across the wavelength dimension
+            mean_vis2 = np.mean(np.vstack(vis2_per_bl[seq][vis2_col].values), 
+                                axis=1)
+            
+            # Average the baseline data to get a rough idea of relative lengths
+            mean_bl = np.mean(vis2_per_bl[seq][bl_col].values)
+            
+            # Construct the label for the legend
+            label = vis2_col + "(%i m)" % mean_bl
+            
+            axes[seq_i].plot(vis2_per_bl[seq]["MJD"], mean_vis2, ".-", 
+                             label=label)
+
         axes[seq_i].set_title(seq)
         
         axes[seq_i].set_ylim([0,1])
+        axes[seq_i].legend(loc="best")
         
     fig.suptitle("vis^2 vs MJD")
     #fig.tight_layout()
     plt.gcf().set_size_inches(32, 32)
     plt.savefig("plots/vis2_vs_time.pdf")
+    
+    
+def compile_bootstraps(complete_sequences):
+    """
+    """
+    # For each 
+    pass
