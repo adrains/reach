@@ -135,3 +135,34 @@ def night_log_diagnostics(night_log):
         print(night, len(night_log[night]))
         for i, yy in enumerate(night_log[night]):
             print("%02i" % i, yy[2], yy[3], yy[-1])
+    
+            
+def get_unique_key(tgt_info, id_list):
+    """
+    """
+    unique_ids = []
+    
+    # Grab the primary IDs
+    # Note that several stars are observed multiple times under different
+    # primary IDs, so we need to check HD and Bayer IDs as well
+    for star in id_list:
+        # Remove non-alpha-numeric characters 
+        star = star.replace("_", "").replace(" ", "").replace(".", "")
+        
+        prim_id = tgt_info[tgt_info["Primary"]==star].index
+        
+        if len(prim_id)==0:
+            prim_id = tgt_info[tgt_info["Bayer_ID"]==star].index
+            
+        if len(prim_id)==0:
+            prim_id = tgt_info[tgt_info.index==star].index
+        
+        try:
+            assert len(prim_id) > 0
+        except:
+            print("...failed on %s, %s" % (star))
+            failed = True
+            break
+        unique_ids.append(prim_id[0])
+        
+    return unique_ids

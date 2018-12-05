@@ -78,12 +78,14 @@ import glob
 import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
+import reach.diagnostics as rdiag
 import reach.plotting as rplt
 import reach.photometry as rphot
 import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 import platform
+from sys import exit
 from astroquery.simbad import Simbad
 from astroquery.vizier import Vizier
 
@@ -91,15 +93,18 @@ from astroquery.vizier import Vizier
 # (0) Parameters
 # -----------------------------------------------------------------------------
 # TODO: move to parameter file
+calibrate_calibrators = True
 run_local = False
 already_calibrated = False
-do_random_ifg_sampling = True
-do_gaussian_diam_sampling = True
+do_random_ifg_sampling = False
+do_gaussian_diam_sampling = False
 test_one_seq_only = False
-n_bootstraps = 50
+do_ldd_fitting = False
+n_bootstraps = 1
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
+results_path="/home/arains/code/reach/results/"
 
 print("\nBeginning calibration and fitting run. Parameters set as follow:")
 print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
@@ -262,6 +267,18 @@ elif not already_calibrated:
                                      run_local=run_local)
 
 # -----------------------------------------------------------------------------
+# (7.5) Calibrate calibrators against each other
+# -----------------------------------------------------------------------------
+if calibrate_calibrators:
+    print("-"*79, "\nCalibrating Calibrators\n", "-"*79)
+    rdiag.calibrate_calibrators(sequences, complete_sequences, base_path, 
+                                tgt_info, n_pred_ldd, e_pred_ldd)
+    
+    # Finished calibrating calibrators, exit
+    print("Finished calibrating calibrators")
+    exit(0)
+
+# -----------------------------------------------------------------------------
 # (8+) Bootstrap the calibration pipeline
 # -----------------------------------------------------------------------------
 # Run N bootstrapping iterations of the following:
@@ -282,7 +299,8 @@ n_vis2, n_baselines, n_ldd_fit, wavelengths = \
                             n_pred_ldd, e_pred_ldd, n_bootstraps,
                             run_local=run_local, 
                             already_calibrated=already_calibrated,
-                            do_random_ifg_sampling=do_random_ifg_sampling)
+                            do_random_ifg_sampling=do_random_ifg_sampling,
+                            results_path=results_path)
 
 # Save the results
 str_date = time.strftime("%y-%m-%d")                     

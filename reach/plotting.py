@@ -207,7 +207,7 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
     bootstrapping run.
     """
     plt.close("all")
-    fig, axes = plt.subplots(4, 4)
+    fig, axes = plt.subplots(4, 5)
     axes = axes.flatten()
     
     # For each science target, plot a histogram of N LDD realisations
@@ -239,3 +239,32 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
     fig.tight_layout()
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/ldd_hists.pdf")
+    
+    
+def plot_vis2(oi_fits_file, star_id):
+    """
+    """
+    import reach.diameters as rdiam
+    #fig, ax = plt.figure()
+    plt.close("all")
+    
+    vis2, e_vis2, baselines, wavelengths = rdiam.extract_vis2(oi_fits_file)
+    
+    n_bl = len(baselines)
+    n_wl = len(wavelengths)
+    bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
+    wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+            
+    b_on_lambda = (bl_grid / wl_grid).flatten()
+    
+    plt.errorbar(b_on_lambda, vis2.flatten(), yerr=e_vis2.flatten(), fmt=".")
+    
+    plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
+    plt.ylabel(r"Visibility$^2$")
+    plt.title(r"%s (%i vis$^2$ points)" % (star_id, len(vis2.flatten())))
+    #plt.legend(loc="best")
+    plt.xlim([0.0,25E7])
+    plt.ylim([0.0,1.0])
+    plt.grid()
+    #plt.gcf().set_size_inches(16, 9)
+    #plt.savefig("plots/vis2_fit.pdf")

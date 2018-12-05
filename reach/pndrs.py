@@ -448,7 +448,8 @@ def reduce_all_observations(base_path=("/priv/mulga1/arains/pionier/"
         os.system("cd %s; pndrsReduce" % folder)
         
 
-def calibrate_all_observations(reduced_data_folders):
+def calibrate_all_observations(reduced_data_folders, bootstrap_i=None,
+                               results_path="/home/arains/code/reach/results/"):
     """Calls the PIONIER data reduction pipeline for each folder of reduced
     data from within Python.
     
@@ -468,7 +469,7 @@ def calibrate_all_observations(reduced_data_folders):
     
         # Navigate to the night folder and call pndrsCalibrate from terminal
         night = ob_folder.split("/")[-2].split("_")[0]
-        print("Calibrating %s, night %i/%i..." 
+        print("\nCalibrating %s, night %i/%i..." 
               % (night, night_i+1, len(reduced_data_folders)), end="")
         sys.stdout.flush()
         os.system("(cd %s; pndrsCalibrate >> cal_log.txt)" % ob_folder)
@@ -478,6 +479,10 @@ def calibrate_all_observations(reduced_data_folders):
         cal_time = (times[-1] - times[-2]).total_seconds() 
         print("calibrated in %02d:%04.1f min" 
               % (int(np.floor(cal_time/60.)), cal_time % 60.))
+        
+        # Move oifits files back to central location (reach/results by default)
+        move_sci_oifits(ob_folder, bootstrap_i=bootstrap_i, 
+                        new_path=results_path)
     
     # All nights finished, print summary          
     total_time = (times[-1] - times[0]).total_seconds()    
@@ -503,9 +508,9 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     bootstrap_i: int
         Integer count for the ith bootstrapping iteration
     """
-    sci_oi_fits = glob.glob(obs_path + "*_v3.73_abcd/*/*SCI*oidataCalibrated.fits")
+    sci_oi_fits = glob.glob(obs_path + "/*SCI*oidataCalibrated.fits")
     
-    print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
+    #print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
     
     for files_copied, oifits in enumerate(sci_oi_fits):
         if os.path.exists(new_path):
@@ -521,7 +526,7 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
             copyfile(oifits, new_path + fname)
             files_copied += 1
     
-    print("%i files copied" % files_copied)
+    #print("%i files copied" % files_copied)
     
 
 def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
@@ -551,20 +556,22 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
     """
     print("\n", "-"*79, "\n", "\tInitialising Interferograms\n", "-"*79)
     
+    # Clean out any old files before we get into the main loop - we can't do it
+    # within the main loop itself, otherwise we'll potentially be deleting 
+    # sequence from the same night that have already been sampled for this 
+    # iteration of the bootstrapping
+    old_files = glob.glob(base_path % "*" + "/*-*-*/PIONI*")
+    
+    for old_file in old_files:
+        os.remove(old_file)
+        
+    print("Removed %i old files \n" % len(old_files))
+    
     # For every sequence, perform bootstrapping at the interferogram level
     for seq in complete_sequences.keys():
         night = complete_sequences[seq][0]
         night_folder = base_path % night
         bootstrapping_folder = night_folder + "/%s/" % night
-        
-        # Remove all files in bootstrapping_folder (i.e. remnants of previous 
-        # bootstrapping runs) as to start anew
-        old_files = glob.glob(bootstrapping_folder + "PIONI*")
-        
-        for old_file in old_files:
-            os.remove(old_file)
-            
-        print("Removed %i old files" % len(old_files))
         
         # Collect interferograms of the same target together, select N randomly
         # with repeats from these, copy to the subdirectory and rename, then
@@ -579,7 +586,7 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
             
             copyfile(night_folder + old_fn, bootstrapping_folder + new_fn)
             
-        print("Moved %i interferograms" % (i_ifg+1))
+        print("Moved %i interferograms for %s" % (i_ifg+1, seq))
             
 
 def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
@@ -667,8 +674,8 @@ def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
             current_tgt = new_tgt
             current_ifgs = []
     
-    for ifg_i, ifg in enumerate(selected_ifgs):
-        print("%i\t%s" % (ifg_i, ifg))
+    #for ifg_i, ifg in enumerate(selected_ifgs):
+        #print("%i\t%s" % (ifg_i, ifg))
      
     return selected_ifgs
     
@@ -676,7 +683,8 @@ def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
 def run_one_calibration_set(sequences, complete_sequences, base_path, 
                             tgt_info, pred_ldd, e_pred_ldd, bs_i,
                             run_local=False, already_calibrated=False,
-                            do_random_ifg_sampling=True):
+                            do_random_ifg_sampling=True, 
+                            results_path="/home/arains/code/reach/results/"):
     """Runs a single bootstrapping iteration, completing the following steps: 
         - Write YYYY-MM-DD_oiDiam.fits files for each night of observing
         - Run pndrsCalibrate for each night of observing
@@ -755,21 +763,23 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
         # Run Calibration
         obs_folders = [base_path % night + "%s/" % night 
                        for night in nights.keys()]
-        calibrate_all_observations(obs_folders)
-
-        # Move oifits files back to central location (reach/results by default)
-        move_sci_oifits(bootstrap_i=bs_i)
+        calibrate_all_observations(obs_folders, bootstrap_i=bs_i, 
+                                   results_path=results_path)
     
     elif run_local and not already_calibrated:
         # Save oiDiam files for local inspection
         nights = save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                                   pred_ldd, e_pred_ldd, 
                                   run_local=run_local)
-    
+  
+  
+def fit_ldd_for_all_nights(bootstrap_i, results_path, tgt_info):
+    """
+    """
     # Collate calibrated vis2 data
     if not run_local:
         vis2, e_vis2, baselines, wavelengths = \
-            rdiam.collate_vis2_from_file(bs_i=bs_i)
+            rdiam.collate_vis2_from_file(bs_i=bootstrap_i, results_path=results_path)
     else:
         path = "/Users/adamrains/code/reach/results/"
         vis2, e_vis2, baselines, wavelengths = \
@@ -780,12 +790,15 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
                                  tgt_info)
     
     return vis2, e_vis2, baselines, wavelengths, ldd_fits
+      
     
     
 def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                      n_pred_ldd, e_pred_ldd, n_bootstraps,
                      run_local=False, already_calibrated=False, 
-                     do_random_ifg_sampling=True):
+                     do_random_ifg_sampling=True,
+                     results_path="/home/arains/code/reach/results/", 
+                     do_ldd_fitting=True):
     """Runs N bootstrapping iterations, collating and return the results.
     
     Parameters
@@ -861,23 +874,28 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         print("\n", "|"*79, "\n\tBootstrapping iteration %i\n" % bs_i, "|"*79)
         
         # Run a single calibration run
-        vis2, e_vis2, baselines, wavelengths, ldd_fits = \
-            run_one_calibration_set(sequences, complete_sequences, base_path, 
-                                    tgt_info, n_pred_ldd.iloc[bs_i], 
-                                    e_pred_ldd, bs_i, run_local=run_local, 
-                                    already_calibrated=already_calibrated,
-                                    do_random_ifg_sampling=do_random_ifg_sampling)
-                                    
-        # Collate results
-        for sci in vis2.keys():
-            if sci in n_vis2.keys():
-                n_vis2[sci].append(vis2[sci])
-                n_baselines[sci].append(baselines[sci])
-                n_ldd_fit[sci].append(ldd_fits[sci][0])
-            else:
-                n_vis2[sci] = [vis2[sci]]
-                n_baselines[sci] = [baselines[sci]]
-                n_ldd_fit[sci] = [ldd_fits[sci][0]]
+        
+        run_one_calibration_set(sequences, complete_sequences, base_path, 
+                                tgt_info, n_pred_ldd.iloc[bs_i], 
+                                e_pred_ldd, bs_i, run_local=run_local, 
+                                already_calibrated=already_calibrated,
+                                do_random_ifg_sampling=do_random_ifg_sampling,
+                                results_path=results_path)
+         
+        if do_ldd_fitting:
+            vis2, e_vis2, baselines, wavelengths, ldd_fits = \
+                fit_ldd_for_all_nights(bs_i, results_path, tgt_info)    
+                              
+            # Collate results
+            for sci in vis2.keys():
+                if sci in n_vis2.keys():
+                    n_vis2[sci].append(vis2[sci])
+                    n_baselines[sci].append(baselines[sci])
+                    n_ldd_fit[sci].append(ldd_fits[sci][0])
+                else:
+                    n_vis2[sci] = [vis2[sci]]
+                    n_baselines[sci] = [baselines[sci]]
+                    n_ldd_fit[sci] = [ldd_fits[sci][0]]
                 
         times.append(datetime.datetime.now())  
         b_i_time = (times[-1] - times[-2]).total_seconds() 
@@ -891,19 +909,23 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
     # All done
     print("\n", "-"*79, "\n", "\tBootstrapping Complete\n", "-"*79)
     
-    for sci in n_ldd_fit.keys():
-        # Predicted results
-        #sci_ldd_pred = tgt_info
-        #sci_e_ldd_pred = np.std(n_ldd_fit[sci])
-        #sci_percent_pred = sci_e_ldd_fit / sci_ldd_fit * 100
+    if do_ldd_fitting: 
+        for sci in n_ldd_fit.keys():
+            # Predicted results
+            #sci_ldd_pred = tgt_info
+            #sci_e_ldd_pred = np.std(n_ldd_fit[sci])
+            #sci_percent_pred = sci_e_ldd_fit / sci_ldd_fit * 100
         
-        # Fitting results
-        sci_ldd_fit = np.mean(n_ldd_fit[sci])
-        sci_e_ldd_fit = np.std(n_ldd_fit[sci])
-        sci_percent_fit = sci_e_ldd_fit / sci_ldd_fit * 100
+            # Fitting results
+            sci_ldd_fit = np.mean(n_ldd_fit[sci])
+            sci_e_ldd_fit = np.std(n_ldd_fit[sci])
+            sci_percent_fit = sci_e_ldd_fit / sci_ldd_fit * 100
         
-        print("%-12s\tLDD = %f +/- %f (%0.2f%%)" % (sci, sci_ldd_fit, 
-                                                      sci_e_ldd_fit,
-                                                      sci_percent_fit))
+            print("%-12s\tLDD = %f +/- %f (%0.2f%%)" % (sci, sci_ldd_fit, 
+                                                          sci_e_ldd_fit,
+                                                          sci_percent_fit))
                                                       
-    return n_vis2, n_baselines, n_ldd_fit, wavelengths
+        return n_vis2, n_baselines, n_ldd_fit, wavelengths
+    
+    else:
+        return None, None, None, None
