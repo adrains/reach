@@ -265,4 +265,28 @@ def plot_calibrator_vis2(cal_folder="diagnostics/"):
         pdf.savefig()
         #plt.close("all")
             
-        
+            
+def inspect_bootstrap_iterations(oifits_files):
+    """
+    """
+    times = []
+    baselines = []
+    wavelengths = []
+    stations = []
+    
+    for file_i, file in enumerate(oifits_files):
+        with fits.open(file, memmap=False) as oifits:
+            wavelengths.append(tuple(oifits[2].data["EFF_WAVE"]))
+            times.append(tuple(oifits[4].data["MJD"]))
+            
+            bl = np.sqrt(oifits[4].data["UCOORD"]**2 + oifits[4].data["VCOORD"]**2)
+            bl.sort()
+            
+            baselines.append(tuple(bl))
+            
+            sta = tuple([tuple(pair) for pair in oifits[4].data["STA_INDEX"]])
+            
+            stations.append(sta)
+            
+    return set(times), set(baselines), set(wavelengths), set(stations)
+    

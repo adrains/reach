@@ -8,6 +8,7 @@ import datetime
 import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
+import reach.plotting as rplt
 from shutil import copyfile, rmtree
 from astropy.io import fits
 from astropy.time import Time
@@ -773,7 +774,7 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
                                   run_local=run_local)
   
   
-def fit_ldd_for_all_nights(bootstrap_i, results_path, tgt_info):
+def fit_ldd_for_all_nights(bootstrap_i, results_path, tgt_info, run_local=False):
     """
     """
     # Collate calibrated vis2 data
@@ -929,3 +930,96 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
     
     else:
         return None, None, None, None
+        
+
+def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
+    """
+    """
+    # Determine the stars that we have results on
+    oifits_files = glob.glob(results_path + "*SCI*.fits")
+    oifits_files.sort()
+    
+    stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
+                 for file in oifits_files])
+                
+    # Initialise a pandas dataframe for each star. At present it's hard to
+    # entirely preallocate memory, but we'll try to at least preallocate the
+    # rows
+    cols1 = ["MJD", "TEL_PAIR", "VIS2", "e_VIS2", "FLAG", "BASELINE", 
+            "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+    
+    cols2 = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
+             "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+            
+    # Store the results for each star in a pandas dataframe, accessed by key 
+    # from a dictionary
+    bs_results = {}
+    results = pd.DataFrame(index=np.arange(0, len(stars)), columns=cols2)      
+    
+    for star in stars:
+        bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
+                                     columns=cols1)
+        
+        # TEL_PAIR --> array of tuples, MJD --> array of floats, VIS2 -->
+        # array of 6 length arrays, BASELINE --> array of floats, WAVELENGTH 
+        # --> array of 6 length arrays, FLAG --> array of 6 length arrays,
+        # LDD --> array of floats
+        bs_results[star]["MJD"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["TEL_PAIR"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["e_VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["FLAG"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["BASELINE"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["LDD"] = np.zeros((n_bootstraps, 0)).tolist()
+    
+    # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
+    # baseline, and wavelength information from each iteration
+    for bs_i in np.arange(0, n_bootstraps):
+        # Collate the information
+        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+            rdiam.collate_vis2_from_file(results_path, bs_i)
+          
+        # Fit LDD
+        ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, 
+                                     tgt_info)  
+        # Populate
+        for star in mjds.keys():
+            bs_results[star]["MJD"][bs_i] = mjds[star]
+            bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
+            bs_results[star]["VIS2"][bs_i] = vis2[star]
+            bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
+            bs_results[star]["FLAG"][bs_i] = flags[star]
+            bs_results[star]["BASELINE"][bs_i] = baselines[star]
+            bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
+            bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
+            
+            bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
+            bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
+            bs_results[star]["u_LLD"][bs_i] = ldd_fits[star][4]
+            
+    # All done collating, combine bootstrapped values into mean and std
+    for star_i, star in enumerate(bs_results.keys()):
+        try:
+            results.iloc[star_i]["STAR"] = star
+        
+            results.iloc[star_i]["VIS2"] = np.mean(np.dstack(bs_results[star]["VIS2"]), axis=2)
+            results.iloc[star_i]["e_VIS2"] = np.std(np.dstack(bs_results[star]["VIS2"]), axis=2)
+    
+            results.iloc[star_i]["BASELINE"] = np.mean(np.vstack(bs_results[star]["BASELINE"]), axis=0)
+            
+            results.iloc[star_i]["WAVELENGTH"] = np.mean(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
+            
+            results.iloc[star_i]["LDD_FIT"] = np.mean(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+            results.iloc[star_i]["e_LDD_FIT"] = np.std(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+        
+            results.iloc[star_i]["LDD_FIT"] = np.mean(np.hstack(bs_results[star]["LDD_PRED"]), axis=0)
+            results.iloc[star_i]["e_LDD_FIT"] = np.std(np.hstack(bs_results[star]["e_LDD_PRED"]), axis=0)
+            results.iloc[star_i]["u_LLD"] = np.std(np.hstack(bs_results[star]["u_LLD"]), axis=0)
+        except:
+            print("Failed on %s" % star)
+            continue
+        # Do plotting
+        rplt.plot_all_vis2_fits(results, tgt_info)
+    
+    return results, bs_results

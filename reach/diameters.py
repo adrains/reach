@@ -247,7 +247,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
               #sci_data["LDD_VW3_dr"].values[0])
         try:
             ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
-                                             baselines[sci], wavelengths, 
+                                             baselines[sci], wavelengths[sci], 
                                              sci_data["u_lld"].values[0], 
                                              sci_data["LDD_VW3_dr"].values[0])
             print("...fit successful")
@@ -300,34 +300,64 @@ def extract_vis2(oi_fits_file):
     with fits.open(oi_fits_file, memmap=False) as oifits:
         #oifits = fits.open(oi_fits_file)
         n_extra_seq = (len(oifits) - 6) // 3
-    
+        
+        mjds = []
+        pairs = []
         vis2 = []
         e_vis2 = []
+        flags = []
         baselines = []
+        wavelengths = []
     
         # Retrieve visibility and baseline information for an arbitrary (>=1) 
         # number of sequences within a given night
         for seq_i in xrange(0, n_extra_seq+1):
             oidata = oifits[4 + n_extra_seq + seq_i].data
-        
-            if len(vis2)==0 and len(e_vis2)==0 and len(baselines)==0:
-                vis2 = oidata["VIS2DATA"]
-                e_vis2 = oidata["VIS2ERR"]
-                baselines = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+            
+            # Sort baselines within each observation (chunk of 6) to ensure 
+            # ordering is the same for bootstrapping. Given there are two 
+            # observations of each science target within the 
+            # CAL1-SCI1-CAL2-SCI2-CAL3 sequence, there will be 2 sets of six
+            # per sequence. To simplify the sorting procedure, convert the 
+            # tuple pairs of telescope IDs to a string.
+            tel_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
+                                  for tel in oidata["STA_INDEX"]])
+            order = np.concatenate((tel_pairs[:6].argsort(), 
+                                    tel_pairs[6:].argsort() + 6))
+            
+            
+            if (len(mjds)==0 and len(pairs)==0 and len(vis2)==0 
+                and len(e_vis2)==0 and len(flags)==0 and len(baselines)==0):
+                # Arrays are empty
+                mjds = oidata[order]["MJD"]
+                pairs = tel_pairs[order]
+                vis2 = oidata[order]["VIS2DATA"]
+                e_vis2 = oidata[order]["VIS2ERR"]
+                flags = oidata[order]["FLAG"]
+                baselines = np.sqrt(oidata[order]["UCOORD"]**2 
+                                    + oidata[order]["VCOORD"]**2)
+                #wavelengths = oifits[2].data["EFF_WAVE"]
+                
             else:
+                # Not empty, stack
+                mjds = np.hstack((mjds, oidata[order]["MJD"]))
+                pairs = np.hstack((pairs, tel_pairs[order]))
                 vis2 = np.vstack((vis2, oidata["VIS2DATA"]))
                 e_vis2 = np.vstack((e_vis2, oidata["VIS2ERR"]))
-                baselines = np.hstack((baselines, np.sqrt(oidata["UCOORD"]**2 
-                                                       + oidata["VCOORD"]**2)))
+                flags = np.vstack((flags, oidata[order]["FLAG"]))
+                baselines = np.hstack((baselines, 
+                                       np.sqrt(oidata[order]["UCOORD"]**2 
+                                               + oidata[order]["VCOORD"]**2)))
+                #wavelengths = np.vstack((wavelengths, 
+                                         #oifits[2].data["EFF_WAVE"])
     
         # Assume that we'll always be using same wavelength mode within a night      
         wavelengths = oifits[2].data["EFF_WAVE"]
     
-    return vis2, e_vis2, baselines, wavelengths
+    return mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths
 
 
-def collate_vis2_from_file(results_path="/home/arains/code/reach/results/",
-                           bs_i=None):
+def collate_vis2_from_file(results_path, bs_i=None):
     """Collates calibrated squared visibilities, errors, baselines, and 
     wavelengths for each science target in the specified results folder.
     
@@ -352,47 +382,56 @@ def collate_vis2_from_file(results_path="/home/arains/code/reach/results/",
     """
     # Initialise data structures to store calibrated results, where dict keys
     # are the science target IDs. Note that the wavelengths are common to all.
+    all_mjds = {}
+    all_tel_pairs = {}
     all_vis2 = {}
     all_e_vis2 = {}
+    all_flags = {}
     all_baselines = {}
-    wavelengths = []
+    all_wavelengths = {}
     
-    all_results = glob.glob(results_path + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
-    all_results.sort()
+    ith_bs_oifits = glob.glob(results_path + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
+    ith_bs_oifits.sort()
     
-    print("\n", "-"*79, "\n", 
-          "\tCollating Calibrated vis2 for bootstrap %i\n" % bs_i, "-"*79)
+    #print("\n", "-"*79, "\n", 
+    #      "\tCollating Calibrated vis2 for bootstrap %i\n" % bs_i, "-"*79)
     
-    print("%i oifits file/s found for this iteration" % len(all_results))
+    print("%i oifits file/s for bootstrap %i" % (len(ith_bs_oifits), bs_i))
     
-    for oifits in all_results:
+    for oifits in ith_bs_oifits:
         # Get the target name from the file name - this is clunky, but more
         # robust than the former method of slicing using static indices which
         # inherently assumes a constant file length (which changes when we
         # begin bootstrapping)
         sci = oifits.split("SCI")[1].split("oidata")[0].replace("_", "")
         
-        print("Collating %s" % oifits, end="")
+        #print("Collating %s" % oifits, end="")
         
         # Open the file
-        try:
-            vis2, e_vis2, baselines, wavelengths = extract_vis2(oifits)
-            print("...success")
-        except:
-            print("...failure, unknown oifits format")
-            continue
-        
+
+        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+            extract_vis2(oifits)
+
         if sci not in all_vis2.keys():
+            all_mjds[sci] = mjds
+            all_tel_pairs[sci] = pairs
             all_vis2[sci] = vis2
             all_e_vis2[sci] = e_vis2
+            all_flags[sci] = flags
             all_baselines[sci] = baselines
+            all_wavelengths[sci] = wavelengths
             
         else:
+            all_mjds[sci] = np.hstack((all_mjds[sci], mjds))
+            all_tel_pairs[sci] = np.hstack((all_tel_pairs[sci], pairs))
             all_vis2[sci] = np.vstack((all_vis2[sci], vis2))
             all_e_vis2[sci] = np.vstack((all_e_vis2[sci], e_vis2))
+            all_flags[sci] = np.vstack((all_flags[sci], flags))
             all_baselines[sci] = np.hstack((all_baselines[sci], baselines))
+            all_wavelengths[sci] = wavelengths # Fix if bootstrapping over this
                                                    
-    return all_vis2, all_e_vis2, all_baselines, wavelengths
+    return all_mjds, all_tel_pairs, all_vis2, all_e_vis2, all_flags, \
+           all_baselines, all_wavelengths
     
     
 def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
