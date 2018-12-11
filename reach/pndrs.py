@@ -12,7 +12,7 @@ import reach.plotting as rplt
 from shutil import copyfile, rmtree
 from astropy.io import fits
 from astropy.time import Time
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 
 # -----------------------------------------------------------------------------
 # pndrs Affiliated Functions
@@ -945,7 +945,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
     # Initialise a pandas dataframe for each star. At present it's hard to
     # entirely preallocate memory, but we'll try to at least preallocate the
     # rows
-    cols1 = ["MJD", "TEL_PAIR", "VIS2", "e_VIS2", "FLAG", "BASELINE", 
+    cols1 = ["MJD", "TEL_PAIR", "VIS2", "FLAG", "BASELINE", 
             "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD"]
     
     cols2 = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
@@ -967,11 +967,11 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
         bs_results[star]["MJD"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["TEL_PAIR"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["e_VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
+        #bs_results[star]["e_VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["FLAG"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["BASELINE"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["LDD"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
     
     # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
     # baseline, and wavelength information from each iteration
@@ -981,6 +981,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
             rdiam.collate_vis2_from_file(results_path, bs_i)
           
         # Fit LDD
+        print("Fitting diameters for bootstrap %i\n" % bs_i)
         ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, 
                                      tgt_info)  
         # Populate
@@ -988,7 +989,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
             bs_results[star]["MJD"][bs_i] = mjds[star]
             bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
             bs_results[star]["VIS2"][bs_i] = vis2[star]
-            bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
+            #bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
             bs_results[star]["FLAG"][bs_i] = flags[star]
             bs_results[star]["BASELINE"][bs_i] = baselines[star]
             bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
@@ -998,28 +999,61 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
             bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
             bs_results[star]["u_LLD"][bs_i] = ldd_fits[star][4]
             
+    #return results, bs_results 
+    prune_errant_baselines = True
+    
+    # A minority of bootstraps result in a different number of observed 
+    # baseline/vis2 measurements, which cannot be stacked to produce vis2 
+    # errors. This step prunes them to enable plotting.
+    if prune_errant_baselines:
+        # Get the most common baseline count, and remove any not adhering
+        shape_dict = {}
+        for star in bs_results.keys():                   
+            shape_dict[star] = []              
+            for vis2 in bs_results[star]["TEL_PAIR"]:
+                shape_dict[star].append(vis2.shape)                                                     
+            shape_dict[star] = Counter(shape_dict[star])    
+                
+            # Get a list of the indices to drop
+            num_most_common = shape_dict[star].most_common(1)[0][0][0]
+            i_to_drop = [i_ob for i_ob, ob in enumerate(bs_results[star]["VIS2"].values)
+                         if len(ob) != num_most_common]
+                         
+            # Now replace the errant vis2 and baseline data with nans
+            for ob_i in i_to_drop:
+                bs_results[star].iloc[ob_i]["VIS2"] = np.ones([num_most_common, 6])*np.nan
+                bs_results[star].iloc[ob_i]["BASELINE"] = np.ones(num_most_common)*np.nan
+
+    # Temporary - del Pav has bad baselines and complicates things
+    #bs_results.pop("delPav")
+    
+    #return results, bs_results
+    
     # All done collating, combine bootstrapped values into mean and std
     for star_i, star in enumerate(bs_results.keys()):
-        try:
-            results.iloc[star_i]["STAR"] = star
-        
-            results.iloc[star_i]["VIS2"] = np.mean(np.dstack(bs_results[star]["VIS2"]), axis=2)
-            results.iloc[star_i]["e_VIS2"] = np.std(np.dstack(bs_results[star]["VIS2"]), axis=2)
+        results.iloc[star_i]["STAR"] = star
     
-            results.iloc[star_i]["BASELINE"] = np.mean(np.vstack(bs_results[star]["BASELINE"]), axis=0)
-            
-            results.iloc[star_i]["WAVELENGTH"] = np.mean(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
-            
-            results.iloc[star_i]["LDD_FIT"] = np.mean(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
-            results.iloc[star_i]["e_LDD_FIT"] = np.std(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+        results.iloc[star_i]["LDD_FIT"] = np.nanmean(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+        results.iloc[star_i]["e_LDD_FIT"] = np.nanstd(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+
+        results.iloc[star_i]["LDD_PRED"] = np.nanmean(np.hstack(bs_results[star]["LDD_PRED"]), axis=0)
+        results.iloc[star_i]["e_LDD_PRED"] = np.nanmedian(np.hstack(bs_results[star]["e_LDD_PRED"]), axis=0)
+        results.iloc[star_i]["u_LLD"] = np.nanmedian(np.hstack(bs_results[star]["u_LLD"]), axis=0)
+
+    
+        # Some vis2/e_vis2/baseline bootstraps might have a different number of 
+        # points. These cannot be stacked, so for the purpose of getting vis2 
+        # plots, remove them from consideration
+        results.iloc[star_i]["VIS2"] = np.nanmean(np.dstack(bs_results[star]["VIS2"]), axis=2)
+        results.iloc[star_i]["e_VIS2"] = np.nanstd(np.dstack(bs_results[star]["VIS2"]), axis=2)
+
+        results.iloc[star_i]["BASELINE"] = np.nanmean(np.vstack(bs_results[star]["BASELINE"]), axis=0)
+    
+        results.iloc[star_i]["WAVELENGTH"] = np.nanmedian(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
         
-            results.iloc[star_i]["LDD_FIT"] = np.mean(np.hstack(bs_results[star]["LDD_PRED"]), axis=0)
-            results.iloc[star_i]["e_LDD_FIT"] = np.std(np.hstack(bs_results[star]["e_LDD_PRED"]), axis=0)
-            results.iloc[star_i]["u_LLD"] = np.std(np.hstack(bs_results[star]["u_LLD"]), axis=0)
-        except:
-            print("Failed on %s" % star)
-            continue
-        # Do plotting
-        rplt.plot_all_vis2_fits(results, tgt_info)
+        
+        
+    # Do plotting
+    rplt.plot_all_vis2_fits(results, tgt_info)
     
     return results, bs_results

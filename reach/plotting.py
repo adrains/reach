@@ -178,28 +178,36 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     plt.savefig("plots/vis2_fit.pdf")
     
     
-def plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit, 
-                       e_ldd_fit, tgt_info, pred_ldd_col, e_pred_ldd_col):
+def plot_all_vis2_fits(results, tgt_info):
     """Plot a single multi-page pdf of all fits using plot_vis2_fit
     """
     plt.close("all")
     with PdfPages("plots/bootstrapped_fits.pdf") as pdf:
-        for sci in vis2:
-            pid = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+        for star_i in np.arange(0, len(results)):
+            #try:
+            sci = results.iloc[star_i]["STAR"]
         
-            n_bl = len(baselines[sci])
-            n_wl = len(wavelengths)
-            bl_grid = np.tile(baselines[sci], n_wl).reshape([n_wl, n_bl]).T
-            wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
-            
+            pid = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+
+            n_bl = len(results.iloc[star_i]["BASELINE"])
+            n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+            bl_grid = np.tile(results.iloc[star_i]["BASELINE"], n_wl).reshape([n_wl, n_bl]).T
+            wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], n_bl).reshape([n_bl, n_wl])
+    
             b_on_lambda = (bl_grid / wl_grid).flatten()
-            plot_vis2_fit(b_on_lambda, vis2[sci].flatten(), 
-                          e_vis2[sci].flatten(),  ldd_fit[sci], 
-                          e_ldd_fit[sci], tgt_info.loc[pid, pred_ldd_col],
-                          tgt_info.loc[pid, e_pred_ldd_col], 
-                          tgt_info.loc[pid, "u_lld"], sci)
+            plot_vis2_fit(b_on_lambda, results.iloc[star_i]["VIS2"].flatten(), 
+                          results.iloc[star_i]["e_VIS2"].flatten(),  
+                          results.iloc[star_i]["LDD_FIT"], 
+                          results.iloc[star_i]["e_LDD_FIT"], 
+                          tgt_info.loc[pid, "LDD_VW3_dr"],
+                          tgt_info.loc[pid, "e_LDD_VW3_dr"], 
+                          tgt_info.loc[pid, "u_lld"], 
+                          sci)
             pdf.savefig()
             plt.close()
+            #except:
+                #print("Failed on star #%i, %s" % (star_i, sci))
+            
             
 
 def plot_ldd_hists(n_ldd_fit, n_bins=10):
@@ -240,6 +248,97 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
     plt.gcf().set_size_inches(16, 9)
     plt.savefig("plots/ldd_hists.pdf")
     
+
+def plot_bootstrapping_summary(results, bs_results, tgt_info, n_bins=20):
+    """
+    """
+    plt.close("all")
+    with PdfPages("plots/bootstrapped_summary.pdf") as pdf:
+        for star_i in np.arange(0, len(results)):
+            # Get the science target name and primary ID
+            sci = results.iloc[star_i]["STAR"]
+            pid = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+            
+            # Plot vis2 fits
+            n_bl = len(results.iloc[star_i]["BASELINE"])
+            n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+            bl_grid = np.tile(results.iloc[star_i]["BASELINE"], n_wl).reshape([n_wl, n_bl]).T
+            wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], n_bl).reshape([n_bl, n_wl])
+            
+            b_on_lambda = (bl_grid / wl_grid).flatten()
+            
+            vis2 = results.iloc[star_i]["VIS2"].flatten()
+            e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
+            ldd_fit = results.iloc[star_i]["LDD_FIT"]
+            e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+            
+            ldd_pred = tgt_info.loc[pid, "LDD_VW3_dr"]
+            e_ldd_pred = tgt_info.loc[pid, "e_LDD_VW3_dr"]
+            u_lld = tgt_info.loc[pid, "u_lld"]
+            
+            # Import here to avoid mutual imports
+            # TODO: remove dependency and need for this
+            import reach.diameters as rdiam
+    
+            x = np.arange(1*10**6, 25*10**7, 10000)
+            y_fit = rdiam.calculate_vis2(x, ldd_fit, u_lld)
+            y_fit_low = rdiam.calculate_vis2(x, ldd_fit - e_ldd_fit, u_lld)
+            y_fit_high = rdiam.calculate_vis2(x, ldd_fit + e_ldd_fit, u_lld)    
+    
+            y_pred = rdiam.calculate_vis2(x, ldd_pred, u_lld)
+            y_pred_low = rdiam.calculate_vis2(x, ldd_pred - e_ldd_pred, u_lld)
+            y_pred_high = rdiam.calculate_vis2(x, ldd_pred + e_ldd_pred, u_lld)
+    
+            fig, axes = plt.subplots(1, 2)
+            axes = axes.flatten()
+    
+            # Plot the data points and best fit curve
+            axes[0].errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
+    
+            axes[0].plot(x, y_fit, "--", 
+                     label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
+                           % (ldd_fit, e_ldd_fit, e_ldd_fit/ldd_fit*100))
+            axes[0].fill_between(x, y_fit_low, y_fit_high, alpha=0.25)
+    
+            # Plot the predicted diameter with error
+            axes[0].plot(x, y_pred, "--", 
+                     label=r"Predicted ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
+                           % (ldd_pred, e_ldd_pred, e_ldd_pred/ldd_pred*100))
+            axes[0].fill_between(x, y_pred_low, y_pred_high, alpha=0.25)
+    
+            axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+            axes[0].set_ylabel(r"Visibility$^2$")
+            axes[0].set_title(sci + r" (%i vis$^2$ points)" % len(vis2))
+            axes[0].legend(loc="best")
+            axes[0].set_xlim([0.0,25E7])
+            axes[0].set_ylim([0.0,1.0])
+            axes[0].grid()
+            
+            # -----------------------------------------------------------------
+            #ldd_percentiles = np.percentile(n_ldd_fit[sci], [50, 84.1, 15.9]) 
+            #err_ldd = np.abs(ldd_percentiles[1:] - ldd_percentiles[0])
+            #import pdb
+            #pdb.set_trace()
+            
+            axes[1].hist(bs_results[sci]["LDD_FIT"].values.tolist(), n_bins)
+        
+            text_y = axes[1].get_ylim()[1]
+        
+            axes[1].set_title(sci)
+            y_height = axes[1].get_ylim()[1]
+            axes[1].vlines(ldd_fit, 0, y_height, linestyles="dashed")
+            axes[1].vlines(ldd_fit-e_ldd_fit, 0, y_height, colors="red", 
+                           linestyles="dotted")
+            axes[1].vlines(ldd_fit+e_ldd_fit, 0, y_height, colors="red", 
+                           linestyles="dotted")
+            axes[1].text(ldd_fit, text_y, r"$\theta_{\rm LDD}=%0.4f \pm%0.4f$" 
+                         % (ldd_fit, e_ldd_fit), horizontalalignment="center") 
+                         #fontsize=7)
+            
+            plt.gcf().set_size_inches(16, 9)
+            pdf.savefig()
+            plt.close() 
+ 
     
 def plot_vis2(oi_fits_file, star_id):
     """

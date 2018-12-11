@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import reach.plotting as rplt
 import matplotlib.pylab as plt
+from collections import Counter
 from astropy.io import fits
 from scipy.special import jv
 from scipy.optimize import curve_fit
@@ -188,17 +189,20 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     b_on_lambda = (bl_grid / wl_grid).flatten()
     
     # Don't consider bad data during fitting process
-    valid_i = (vis2.flatten() >= 0) & (e_vis2.flatten() > 0)
+    valid_i = (vis2.flatten() >= 0) & (e_vis2.flatten() > 0) & (~np.isnan(vis2.flatten()))
     
     # Fit for LDD. The lambda function means that we can fix u_lld and not have
     # to optimise for it too. Loose, but physically realistic bounds on LDD for
     # science targets (LDD cannot be zero else the fitting/formula will fail) 
-    ldd_opt, ldd_cov = curve_fit((lambda b_on_lambda, ldd_pred: 
+    try:
+        ldd_opt, ldd_cov = curve_fit((lambda b_on_lambda, ldd_pred: 
                                  calculate_vis2(b_on_lambda, ldd_pred, u_lld)), 
                                  b_on_lambda[valid_i], vis2.flatten()[valid_i], 
                                  sigma=e_vis2.flatten()[valid_i], 
                                  bounds=(0.1, 10))
-    
+    except:
+        import pdb
+        pdb.set_trace()
     # Compute standard deviation of ldd 
     e_ldd_opt = np.sqrt(np.diag(ldd_cov))
     
@@ -231,7 +235,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
         List recording the wavelengths observed at (m)
     """
     successful_fits = {}
-    print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
+    #print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
     for sci in vis2.keys():
         
         sci_data = tgt_info[tgt_info["Primary"]==sci]
@@ -245,19 +249,19 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
         #print(vis2[sci].shape, e_vis2[sci].shape, baselines[sci].shape, 
               #len(wavelengths), sci_data["u_lld"].values[0], 
               #sci_data["LDD_VW3_dr"].values[0])
-        try:
-            ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
-                                             baselines[sci], wavelengths[sci], 
-                                             sci_data["u_lld"].values[0], 
-                                             sci_data["LDD_VW3_dr"].values[0])
-            print("...fit successful")
-            successful_fits[sci] = [ldd_opt, e_ldd_opt, 
-                                    sci_data["LDD_VW3_dr"].values[0],
-                                    sci_data["e_LDD_VW3_dr"].values[0],
-                                    sci_data["u_lld"].values[0]]
+        #try:
+        ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
+                                         baselines[sci], wavelengths[sci], 
+                                         sci_data["u_lld"].values[0], 
+                                         sci_data["LDD_VW3_dr"].values[0])
+        print("...fit successful")
+        successful_fits[sci] = [ldd_opt, e_ldd_opt, 
+                                sci_data["LDD_VW3_dr"].values[0],
+                                sci_data["e_LDD_VW3_dr"].values[0],
+                                sci_data["u_lld"].values[0]]
             
-        except Exception, err:
-            print("...exception, aborting fit - %s" % err)                              
+        #except Exception, err:
+            #print("...exception, aborting fit - %s" % err)                              
                                          
     # All Done, create diagnostic plots
     if do_plot:
@@ -314,40 +318,102 @@ def extract_vis2(oi_fits_file):
         for seq_i in xrange(0, n_extra_seq+1):
             oidata = oifits[4 + n_extra_seq + seq_i].data
             
+            # Figure out how large the chunk is. For the majority of cases
+            # there will be two different MJDs (barring any weird sequences or
+            # dropped baselines). Want to figure out how many of the maximum
+            # 6 baselines per observation are available. If we don't have six
+            # baselines, we need to insert an empty placeholder set to keep the
+            # ordering and ensure we can compute means/standard deviations 
+            # later.
+            
+            mjd_counts = Counter(oidata["MJD"])
+            unique_mjds = list(set(oidata["MJD"]))
+            unique_mjds.sort()
+            n_1st_mjd = mjd_counts[unique_mjds[0]]
+            
+            # Sometimes the MJDs are split trivially in time (< 1 minute),
+            # which splits the baselines into chunks smaller than 6. Science
+            # observations actually split in time are actually 15 mins+ apart.
+            # Thus we want to count any close in time as occurring at the same
+            # time.
+            for mjd in unique_mjds[1:]:
+                if ((mjd - unique_mjds[0]) * 24 * 60) < 5: # < 5 mins in time
+                    n_1st_mjd += mjd_counts[mjd]
+            
+            expected_pairs = set(["1-2", "1-3", "1-4", "2-3", "2-4", "3-4"])
+            
+            observed_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
+                                  for tel in oidata["STA_INDEX"][:n_1st_mjd]])
+            
+            # Grab the relevant info prior to modification
+            mjds_obs = oidata["MJD"]
+            pairs_obs = np.array(["%i-%i" % (tel[0], tel[1]) 
+                                  for tel in oidata["STA_INDEX"]])
+            vis2_obs = oidata["VIS2DATA"]
+            e_vis2_obs = oidata["VIS2ERR"]
+            flags_obs = oidata["FLAG"]
+            baselines_obs = np.sqrt(oidata["UCOORD"]**2 + oidata["VCOORD"]**2)
+            
+            # For every missing baseline, insert dummy NaN data to keep array
+            # dimensions the same
+            for missing_bl in list(expected_pairs - set(observed_pairs)):
+                print("Adding missing info for first science block")
+                mjds_obs = np.insert(mjds_obs, n_1st_mjd, np.nan)
+                pairs_obs = np.insert(pairs_obs, n_1st_mjd, missing_bl)
+                vis2_obs = np.insert(vis2_obs, n_1st_mjd, [np.nan]*6, axis=0)
+                e_vis2_obs = np.insert(e_vis2_obs, n_1st_mjd, [np.nan]*6, axis=0)
+                flags_obs = np.insert(flags_obs, n_1st_mjd, [np.nan]*6, axis=0)
+                baselines_obs = np.insert(baselines_obs, n_1st_mjd, np.nan, axis=0)
+                
+            # Now do this again for the other expected observation
+            observed_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
+                                  for tel in oidata["STA_INDEX"][6:]])
+            
+            for missing_bl in list(expected_pairs - set(observed_pairs)):
+                print("Adding missing info for second science block")
+                mjds_obs = np.insert(mjds_obs, 6, np.nan)
+                pairs_obs = np.insert(pairs_obs, 6, missing_bl)
+                vis2_obs = np.insert(vis2_obs, 6, [np.nan]*6, axis=0)
+                e_vis2_obs = np.insert(e_vis2_obs, 6, [np.nan]*6, axis=0)
+                flags_obs = np.insert(flags_obs, 6, [np.nan]*6, axis=0)
+                baselines_obs = np.insert(baselines_obs, 6, np.nan, axis=0)                      
+            
             # Sort baselines within each observation (chunk of 6) to ensure 
             # ordering is the same for bootstrapping. Given there are two 
             # observations of each science target within the 
             # CAL1-SCI1-CAL2-SCI2-CAL3 sequence, there will be 2 sets of six
             # per sequence. To simplify the sorting procedure, convert the 
             # tuple pairs of telescope IDs to a string.
-            tel_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
-                                  for tel in oidata["STA_INDEX"]])
-            order = np.concatenate((tel_pairs[:6].argsort(), 
-                                    tel_pairs[6:].argsort() + 6))
+            #tel_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
+                                  #for tel in oidata["STA_INDEX"]])
+                                     
+                                  
+            order = np.concatenate((pairs_obs[:6].argsort(), 
+                                    pairs_obs[6:].argsort() + 6))
             
+            
+            #import pdb
+            #pdb.set_trace()
             
             if (len(mjds)==0 and len(pairs)==0 and len(vis2)==0 
                 and len(e_vis2)==0 and len(flags)==0 and len(baselines)==0):
                 # Arrays are empty
-                mjds = oidata[order]["MJD"]
-                pairs = tel_pairs[order]
-                vis2 = oidata[order]["VIS2DATA"]
-                e_vis2 = oidata[order]["VIS2ERR"]
-                flags = oidata[order]["FLAG"]
-                baselines = np.sqrt(oidata[order]["UCOORD"]**2 
-                                    + oidata[order]["VCOORD"]**2)
+                mjds = mjds_obs[order]
+                pairs = pairs_obs[order]
+                vis2 = vis2_obs[order]
+                e_vis2 = e_vis2_obs[order]
+                flags = flags_obs[order]
+                baselines = baselines_obs[order]
                 #wavelengths = oifits[2].data["EFF_WAVE"]
                 
             else:
                 # Not empty, stack
-                mjds = np.hstack((mjds, oidata[order]["MJD"]))
-                pairs = np.hstack((pairs, tel_pairs[order]))
-                vis2 = np.vstack((vis2, oidata["VIS2DATA"]))
-                e_vis2 = np.vstack((e_vis2, oidata["VIS2ERR"]))
-                flags = np.vstack((flags, oidata[order]["FLAG"]))
-                baselines = np.hstack((baselines, 
-                                       np.sqrt(oidata[order]["UCOORD"]**2 
-                                               + oidata[order]["VCOORD"]**2)))
+                mjds = np.hstack((mjds, mjds_obs[order]))
+                pairs = np.hstack((pairs, pairs_obs[order]))
+                vis2 = np.vstack((vis2, vis2_obs[order]))
+                e_vis2 = np.vstack((e_vis2, e_vis2_obs[order]))
+                flags = np.vstack((flags, flags_obs[order]))
+                baselines = np.hstack((baselines, baselines_obs[order]))
                 #wavelengths = np.vstack((wavelengths, 
                                          #oifits[2].data["EFF_WAVE"])
     
