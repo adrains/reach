@@ -272,8 +272,8 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20):
             ldd_fit = results.iloc[star_i]["LDD_FIT"]
             e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
             
-            ldd_pred = results.iloc[star_i]["LDD_FIT"]
-            e_ldd_pred = results.iloc[star_i]["e_LDD_FIT"]
+            ldd_pred = results.iloc[star_i]["LDD_PRED"]
+            e_ldd_pred = results.iloc[star_i]["e_LDD_PRED"]
             u_lld = results.iloc[star_i]["u_LLD"]
     
             x = np.arange(1*10**6, 25*10**7, 10000)
