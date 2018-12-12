@@ -88,8 +88,8 @@ def load_target_information(filepath="data/target_info.tsv"):
     
     
 def combine_independent_boostrap_runs(pkl_list):
-    """Function to combine LDD realisations from independent bootstrapping runs
-    for the purpose of plotting histograms/estimating uncertainties.
+    """Function to combine results from independent bootstrapping runs for the
+    purpose of plotting histograms/estimating uncertainties.
     
     Parameters
     ----------
@@ -98,25 +98,37 @@ def combine_independent_boostrap_runs(pkl_list):
         
     Returns
     -------
-    n_ldd_fit_all: dict
-        Dictionary of all LDD fits from each bootstrapping run. Key is the 
-        science target, values stored in list.
+    bs_results: dict of pandas dataframes
+        Dictionary with science targets as keys, containing pandas dataframes
+        recording the results of each bootstrapping iteration as rows.
     """
-    n_ldd_fit_all = {}
+    # Initialise structure to store results in
+    bs_result_list = []   
     
     # Open each pickle and join together into n_ldd_fit_all
     for pkl_fn in pkl_list:
         pkl = open(pkl_fn)
-        [n_vis2, n_baselines, n_ldd_fit, wavelengths] = pickle.load(pkl)
+        bs_result_list.append(pickle.load(pkl))
         pkl.close()
         
-        for sci in n_ldd_fit.keys():
-            if sci in n_ldd_fit_all.keys():
-                n_ldd_fit_all[sci].extend(n_ldd_fit[sci])
-            else:
-                n_ldd_fit_all[sci] = n_ldd_fit[sci]
+    # Get a reference to the dataframe we want to join to    
+    all_bs_results = bs_result_list[0]     
+        
+    # For every science target, combine all bootstrapping iterations
+    for bs_result_n in bs_result_list[1:]:
+        for sci in bs_result_n.keys():
+            # Increment the index of the data to be joined
+            orig_n_bs = len(bs_result_n[sci])
+            base_n = len(all_bs_results[sci])
+            bs_result_n[sci].set_index(np.arange(base_n, base_n + orig_n_bs),
+                                       inplace=True)
+            
+            # Join
+            all_bs_results[sci] = pd.concat([all_bs_results[sci], 
+                                             bs_result_n[sci]])
                 
-    return n_ldd_fit_all
+    return all_bs_results
+    
 
 def complete_obs_diagnostics(complete_sequences):
     """

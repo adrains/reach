@@ -449,8 +449,8 @@ def reduce_all_observations(base_path=("/priv/mulga1/arains/pionier/"
         os.system("cd %s; pndrsReduce" % folder)
         
 
-def calibrate_all_observations(reduced_data_folders, bootstrap_i=None,
-                               results_path="/home/arains/code/reach/results/"):
+def calibrate_all_observations(reduced_data_folders, bootstrap_i, 
+                               results_path):
     """Calls the PIONIER data reduction pipeline for each folder of reduced
     data from within Python.
     
@@ -482,8 +482,7 @@ def calibrate_all_observations(reduced_data_folders, bootstrap_i=None,
               % (int(np.floor(cal_time/60.)), cal_time % 60.))
         
         # Move oifits files back to central location (reach/results by default)
-        move_sci_oifits(ob_folder, bootstrap_i=bootstrap_i, 
-                        new_path=results_path)
+        move_sci_oifits(ob_folder, results_path, bootstrap_i)
     
     # All nights finished, print summary          
     total_time = (times[-1] - times[0]).total_seconds()    
@@ -492,9 +491,7 @@ def calibrate_all_observations(reduced_data_folders, bootstrap_i=None,
              total_time % 60.))
         
 
-def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
-                    new_path="/home/arains/code/reach/results/",
-                    bootstrap_i=None):
+def move_sci_oifits(obs_path, results_path, bootstrap_i):
     """Used to collect the calibrated oiFits files of all science targets after
     running the PIONIER data reduction pipeline. 
     
@@ -514,18 +511,18 @@ def move_sci_oifits(obs_path="/priv/mulga1/arains/pionier/complete_sequences/",
     #print("\n", "-"*79, "\n", "\tCopying complete sequences\n", "-"*79)
     
     for files_copied, oifits in enumerate(sci_oi_fits):
-        if os.path.exists(new_path):
-            # Update the filename to keep copies of all potential bootstraps
-            if bootstrap_i is not None:
-                fname = oifits.split("/")[-1].replace(".fits", 
-                                                      "_%02i.fits" % bootstrap_i)
-            else:
-                fname = oifits.split("/")[-1]
-                
-            print("...copying %s as %s" % (oifits.split("/")[-1], fname))
-                
-            copyfile(oifits, new_path + fname)
-            files_copied += 1
+        # Make the folder if it doesn't exist
+        if not os.path.exists(results_path):
+            os.mkdir(results_path)
+        
+        # Update the filename to keep copies of all potential bootstraps
+        fname = oifits.split("/")[-1].replace(".fits", 
+                                              "_%02i.fits" % bootstrap_i)
+
+        print("...copying %s as %s" % (oifits.split("/")[-1], fname))
+            
+        copyfile(oifits, results_path + fname)
+        files_copied += 1
     
     #print("%i files copied" % files_copied)
     
@@ -682,10 +679,9 @@ def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,
     
     
 def run_one_calibration_set(sequences, complete_sequences, base_path, 
-                            tgt_info, pred_ldd, e_pred_ldd, bs_i,
+                            tgt_info, pred_ldd, e_pred_ldd, bs_i, results_path,
                             run_local=False, already_calibrated=False,
-                            do_random_ifg_sampling=True, 
-                            results_path="/home/arains/code/reach/results/"):
+                            do_random_ifg_sampling=True):
     """Runs a single bootstrapping iteration, completing the following steps: 
         - Write YYYY-MM-DD_oiDiam.fits files for each night of observing
         - Run pndrsCalibrate for each night of observing
@@ -719,6 +715,9 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     bs_i: int
         Integer count for the ith bootstrapping iteration
     
+    results_path: string
+        Path to store the bootstrapped oifits files.
+    
     run_local: bool
         Boolean indicating whether the pipeline is being run locally, and to
         save files instead within reach/test/ for inspection.
@@ -730,23 +729,6 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
     do_random_ifg_sampling: bool
         Boolean indicating whether to randomly sample from the interferograms 
         or to use all data available.
-        
-    Returns
-    -------
-    vis2: list
-        List of all calibrated visibilities from bootstrapping run.
-    
-    e_vis2: list
-        List of errors on calibrated visibilities from bootstrapping run.
-    
-    baselines: list
-        List of all n_baselines from bootstrapping run. 
-    
-    wavelengths: list
-        List of wavelengths observed at. Assumed constant for all observations.
-        
-    ldd_fits: list
-        List of all LDD fits from bootstrapping run. 
     """
     # Intialise interferograms
     # Select the reduced interferograms which should be used for calibration
@@ -764,42 +746,19 @@ def run_one_calibration_set(sequences, complete_sequences, base_path,
         # Run Calibration
         obs_folders = [base_path % night + "%s/" % night 
                        for night in nights.keys()]
-        calibrate_all_observations(obs_folders, bootstrap_i=bs_i, 
-                                   results_path=results_path)
+        calibrate_all_observations(obs_folders, bs_i, results_path)
     
     elif run_local and not already_calibrated:
         # Save oiDiam files for local inspection
         nights = save_nightly_ldd(sequences, complete_sequences, tgt_info, 
                                   pred_ldd, e_pred_ldd, 
                                   run_local=run_local)
-  
-  
-def fit_ldd_for_all_nights(bootstrap_i, results_path, tgt_info, run_local=False):
-    """
-    """
-    # Collate calibrated vis2 data
-    if not run_local:
-        vis2, e_vis2, baselines, wavelengths = \
-            rdiam.collate_vis2_from_file(bs_i=bootstrap_i, results_path=results_path)
-    else:
-        path = "/Users/adamrains/code/reach/results/"
-        vis2, e_vis2, baselines, wavelengths = \
-            rdiam.collate_vis2_from_file(path)
-    
-    # Fit LDD
-    ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, 
-                                 tgt_info)
-    
-    return vis2, e_vis2, baselines, wavelengths, ldd_fits
-      
     
     
 def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
-                     n_pred_ldd, e_pred_ldd, n_bootstraps,
+                     n_pred_ldd, e_pred_ldd, n_bootstraps, results_path,
                      run_local=False, already_calibrated=False, 
-                     do_random_ifg_sampling=True,
-                     results_path="/home/arains/code/reach/results/", 
-                     do_ldd_fitting=True):
+                     do_random_ifg_sampling=True):
     """Runs N bootstrapping iterations, collating and return the results.
     
     Parameters
@@ -833,6 +792,9 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
     n_bootstraps: int
         The number of bootstrapping iterations to run.
     
+    results_path: string
+        Path to store the bootstrapped oifits files.
+    
     run_local: bool
         Boolean indicating whether the pipeline is being run locally, and to
         save files instead within reach/test/ for inspection.
@@ -845,22 +807,6 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         Boolean indicating whether to randomly sample from the interferograms 
         or to use all data available.
         
-    Returns
-    -------
-    n_vis2: dict
-        Dictionary of all calibrated visibilities from each bootstrapping run.
-        Key is the science target, values stored in list.
-    
-    n_baselines: dict
-        Dictionary of all n_baselines from each bootstrapping run. Key is the 
-        science target, values stored in list.
-    
-    n_ldd_fit: dict
-        Dictionary of all LDD fits from each bootstrapping run. Key is the 
-        science target, values stored in list.
-    
-    wavelengths: list
-        List of wavelengths observed at. Assumed constant for all observations.
     """
     # Initialise data structures for results
     n_vis2 = {}
@@ -875,28 +821,12 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
         print("\n", "|"*79, "\n\tBootstrapping iteration %i\n" % bs_i, "|"*79)
         
         # Run a single calibration run
-        
         run_one_calibration_set(sequences, complete_sequences, base_path, 
                                 tgt_info, n_pred_ldd.iloc[bs_i], 
-                                e_pred_ldd, bs_i, run_local=run_local, 
+                                e_pred_ldd, bs_i, results_path, 
+                                run_local=run_local, 
                                 already_calibrated=already_calibrated,
-                                do_random_ifg_sampling=do_random_ifg_sampling,
-                                results_path=results_path)
-         
-        if do_ldd_fitting:
-            vis2, e_vis2, baselines, wavelengths, ldd_fits = \
-                fit_ldd_for_all_nights(bs_i, results_path, tgt_info)    
-                              
-            # Collate results
-            for sci in vis2.keys():
-                if sci in n_vis2.keys():
-                    n_vis2[sci].append(vis2[sci])
-                    n_baselines[sci].append(baselines[sci])
-                    n_ldd_fit[sci].append(ldd_fits[sci][0])
-                else:
-                    n_vis2[sci] = [vis2[sci]]
-                    n_baselines[sci] = [baselines[sci]]
-                    n_ldd_fit[sci] = [ldd_fits[sci][0]]
+                                do_random_ifg_sampling=do_random_ifg_sampling)
                 
         times.append(datetime.datetime.now())  
         b_i_time = (times[-1] - times[-2]).total_seconds() 
@@ -909,151 +839,3 @@ def run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                 
     # All done
     print("\n", "-"*79, "\n", "\tBootstrapping Complete\n", "-"*79)
-    
-    if do_ldd_fitting: 
-        for sci in n_ldd_fit.keys():
-            # Predicted results
-            #sci_ldd_pred = tgt_info
-            #sci_e_ldd_pred = np.std(n_ldd_fit[sci])
-            #sci_percent_pred = sci_e_ldd_fit / sci_ldd_fit * 100
-        
-            # Fitting results
-            sci_ldd_fit = np.mean(n_ldd_fit[sci])
-            sci_e_ldd_fit = np.std(n_ldd_fit[sci])
-            sci_percent_fit = sci_e_ldd_fit / sci_ldd_fit * 100
-        
-            print("%-12s\tLDD = %f +/- %f (%0.2f%%)" % (sci, sci_ldd_fit, 
-                                                          sci_e_ldd_fit,
-                                                          sci_percent_fit))
-                                                      
-        return n_vis2, n_baselines, n_ldd_fit, wavelengths
-    
-    else:
-        return None, None, None, None
-        
-
-def collate_bootstrapping(tgt_info, n_bootstraps, results_path):
-    """
-    """
-    # Determine the stars that we have results on
-    oifits_files = glob.glob(results_path + "*SCI*.fits")
-    oifits_files.sort()
-    
-    stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
-                 for file in oifits_files])
-                
-    # Initialise a pandas dataframe for each star. At present it's hard to
-    # entirely preallocate memory, but we'll try to at least preallocate the
-    # rows
-    cols1 = ["MJD", "TEL_PAIR", "VIS2", "FLAG", "BASELINE", 
-            "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD"]
-    
-    cols2 = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
-             "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD"]
-            
-    # Store the results for each star in a pandas dataframe, accessed by key 
-    # from a dictionary
-    bs_results = {}
-    results = pd.DataFrame(index=np.arange(0, len(stars)), columns=cols2)      
-    
-    for star in stars:
-        bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
-                                     columns=cols1)
-        
-        # TEL_PAIR --> array of tuples, MJD --> array of floats, VIS2 -->
-        # array of 6 length arrays, BASELINE --> array of floats, WAVELENGTH 
-        # --> array of 6 length arrays, FLAG --> array of 6 length arrays,
-        # LDD --> array of floats
-        bs_results[star]["MJD"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["TEL_PAIR"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
-        #bs_results[star]["e_VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["FLAG"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["BASELINE"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
-        bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
-    
-    # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
-    # baseline, and wavelength information from each iteration
-    for bs_i in np.arange(0, n_bootstraps):
-        # Collate the information
-        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
-            rdiam.collate_vis2_from_file(results_path, bs_i)
-          
-        # Fit LDD
-        print("Fitting diameters for bootstrap %i\n" % bs_i)
-        ldd_fits = rdiam.fit_all_ldd(vis2, e_vis2, baselines, wavelengths, 
-                                     tgt_info)  
-        # Populate
-        for star in mjds.keys():
-            bs_results[star]["MJD"][bs_i] = mjds[star]
-            bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
-            bs_results[star]["VIS2"][bs_i] = vis2[star]
-            #bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
-            bs_results[star]["FLAG"][bs_i] = flags[star]
-            bs_results[star]["BASELINE"][bs_i] = baselines[star]
-            bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
-            bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
-            
-            bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
-            bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
-            bs_results[star]["u_LLD"][bs_i] = ldd_fits[star][4]
-            
-    #return results, bs_results 
-    prune_errant_baselines = True
-    
-    # A minority of bootstraps result in a different number of observed 
-    # baseline/vis2 measurements, which cannot be stacked to produce vis2 
-    # errors. This step prunes them to enable plotting.
-    if prune_errant_baselines:
-        # Get the most common baseline count, and remove any not adhering
-        shape_dict = {}
-        for star in bs_results.keys():                   
-            shape_dict[star] = []              
-            for vis2 in bs_results[star]["TEL_PAIR"]:
-                shape_dict[star].append(vis2.shape)                                                     
-            shape_dict[star] = Counter(shape_dict[star])    
-                
-            # Get a list of the indices to drop
-            num_most_common = shape_dict[star].most_common(1)[0][0][0]
-            i_to_drop = [i_ob for i_ob, ob in enumerate(bs_results[star]["VIS2"].values)
-                         if len(ob) != num_most_common]
-                         
-            # Now replace the errant vis2 and baseline data with nans
-            for ob_i in i_to_drop:
-                bs_results[star].iloc[ob_i]["VIS2"] = np.ones([num_most_common, 6])*np.nan
-                bs_results[star].iloc[ob_i]["BASELINE"] = np.ones(num_most_common)*np.nan
-
-    # Temporary - del Pav has bad baselines and complicates things
-    #bs_results.pop("delPav")
-    
-    #return results, bs_results
-    
-    # All done collating, combine bootstrapped values into mean and std
-    for star_i, star in enumerate(bs_results.keys()):
-        results.iloc[star_i]["STAR"] = star
-    
-        results.iloc[star_i]["LDD_FIT"] = np.nanmean(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
-        results.iloc[star_i]["e_LDD_FIT"] = np.nanstd(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
-
-        results.iloc[star_i]["LDD_PRED"] = np.nanmean(np.hstack(bs_results[star]["LDD_PRED"]), axis=0)
-        results.iloc[star_i]["e_LDD_PRED"] = np.nanmedian(np.hstack(bs_results[star]["e_LDD_PRED"]), axis=0)
-        results.iloc[star_i]["u_LLD"] = np.nanmedian(np.hstack(bs_results[star]["u_LLD"]), axis=0)
-
-    
-        # Some vis2/e_vis2/baseline bootstraps might have a different number of 
-        # points. These cannot be stacked, so for the purpose of getting vis2 
-        # plots, remove them from consideration
-        results.iloc[star_i]["VIS2"] = np.nanmean(np.dstack(bs_results[star]["VIS2"]), axis=2)
-        results.iloc[star_i]["e_VIS2"] = np.nanstd(np.dstack(bs_results[star]["VIS2"]), axis=2)
-
-        results.iloc[star_i]["BASELINE"] = np.nanmean(np.vstack(bs_results[star]["BASELINE"]), axis=0)
-    
-        results.iloc[star_i]["WAVELENGTH"] = np.nanmedian(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
-        
-        
-        
-    # Do plotting
-    rplt.plot_all_vis2_fits(results, tgt_info)
-    
-    return results, bs_results

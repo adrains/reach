@@ -92,19 +92,22 @@ from astroquery.vizier import Vizier
 # -----------------------------------------------------------------------------
 # (0) Parameters
 # -----------------------------------------------------------------------------
+# Time to append to results_path to prevent being overriden
+str_date = time.strftime("%y-%m-%d")  
+
 # TODO: move to parameter file
-calibrate_calibrators = True
+calibrate_calibrators = False
 run_local = False
 already_calibrated = False
-do_random_ifg_sampling = False
-do_gaussian_diam_sampling = False
+do_random_ifg_sampling = True
+do_gaussian_diam_sampling = True
 test_one_seq_only = False
-do_ldd_fitting = False
-n_bootstraps = 1
+do_ldd_fitting = True
+n_bootstraps = 100
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
-results_path="/home/arains/code/reach/results/"
+results_path = "/home/arains/code/reach/results/" + str_date + "/"
 
 print("\nBeginning calibration and fitting run. Parameters set as follow:")
 print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
@@ -252,7 +255,6 @@ pkl_sequences.close()
 # (6) Inspect reduced data
 # -----------------------------------------------------------------------------
 # Check visibilities for anything unusual (?) or potential saturated data
-pass
 
 # -----------------------------------------------------------------------------
 # (7) Write YYYY-MM-DD_pndrsScript.i
@@ -294,52 +296,32 @@ if test_one_seq_only:
                       
     sequences = {seq2:sequences[seq2]}
 
-n_vis2, n_baselines, n_ldd_fit, wavelengths = \
-    rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
-                            n_pred_ldd, e_pred_ldd, n_bootstraps,
-                            run_local=run_local, 
-                            already_calibrated=already_calibrated,
-                            do_random_ifg_sampling=do_random_ifg_sampling,
-                            results_path=results_path)
-
-# Save the results
-str_date = time.strftime("%y-%m-%d")                     
-pkl_bootstrap_raw = open("results/bootstrap_%s_n%i.pkl" 
-                         % (str_date, n_bootstraps), "wb")
-pickle.dump([n_vis2, n_baselines, n_ldd_fit, wavelengths], pkl_bootstrap_raw)
-pkl_bootstrap_raw.close()
+rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
+                        n_pred_ldd, e_pred_ldd, n_bootstraps, results_path,
+                        run_local=run_local, 
+                        already_calibrated=already_calibrated,
+                        do_random_ifg_sampling=do_random_ifg_sampling)
 
 # -----------------------------------------------------------------------------
 # (N) Create summary pdf with vis^2 plots for all science targets
 # -----------------------------------------------------------------------------
-pkl_list = glob.glob("results/*pkl")
-n_ldd_fit_all = rutils.combine_independent_boostrap_runs(pkl_list)
-rplt.plot_ldd_hists(n_ldd_fit_all, 25)
+# Collate the bootstrapping run
+bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
+                                         pred_ldd_col, 
+                                         prune_errant_baselines=True)
 
-# Below is currently broken until a the visibility plotting code is fixed
-"""
-vis2 = {}
-e_vis2 = {}
-ldd_fit = {}
-e_ldd_fit = {}
-baselines = {}
+# Save the results from this bootstrapping run                   
+pkl_bs_results = open("results/bootstrapped_results_%s_n%i.pkl" 
+                      % (str_date, n_bootstraps), "wb")
+pickle.dump(bs_results, pkl_bs_results)
+pkl_bs_results.close()
+                                         
+# Combine these bootstrapping results with any previous ones
+pkl_list = glob.glob("results/*results*pkl")
+all_bs_results = rutils.combine_independent_boostrap_runs(pkl_list)
 
-# Combine bootstrapped data
-for sci in n_vis2.keys():
-    vis2[sci] = np.mean(n_vis2[sci], axis=0)
-    e_vis2[sci] = np.std(n_vis2[sci], axis=0)
-    
-    ldd_fit[sci] = np.mean(n_ldd_fit[sci])
-    e_ldd_fit[sci] = np.std(n_ldd_fit[sci])
-    
-    assert np.all([len(np.unique(n_baselines[sci]))==1 
-                   for i in np.arange(0, len(n_baselines[sci]))])
-                   
-    baselines[sci] = n_baselines[sci][0]
-    
-# Now generate plots
-rplt.plot_all_vis2_fits(baselines, wavelengths, vis2, e_vis2, ldd_fit, 
-                        e_ldd_fit, tgt_info, pred_ldd_col, e_pred_ldd_col)
-                        
-# Save the results
-"""
+# Summarise the bootstrapping run                                
+results = rdiam.summarise_bootstrapping(all_bs_results, tgt_info, pred_ldd_col, 
+                                        e_pred_ldd_col)
+
+rplt.plot_bootstrapping_summary(results, all_bs_results)

@@ -5,7 +5,6 @@ import os
 import glob
 import numpy as np
 import pandas as pd
-import reach.plotting as rplt
 import matplotlib.pylab as plt
 from collections import Counter
 from astropy.io import fits
@@ -216,7 +215,7 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     return ldd_opt[0], e_ldd_opt[0]
 
 
-def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
+def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -244,29 +243,15 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, do_plot=False):
             print("%s is not science target, aborting fit" % sci)
             continue
         else:
-            print("Fitting linear LDD to %s" % sci, end="")
+            print("\tFitting linear LDD to %s" % sci, end="")
             
-        #print(vis2[sci].shape, e_vis2[sci].shape, baselines[sci].shape, 
-              #len(wavelengths), sci_data["u_lld"].values[0], 
-              #sci_data["LDD_VW3_dr"].values[0])
-        #try:
         ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                          baselines[sci], wavelengths[sci], 
                                          sci_data["u_lld"].values[0], 
-                                         sci_data["LDD_VW3_dr"].values[0])
+                                         sci_data[pred_ldd_col].values[0])
         print("...fit successful")
-        successful_fits[sci] = [ldd_opt, e_ldd_opt, 
-                                sci_data["LDD_VW3_dr"].values[0],
-                                sci_data["e_LDD_VW3_dr"].values[0],
-                                sci_data["u_lld"].values[0]]
-            
-        #except Exception, err:
-            #print("...exception, aborting fit - %s" % err)                              
-                                         
-    # All Done, create diagnostic plots
-    if do_plot:
-        rplt.plot_all_vis2_fits(successful_fits, baselines, wavelengths, vis2, 
-                                e_vis2)
+        
+        successful_fits[sci] = [ldd_opt, e_ldd_opt]                          
             
     return successful_fits
 
@@ -282,11 +267,20 @@ def extract_vis2(oi_fits_file):
         
     Returns
     -------
+    mjds: float array
+        MJDs of the observations.
+    
+    pairs: string array
+        Telescope pairs for each each baseline.
+    
     vis2: float array
         Calibrated squared visibiity measurements
         
     e_vis2: float array
         Error on the calibrated squared visibility measurements
+    
+    flags: float array
+        Quality flags for each observation.
         
     baseline: float array
         Projected interferometric baselines (m)
@@ -357,20 +351,25 @@ def extract_vis2(oi_fits_file):
             # For every missing baseline, insert dummy NaN data to keep array
             # dimensions the same
             for missing_bl in list(expected_pairs - set(observed_pairs)):
-                print("Adding missing info for first science block")
+                print("\tAdding missing info for first science block on %s" 
+                      % oi_fits_file)
                 mjds_obs = np.insert(mjds_obs, n_1st_mjd, np.nan)
                 pairs_obs = np.insert(pairs_obs, n_1st_mjd, missing_bl)
                 vis2_obs = np.insert(vis2_obs, n_1st_mjd, [np.nan]*6, axis=0)
-                e_vis2_obs = np.insert(e_vis2_obs, n_1st_mjd, [np.nan]*6, axis=0)
-                flags_obs = np.insert(flags_obs, n_1st_mjd, [np.nan]*6, axis=0)
-                baselines_obs = np.insert(baselines_obs, n_1st_mjd, np.nan, axis=0)
+                e_vis2_obs = np.insert(e_vis2_obs, n_1st_mjd, [np.nan]*6, 
+                                       axis=0)
+                flags_obs = np.insert(flags_obs, n_1st_mjd, [np.nan]*6, 
+                                      axis=0)
+                baselines_obs = np.insert(baselines_obs, n_1st_mjd, np.nan, 
+                                          axis=0)
                 
             # Now do this again for the other expected observation
             observed_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
                                   for tel in oidata["STA_INDEX"][6:]])
             
             for missing_bl in list(expected_pairs - set(observed_pairs)):
-                print("Adding missing info for second science block")
+                print("\tAdding missing info for first science block on %s" 
+                      % oi_fits_file)
                 mjds_obs = np.insert(mjds_obs, 6, np.nan)
                 pairs_obs = np.insert(pairs_obs, 6, missing_bl)
                 vis2_obs = np.insert(vis2_obs, 6, [np.nan]*6, axis=0)
@@ -385,15 +384,10 @@ def extract_vis2(oi_fits_file):
             # per sequence. To simplify the sorting procedure, convert the 
             # tuple pairs of telescope IDs to a string.
             #tel_pairs = np.array(["%i-%i" % (tel[0], tel[1]) 
-                                  #for tel in oidata["STA_INDEX"]])
-                                     
+                                  #for tel in oidata["STA_INDEX"]])                  
                                   
             order = np.concatenate((pairs_obs[:6].argsort(), 
                                     pairs_obs[6:].argsort() + 6))
-            
-            
-            #import pdb
-            #pdb.set_trace()
             
             if (len(mjds)==0 and len(pairs)==0 and len(vis2)==0 
                 and len(e_vis2)==0 and len(flags)==0 and len(baselines)==0):
@@ -434,11 +428,20 @@ def collate_vis2_from_file(results_path, bs_i=None):
         
     Returns
     -------
+    all_mjds: dict
+        Dictionary mapping science target ID to all observation MJDs (times).
+    
+    all_tel_pairs: dict
+         Dictionary mapping science target ID to all telescope pairs.
+    
     all_vis2: dict
         Dictionary mapping science target ID to all vis^2 values
     
     all_e_vis2: dict
         Dictionary mapping science target ID to all e_vis^2 values
+        
+    all_flags: dict    
+         Dictionary mapping science target ID to all quality flags.
         
     all_baselines: dict
         Dictionary mapping science target ID to all projected baselines (m)
@@ -456,13 +459,15 @@ def collate_vis2_from_file(results_path, bs_i=None):
     all_baselines = {}
     all_wavelengths = {}
     
-    ith_bs_oifits = glob.glob(results_path + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
+    ith_bs_oifits = glob.glob(results_path 
+                              + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
     ith_bs_oifits.sort()
     
     #print("\n", "-"*79, "\n", 
     #      "\tCollating Calibrated vis2 for bootstrap %i\n" % bs_i, "-"*79)
     
-    print("%i oifits file/s for bootstrap %i" % (len(ith_bs_oifits), bs_i))
+    print("\nFound %i oifits file/s for bootstrap %i" % (len(ith_bs_oifits), 
+                                                       bs_i))
     
     for oifits in ith_bs_oifits:
         # Get the target name from the file name - this is clunky, but more
@@ -623,3 +628,197 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
                                               tgt_info.loc[id, e_pred_ldd_col],
                                               n_bootstraps)                                           
     return n_pred_ldd, e_pred_ldd
+    
+    
+def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
+                          prune_errant_baselines=True):
+    """Collates all bootstrapped oifits files within results_path into
+    sumarising pandas dataframes. 
+    
+    Parameters
+    ----------
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    n_bootstraps: int
+        The number of bootstrapping iterations to run.
+    
+    results_path: string
+        Path to store the bootstrapped oifits files.
+            
+    pred_ldd_col: string
+        The column to use from tgt_info for the predicted diameters.
+        
+    prune_errant_baselines: boolean
+        Whether to replace non-matching vis2 and baseline data with NaNs to
+        facillitate computation of vis2 errors. This does not affect the fitted
+        LDD or its error computed from the distribution of fitted LDDs, and is
+        purely to allow plotting of vis2 curves with errors.
+            
+    Returns
+    -------
+    bs_results: dict of pandas dataframes
+        Dictionary with science targets as keys, containing pandas dataframes
+        recording the results of each bootstrapping iteration as rows.
+    """
+    # Determine the stars that we have results on
+    oifits_files = glob.glob(results_path + "*SCI*.fits")
+    oifits_files.sort()
+    
+    stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
+                 for file in oifits_files])
+                
+    # Initialise a pandas dataframe for each star. At present it's hard to
+    # entirely preallocate memory, but we'll try to at least preallocate the
+    # rows
+    cols1 = ["MJD", "TEL_PAIR", "VIS2", "FLAG", "BASELINE", 
+            "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+            
+    # Store the results for each star in a pandas dataframe, accessed by key 
+    # from a dictionary
+    bs_results = {}
+        
+    for star in stars:
+        bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
+                                     columns=cols1)
+        
+        # TEL_PAIR --> array of tuples, MJD --> array of floats, VIS2 -->
+        # array of 6 length arrays, BASELINE --> array of floats, WAVELENGTH 
+        # --> array of 6 length arrays, FLAG --> array of 6 length arrays,
+        # LDD --> array of floats
+        bs_results[star]["MJD"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["TEL_PAIR"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
+        #bs_results[star]["e_VIS2"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["FLAG"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["BASELINE"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
+    
+    # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
+    # baseline, and wavelength information from each iteration
+    for bs_i in np.arange(0, n_bootstraps):
+        # Collate the information
+        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+            collate_vis2_from_file(results_path, bs_i)
+          
+        # Fit LDD
+        print("\nFitting diameters for bootstrap %i" % (bs_i+1))
+        ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
+                               pred_ldd_col)  
+                               
+        # Populate
+        for star in mjds.keys():
+            bs_results[star]["MJD"][bs_i] = mjds[star]
+            bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
+            bs_results[star]["VIS2"][bs_i] = vis2[star]
+            #bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
+            bs_results[star]["FLAG"][bs_i] = flags[star]
+            bs_results[star]["BASELINE"][bs_i] = baselines[star]
+            bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
+            bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
+            
+            #bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
+            #bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
+            #bs_results[star]["u_LLD"][bs_i] = ldd_fits[star][4]
+    
+    # A minority of bootstraps result in a different number of observed 
+    # baseline/vis2 measurements, which cannot be stacked to produce vis2 
+    # errors. This step prunes them to enable plotting.
+    if prune_errant_baselines:
+        # Get the most common baseline count, and remove any not adhering
+        shape_dict = {}
+        for star in bs_results.keys():                   
+            shape_dict[star] = []              
+            for vis2 in bs_results[star]["TEL_PAIR"]:
+                shape_dict[star].append(vis2.shape)                                                     
+            shape_dict[star] = Counter(shape_dict[star])    
+                
+            # Get a list of the indices to drop
+            num_most_common = shape_dict[star].most_common(1)[0][0][0]
+            i_to_drop = [i_ob for i_ob, ob 
+                         in enumerate(bs_results[star]["VIS2"].values)
+                         if len(ob) != num_most_common]
+                         
+            # Now replace the errant vis2 and baseline data with nans
+            for ob_i in i_to_drop:
+                bs_results[star].iloc[ob_i]["VIS2"] = \
+                    np.ones([num_most_common, 6])*np.nan
+                bs_results[star].iloc[ob_i]["BASELINE"] = \
+                    np.ones(num_most_common)*np.nan
+
+    return bs_results
+
+
+def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
+                           e_pred_ldd_col):
+    """Summarise N boostrapping results by computing mean and standard 
+    deviations for each distribution.
+    
+    Parameters
+    ----------
+    bs_results: dict of pandas dataframes
+        Dictionary with science targets as keys, containing pandas dataframes
+        recording the results of each bootstrapping iteration as rows.
+    
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+        
+    pred_ldd_col: string
+        The column to use from tgt_info for the predicted diameters.
+        
+    e_pred_ldd_col: string
+        The column to use from tgt_info for the predicted diameter 
+        uncertainties.
+            
+    Returns
+    -------
+    results: pandas dataframe
+        Summarised results of the bootstrapping with mean and std values
+        computed from respective parameter distributions.
+    """    
+    # Initialise
+    cols = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
+            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+    results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
+                           columns=cols)  
+    
+    # All done collating, combine bootstrapped values into mean and std
+    for star_i, star in enumerate(bs_results.keys()):
+        # Set the common ID, and get the primary ID
+        results.iloc[star_i]["STAR"] = star
+        
+        pid = tgt_info[tgt_info["Primary"]==star].index.values[0]
+        
+        # Stack and compute mean and standard deviations 
+        results.iloc[star_i]["LDD_FIT"] = \
+            np.nanmean(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+            
+        results.iloc[star_i]["e_LDD_FIT"] = \
+            np.nanstd(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+
+        results.iloc[star_i]["VIS2"] = \
+            np.nanmean(np.dstack(bs_results[star]["VIS2"]), axis=2)
+            
+        results.iloc[star_i]["e_VIS2"] = \
+            np.nanstd(np.dstack(bs_results[star]["VIS2"]), axis=2)
+
+        results.iloc[star_i]["BASELINE"] = \
+            np.nanmean(np.vstack(bs_results[star]["BASELINE"]), axis=0)
+    
+        results.iloc[star_i]["WAVELENGTH"] = \
+            np.nanmedian(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
+            
+        results.iloc[star_i]["LDD_PRED"] = tgt_info.loc[pid, pred_ldd_col]    
+        results.iloc[star_i]["e_LDD_PRED"] = tgt_info.loc[pid, e_pred_ldd_col]   
+        results.iloc[star_i]["u_LLD"] = tgt_info.loc[pid, "u_lld"]    
+        
+        # Print some simple diagnostics                
+        sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]
+                           / results.iloc[star_i]["LDD_FIT"]) * 100
+           
+        print("%-12s\tLDD = %f +/- %f (%0.2f%%)" 
+              % (star, results.iloc[star_i]["LDD_FIT"], 
+                 results.iloc[star_i]["e_LDD_FIT"], sci_percent_fit))
+    
+    return results
