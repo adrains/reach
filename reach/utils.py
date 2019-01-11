@@ -1,21 +1,32 @@
 """Miscellaneous function module for reach
 """
 from __future__ import division, print_function
+
 import csv
 import pickle
 import numpy as np
 import pandas as pd
+from collections import OrderedDict
 
 # -----------------------------------------------------------------------------
 # Utilities Functions
 # -----------------------------------------------------------------------------
 def summarise_sequences():
-    """
+    """Creates a dictionary summary of each sequence, specified with the unique
+    key (period, science, bright/faint).
+    
+    Returns
+    -------
+    sequences: OrderedDict
+        Dict mapping key (period, science, bright/faint) with list of target 
+        IDs in the sequence.
     """
     # Read in each sequence
-    bright_list_files = ["p99_bright.txt", "p101_bright.txt"]
-    faint_list_files = ["p99_faint.txt", "p101_faint.txt"]
-    period = [99, 101]
+    bright_list_files = ["data/p99_bright.txt", "data/p101_bright.txt", 
+                         "data/p102_bright.txt"]
+    faint_list_files = ["data/p99_faint.txt", "data/p101_faint.txt",
+                        "data/p102_faint.txt"]
+    period = [99, 101, 102]
 
     target_list = []
 
@@ -51,6 +62,7 @@ def summarise_sequences():
     pkl_sequences.close()
     
     return sequences
+    
     
 def load_target_information(filepath="data/target_info.tsv"):
     """Loads in the target information tsv (tab separated) as a pandas 
@@ -131,16 +143,18 @@ def combine_independent_boostrap_runs(pkl_list):
     
 
 def complete_obs_diagnostics(complete_sequences):
-    """
+    """Prints complete_complete sequences in a human readable format for 
+    troubleshooting.
     """
     for seq in complete_sequences.keys():
         print("-"*30)
         print(seq,len(complete_sequences[seq][2]))
         for i, yy in enumerate(complete_sequences[seq][2]):
             print("%02i" % i, yy[2], yy[3], yy[-1])
+          
             
 def night_log_diagnostics(night_log):
-    """
+    """Prints the night log in a human readable format for troubleshooting.
     """
     for night in night_log.keys():
         print("-"*30)
@@ -150,7 +164,24 @@ def night_log_diagnostics(night_log):
     
             
 def get_unique_key(tgt_info, id_list):
-    """
+    """Some stars were observed multiple times under different names (e.g. a
+    Bayer designation once, and a HD number another time). This complicates
+    uniquely IDing each star, so this method serves to take an ID that we may
+    have referenced a star with, and take the value that allows us to easily
+    reference tgt_info.
+    
+    Parameters
+    ----------
+    tgt_info: pandas dataframe
+        Pandas dataframe of all target info
+    
+    id_list: list
+        List of string IDs.
+    
+    Returns
+    -------
+    unique_ids: list
+        List of IDs.
     """
     unique_ids = []
     

@@ -21,6 +21,7 @@ import glob
 import os
 import pickle
 import numpy as np
+from sys import exit
 from shutil import copyfile
 from collections import OrderedDict
 from datetime import datetime
@@ -127,7 +128,6 @@ np.savetxt("ref_ids.csv", list(ref_ids), fmt="%s")
 # datetime1 - datetime2 --> datetime.timedelta(...)
 # datetime.timedelta(...).seconds
 
-
 # -----------------------------------------------------------------------------
 # Read in and separate out the bright and faint sci-cal sequences
 # -----------------------------------------------------------------------------
@@ -160,7 +160,7 @@ for i in xrange(0, len(bright_list), 4):
     bright_sequences[bright_list[i]] = [bright_list[i+1], bright_list[i],
                                         bright_list[i+2], bright_list[i],
                                         bright_list[i+3]]
-    
+for i in xrange(0, len(faint_list), 4):    
     faint_sequences[faint_list[i]] = [faint_list[i+1], faint_list[i],
                                       faint_list[i+2], faint_list[i],
                                       faint_list[i+3]]
@@ -416,6 +416,55 @@ key = (period, "TauCet", "bright")
 complete_sequences[key] = ("2017-08-26", grade, concatenation)
 
 #missing_sequences.remove(("TauCet", "bright"))
+
+# -----------------------------------------------------------------------------
+# P102 Stars
+# -----------------------------------------------------------------------------
+# del Eri (bright)
+# All obs are fine, save first which had grade of "_"
+concatenation = night_log["2018-11-25"]
+
+grade = "".join([observation[3] for observation in concatenation])
+period = int(concatenation[0][6].split(".")[0])
+end_time = concatenation[-1][4].isoformat()
+
+key = (period, "delEri", "bright")
+complete_sequences[key] = ("2018-11-25", grade, concatenation)
+
+# del Eri (faint)
+# Observations of first cal (HD16970) are bad (grade "X"), and the first delEri
+# observations is "_". Everything after this is good, and the first cal is done
+# again successfully at the end
+concatenation = night_log["2018-11-26"][7:41]
+
+grade = "".join([observation[3] for observation in concatenation])
+period = int(concatenation[0][6].split(".")[0])
+end_time = concatenation[-1][4].isoformat()
+
+key = (period, "delEri", "faint")
+complete_sequences[key] = ("2018-11-26", grade, concatenation)
+
+# omi2 Eri (faint)
+# All obs are fine
+concatenation = night_log["2018-11-26"][41:75]
+
+grade = "".join([observation[3] for observation in concatenation])
+period = int(concatenation[0][6].split(".")[0])
+end_time = concatenation[-1][4].isoformat()
+
+key = (period, "omi2Eri", "faint")
+complete_sequences[key] = ("2018-11-26", grade, concatenation)
+
+# omi2 Eri (bright)
+# All obs are fine
+concatenation = night_log["2018-11-26"][75:]
+
+grade = "".join([observation[3] for observation in concatenation])
+period = int(concatenation[0][6].split(".")[0])
+end_time = concatenation[-1][4].isoformat()
+
+key = (period, "omi2Eri", "bright")
+complete_sequences[key] = ("2018-11-26", grade, concatenation)
 
 # -----------------------------------------------------------------------------
 # Summarise keys for easy inspection

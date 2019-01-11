@@ -103,7 +103,8 @@ do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
 do_ldd_fitting = True
-n_bootstraps = 100
+combine_previous_bootstraps = False
+n_bootstraps = 120
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
@@ -115,6 +116,7 @@ print(" - run_local\t\t\t=\t%s" % run_local)
 print(" - already_calibrated\t\t=\t%s" % already_calibrated)
 print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
 print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
+print(" - combine_previous_bootstraps\t=\t%s" % combine_previous_bootstraps)
 
 print("<i>Strap in</i> for bootstrapping.")
 
@@ -251,6 +253,9 @@ pkl_sequences = open("data/sequences.pkl", "r")
 sequences = pickle.load(pkl_sequences)
 pkl_sequences.close()
 
+# Currently broken, don't consider
+complete_sequences.pop((102, 'delEri', 'bright'))
+
 # -----------------------------------------------------------------------------
 # (6) Inspect reduced data
 # -----------------------------------------------------------------------------
@@ -315,13 +320,20 @@ pkl_bs_results = open("results/bootstrapped_results_%s_n%i.pkl"
                       % (str_date, n_bootstraps), "wb")
 pickle.dump(bs_results, pkl_bs_results)
 pkl_bs_results.close()
-                                         
-# Combine these bootstrapping results with any previous ones
-pkl_list = glob.glob("results/*results*pkl")
-all_bs_results = rutils.combine_independent_boostrap_runs(pkl_list)
+                             
+if combine_previous_bootstraps:                                         
+    # Combine these bootstrapping results with any previous ones
+    pkl_list = glob.glob("results/*results*pkl")
+    all_bs_results = rutils.combine_independent_boostrap_runs(pkl_list)
 
-# Summarise the bootstrapping run                                
-results = rdiam.summarise_bootstrapping(all_bs_results, tgt_info, pred_ldd_col, 
-                                        e_pred_ldd_col)
+    # Summarise the bootstrapping run                                
+    results = rdiam.summarise_bootstrapping(all_bs_results, tgt_info, 
+                                            pred_ldd_col, e_pred_ldd_col)
 
-rplt.plot_bootstrapping_summary(results, all_bs_results)
+    rplt.plot_bootstrapping_summary(results, all_bs_results)
+
+else:
+    results = rdiam.summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col, 
+                                            e_pred_ldd_col)
+
+    rplt.plot_bootstrapping_summary(results, bs_results)

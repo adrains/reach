@@ -189,6 +189,32 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
     return nights
 
 
+def load_bad_baselines_log():
+    """Loads in the text file recording any bad baselines, where each entry
+    has the form: (Period,ID,concatenation,station,start,end)
+    
+    Returns
+    -------
+    bad_baseline_dict: dict
+        Dictionary mapping keys of string nights to (station_id, mjd1, mjd2)
+    """
+    bad_baseline_file = "data/bad_baselines.txt"
+    
+    # Load the file
+    bad_baselines = np.loadtxt(bad_baseline_file, str, "#", " ")
+    
+    # Format to a dict
+    if len(bad_baselines.shape) == 1:
+        bad_baseline_dict = {bad_baselines[0]: [bad_baselines[4], 
+                             float(bad_baselines[5]), float(bad_baselines[6])]}
+    else:
+        bad_baseline_dict = {baseline_entry[0]: [baseline_entry[4],
+                            float(baseline_entry[5]), float(baseline_entry[5])]
+                             for baseline_entry in bad_baselines}
+                             
+    return bad_baseline_dict
+
+
 def save_nightly_pndrs_script(complete_sequences, tgt_info, 
             base_path="/priv/mulga1/arains/pionier/complete_sequences/",
             dir_suffix="_v3.73_abcd", run_local=False):
@@ -255,6 +281,15 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
     line_exclude_2 = ('oiFitsFlagOiData, oiWave, oiArray, oiVis2, oiT3, oiVis,' 
                       'tlimit=startend;')
     
+    # These lines are written when excluding bad baselines based on station 
+    # number and MJD
+    line_bad_bl_1 = 'yocoLogInfo,"Ignore bad baselines";'
+    line_bad_bl_2 = ('oiFitsFlagOiData, oiWave, oiArray, oiVis2, oiT3, oiVis,' 
+                     'base=station, tlimit=startend;')
+    
+    # Get the record of sequences with bad baselines
+    bad_baseline_dict = load_bad_baselines_log()
+    
     pndrs_scripts_written = 0
     no_script_nights = 0
     
@@ -275,8 +310,9 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
             
         # It is only meaningful to write a script if we need to split the night
         # (i.e. if more than one sequence has been observed, that is there are
-        # 4 or more MJD entries) or we have bad calibrators to exclude 
-        if len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1:
+        # 4 or more MJD entries) or have bad calibrators/baselines to exclude 
+        if (len(sequence_times[night]) <= 2 and len(bad_durations[night]) < 1
+            and night not in bad_baseline_dict):
             no_script_nights += 1
             continue     
         
@@ -303,6 +339,15 @@ def save_nightly_pndrs_script(complete_sequences, tgt_info,
                     startend = "startend = %s;\n" % bad_cal[1:]
                     nightly_script.write(startend)
                     nightly_script.write(line_exclude_2 + "\n")
+                    
+            # Ignore observations with bad baselines using station ID and MJD
+            if night in bad_baseline_dict:
+                nightly_script.write(line_bad_bl_1 + "\n")
+                startend = "startend = %s;\n" % bad_baseline_dict[night][1:]
+                nightly_script.write(startend)
+                station = 'station = "*%s*";\n' % bad_baseline_dict[night][0]
+                nightly_script.write(station)
+                nightly_script.write(line_bad_bl_2 + "\n")
         
         # Done, move to the next night
         print("...wrote %s, night split into %s, bad calibrators: %s" 
