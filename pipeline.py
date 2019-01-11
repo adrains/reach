@@ -96,6 +96,7 @@ from astroquery.vizier import Vizier
 str_date = time.strftime("%y-%m-%d")  
 
 # TODO: move to parameter file
+lb_pc = 150 # The size of the local bubble in parsecs
 calibrate_calibrators = False
 run_local = False
 already_calibrated = False
@@ -126,6 +127,9 @@ print("<i>Strap in</i> for bootstrapping.")
 # Targets information is loaded into a pandas dataframe, with column labels for
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
 tgt_info = rutils.load_target_information()
+
+# Calculate distances
+tgt_info["Dist"] = 1000 / tgt_info["Plx"]
 
 # -----------------------------------------------------------------------------
 # (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
@@ -180,24 +184,31 @@ a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag",
                                             "e_Hmag", "e_Kmag", "e_W1mag",  
                                             "e_W2mag", "e_W3mag", "e_W4mag"]], 
                                   filter_eff_lambda, tgt_info["A_V"])
+
+# Create a mask which has values of 1 for stars outside the local bubble, and
+# values of 0 for stars within it. This is multiplied by the calculated 
+# extinction in each band, treating it as zero for stars within the bubble and
+# as calculated for those stars outside it.
+lb_mask = (tgt_info["Dist"] > 150).astype(int)
                                  
-# Correct magnitudes for extinction
-# TODO: Only correct the magnitudes if the star is beyond the local bubble
-tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0]
-tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1]
-tgt_info["Jmag_dr"] = tgt_info["Jmag"] - a_mags[:,2]
-tgt_info["Hmag_dr"] = tgt_info["Hmag"] - a_mags[:,3]
-tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4]
-#tgt_info["W1mag_dr"] = a_mags[:,5]
-#tgt_info["W2mag_dr"] = a_mags[:,6]
-#tgt_info["W3mag_dr"] = a_mags[:,7]
-#tgt_info["W4mag_dr"] = a_mags[:,8]
+# Correct for extinction only for those stars outside the Local Bubble
+tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0] * lb_mask
+tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1] * lb_mask
+tgt_info["Jmag_dr"] = tgt_info["Jmag"] - a_mags[:,2] * lb_mask
+tgt_info["Hmag_dr"] = tgt_info["Hmag"] - a_mags[:,3] * lb_mask
+tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4] * lb_mask
+tgt_info["W1mag_dr"] = tgt_info["W1mag"] - a_mags[:,5] * lb_mask
+tgt_info["W2mag_dr"] = tgt_info["W2mag"] - a_mags[:,6] * lb_mask
+tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,7] * lb_mask
+tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,8] * lb_mask
 
 # -----------------------------------------------------------------------------
 # (4) Estimate angular diameters
 # -----------------------------------------------------------------------------
 # Estimate angular diameters using colour relations. We want to do this using 
 # as many colour combos as is feasible, as this can be a useful diagnostic
+# TODO: Is not correcting reddening for W1-3 appropriate given the laws don't
+# extend that far?
 """
 ldd_bv_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Bmag_dr"], 
                                                     tgt_info["e_BTmag"], 
