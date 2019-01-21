@@ -98,14 +98,16 @@ str_date = time.strftime("%y-%m-%d")
 # TODO: move to parameter file
 lb_pc = 150 # The size of the local bubble in parsecs
 calibrate_calibrators = False
+test_all_cals = False
 run_local = False
 already_calibrated = False
 do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
+separate_sequences = True
 do_ldd_fitting = True
 combine_previous_bootstraps = False
-n_bootstraps = 120
+n_bootstraps = 250
 pred_ldd_col = "LDD_VW3_dr"
 e_pred_ldd_col = "e_LDD_VW3_dr"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
@@ -114,6 +116,7 @@ results_path = "/home/arains/code/reach/results/" + str_date + "/"
 print("\nBeginning calibration and fitting run. Parameters set as follow:")
 print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
 print(" - run_local\t\t\t=\t%s" % run_local)
+print(" - separate_sequences\t\t=\t%s" % separate_sequences)
 print(" - already_calibrated\t\t=\t%s" % already_calibrated)
 print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
 print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
@@ -267,6 +270,13 @@ pkl_sequences.close()
 # Currently broken, don't consider
 complete_sequences.pop((102, 'delEri', 'bright'))
 
+
+
+# Currently no proxima cen or gam pav data, so pop
+sequences.pop((102, 'gamPav', 'faint'))
+sequences.pop((102, 'gamPav', 'bright'))
+sequences.pop((102, 'ProximaCen', 'bright'))
+
 # -----------------------------------------------------------------------------
 # (6) Inspect reduced data
 # -----------------------------------------------------------------------------
@@ -290,7 +300,8 @@ elif not already_calibrated:
 if calibrate_calibrators:
     print("-"*79, "\nCalibrating Calibrators\n", "-"*79)
     rdiag.calibrate_calibrators(sequences, complete_sequences, base_path, 
-                                tgt_info, n_pred_ldd, e_pred_ldd)
+                                tgt_info, n_pred_ldd, e_pred_ldd, 
+                                test_all_cals)
     
     # Finished calibrating calibrators, exit
     print("Finished calibrating calibrators")
@@ -324,7 +335,8 @@ rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
 # Collate the bootstrapping run
 bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
                                          pred_ldd_col, 
-                                         prune_errant_baselines=True)
+                                         prune_errant_baselines=True, 
+                                         separate_sequences=separate_sequences)
 
 # Save the results from this bootstrapping run                   
 pkl_bs_results = open("results/bootstrapped_results_%s_n%i.pkl" 

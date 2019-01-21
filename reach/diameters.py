@@ -236,8 +236,8 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
     successful_fits = {}
     #print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
     for sci in vis2.keys():
-        
-        sci_data = tgt_info[tgt_info["Primary"]==sci]
+        # Only take the ID part of sci - could have " (Sequence)" after it
+        sci_data = tgt_info[tgt_info["Primary"]==sci.split(" ")[0]]
         
         if not sci_data["Science"].values:
             print("%s is not science target, aborting fit" % sci)
@@ -417,7 +417,7 @@ def extract_vis2(oi_fits_file):
     return mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths
 
 
-def collate_vis2_from_file(results_path, bs_i=None):
+def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
     """Collates calibrated squared visibilities, errors, baselines, and 
     wavelengths for each science target in the specified results folder.
     
@@ -463,11 +463,14 @@ def collate_vis2_from_file(results_path, bs_i=None):
                               + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
     ith_bs_oifits.sort()
     
-    #print("\n", "-"*79, "\n", 
-    #      "\tCollating Calibrated vis2 for bootstrap %i\n" % bs_i, "-"*79)
+    if separate_sequences:
+        # We want to keep the bright and faint sequences separate for 
+        # diagnostic purposes, but still need to collate in the instance
+        # that a star as duplicate sequences
+        dates_obs = pd.read_csv("data/dates_observed.tsv", sep="\t")                     
     
     print("\nFound %i oifits file/s for bootstrap %i" % (len(ith_bs_oifits), 
-                                                       bs_i))
+                                                       bs_i+1))
     
     for oifits in ith_bs_oifits:
         # Get the target name from the file name - this is clunky, but more
@@ -476,10 +479,30 @@ def collate_vis2_from_file(results_path, bs_i=None):
         # begin bootstrapping)
         sci = oifits.split("SCI")[1].split("oidata")[0].replace("_", "")
         
-        #print("Collating %s" % oifits, end="")
+        # If keeping separate sequences, record bright/faint in "sci"
+        if separate_sequences:
+            
+            night = oifits.split("/")[-1].split("_SCI")[0]
+            
+            faint_entry = dates_obs[np.logical_and(dates_obs["Star"]==sci, 
+                                                   dates_obs["Faint"]==night)]
+            
+            bright_entry = dates_obs[np.logical_and(dates_obs["Star"]==sci, 
+                                                   dates_obs["Bright"]==night)]
+            
+            #import pdb
+            #pdb.set_trace()
+                                                   
+            if len(bright_entry) > 0 and len(faint_entry) > 0:
+                sci = sci + " (Combined)"
+            
+            elif len(bright_entry) > 0 and len(faint_entry) == 0:
+                sci = sci + " (Bright)"
+                
+            elif len(bright_entry) == 0 and len(faint_entry) > 0:
+                sci = sci + " (Faint)"
         
-        # Open the file
-
+        # Extract data from oifits file and stack as appropriate
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             extract_vis2(oifits)
 
@@ -631,7 +654,7 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
     
     
 def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
-                          prune_errant_baselines=True):
+                          prune_errant_baselines=True, separate_sequences=False):
     """Collates all bootstrapped oifits files within results_path into
     sumarising pandas dataframes. 
     
@@ -662,11 +685,16 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
         recording the results of each bootstrapping iteration as rows.
     """
     # Determine the stars that we have results on
-    oifits_files = glob.glob(results_path + "*SCI*.fits")
-    oifits_files.sort()
+    #oifits_files = glob.glob(results_path + "*SCI*.fits")
+    #oifits_files.sort()
+    mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+            collate_vis2_from_file(results_path, 0, separate_sequences)
     
-    stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
-                 for file in oifits_files])
+    #stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
+                 #for file in oifits_files])
+                 
+    stars = mjds.keys()
+    stars.sort()
                 
     # Initialise a pandas dataframe for each star. At present it's hard to
     # entirely preallocate memory, but we'll try to at least preallocate the
@@ -700,13 +728,13 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
     for bs_i in np.arange(0, n_bootstraps):
         # Collate the information
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
-            collate_vis2_from_file(results_path, bs_i)
+            collate_vis2_from_file(results_path, bs_i, separate_sequences)
           
         # Fit LDD
         print("\nFitting diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col)  
-                               
+                          
         # Populate
         for star in mjds.keys():
             bs_results[star]["MJD"][bs_i] = mjds[star]
@@ -783,12 +811,15 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
+    stars = bs_results.keys()
+    stars.sort()
+    
     # All done collating, combine bootstrapped values into mean and std
-    for star_i, star in enumerate(bs_results.keys()):
+    for star_i, star in enumerate(stars):
         # Set the common ID, and get the primary ID
         results.iloc[star_i]["STAR"] = star
         
-        pid = tgt_info[tgt_info["Primary"]==star].index.values[0]
+        pid = tgt_info[tgt_info["Primary"]==star.split(" ")[0]].index.values[0]
         
         # Stack and compute mean and standard deviations 
         results.iloc[star_i]["LDD_FIT"] = \
@@ -827,9 +858,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
 def inspect_dr_photometry(tgt_info):
     """Diagnostic function to inspect for issues with reddening/diameters. WIP. 
     """
-    print("%7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s" %
+    print("%7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s" %
           ("ID", "B_a_mag", "V_a_mag", "J_a_mag", "H_a_mag", "K_a_mag", "Flag",
-           "Dist", "ID"))
+           "Dist", "LDD (V-K)", "LDD (V-W3)", "ID"))
     
     num_flagged = 0
     
@@ -840,6 +871,8 @@ def inspect_dr_photometry(tgt_info):
         h_a_mag = row["Hmag"] - row["Hmag_dr"]
         k_a_mag = row["Kmag"] - row["Kmag_dr"]
         primary = row["Primary"]
+        vk_ldd = row["LDD_VK_dr"]
+        vw3_ldd = row["LDD_VW3_dr"]
         flag = ""
         dist = row["Dist"]
         
@@ -847,8 +880,9 @@ def inspect_dr_photometry(tgt_info):
             flag = "***"
             num_flagged += 1
         
-        print("%8s \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %s \t %10s \t %s" 
-                    % (star, b_a_mag, v_a_mag, j_a_mag, h_a_mag, k_a_mag,
-                       flag, dist, primary))
+        print(("%8s \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %7s \t"
+               "%4.2f \t %5.3f \t %5.3f \t %s") 
+                % (star, b_a_mag, v_a_mag, j_a_mag, h_a_mag, k_a_mag, flag, 
+                   dist, vk_ldd, vw3_ldd, primary))
                        
     print("\nFlagged Stars: %i/%i" % (num_flagged, len(tgt_info)))
