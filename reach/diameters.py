@@ -479,7 +479,7 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
         # begin bootstrapping)
         sci = oifits.split("SCI")[1].split("oidata")[0].replace("_", "")
         
-        # If keeping separate sequences, record bright/faint in "sci"
+        # If keeping separate sequences, record bright/faint and period in key
         if separate_sequences:
             
             night = oifits.split("/")[-1].split("_SCI")[0]
@@ -489,18 +489,15 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
             
             bright_entry = dates_obs[np.logical_and(dates_obs["Star"]==sci, 
                                                    dates_obs["Bright"]==night)]
-            
-            #import pdb
-            #pdb.set_trace()
                                                    
             if len(bright_entry) > 0 and len(faint_entry) > 0:
-                sci = sci + " (Combined)"
+                sci = sci + " (combined, %s)" % faint_entry["Period"].values[0]
             
             elif len(bright_entry) > 0 and len(faint_entry) == 0:
-                sci = sci + " (Bright)"
+                sci = sci + " (bright, %s)" % bright_entry["Period"].values[0]
                 
             elif len(bright_entry) == 0 and len(faint_entry) > 0:
-                sci = sci + " (Faint)"
+                sci = sci + " (faint, %s)" % faint_entry["Period"].values[0]
         
         # Extract data from oifits file and stack as appropriate
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
