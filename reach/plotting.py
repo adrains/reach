@@ -7,6 +7,7 @@ import reach.diameters as rdiam
 import reach.utils as rutils
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
@@ -249,7 +250,7 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
 
 def plot_bootstrapping_summary(results, bs_results, n_bins=20, 
                                plot_cal_info=True, sequences=None, 
-                               tgt_info=None):
+                               complete_sequences=None, tgt_info=None):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
     plt.close("all")
@@ -290,6 +291,11 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
     
             fig, axes = plt.subplots(1, 2)
             axes = axes.flatten()
+            
+            # Setup lower panel for residuals
+            divider = make_axes_locatable(axes[0])
+            res_ax = divider.append_axes("bottom", size="20%", pad=0)
+            axes[0].figure.add_axes(res_ax)
     
             # Plot the data points and best fit curve
             axes[0].errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", 
@@ -309,13 +315,26 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             axes[0].fill_between(x, y_pred_low, y_pred_high, alpha=0.25, 
                                  color="C2")
     
-            axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+            #axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
             axes[0].set_ylabel(r"Visibility$^2$")
             axes[0].set_title(sci_key + r" (%i vis$^2$ points)" % len(vis2))
             axes[0].legend(loc="best")
             axes[0].set_xlim([0.0,25E7])
             axes[0].set_ylim([0.0,1.0])
             axes[0].grid()
+            
+            # Plot residuals below the vis2 plot
+            axes[0].set_xticks([])
+            residuals = vis2 - rdiam.calculate_vis2(b_on_lambda, ldd_fit,
+                                                    u_lld)
+            
+            res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 
+                            label="Residuals", elinewidth=0.1, capsize=0.2, 
+                            capthick=0.1)
+            res_ax.set_xlim([0.0,25E7])
+            res_ax.hlines(0, 0, 25E7, linestyles="dotted")
+            res_ax.set_ylabel("Residuals")
+            res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
             
             # -----------------------------------------------------------------
             # Plot calibrator angular diameters and magnitudes for diagnostic
@@ -327,6 +346,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                 sequence = sci_key.split(" ")[1][1:-1]
                 
                 sci_h = tgt_info[tgt_info["Primary"]==sci]["Hmag"].values[0]
+                sci_jsdc = tgt_info[tgt_info["Primary"]==sci]["JSDC_LDD"].values[0]
                 
                 if sequence == "combined":
                     stars = set(sequences[(period, sci, "bright")][::2]
@@ -340,23 +360,45 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                 stars = rutils.get_unique_key(tgt_info, stars)
                 
                 # Print science details
-                text_x = axes[0].get_xlim()[1] * 3/4 
-                text_y = 3/4 + 0.05
+                text_x = axes[0].get_xlim()[1] * 5/8 
+                text_y = 3/4 + 0.1
                 
-                text = (r"%s, $\theta_{\rm LDD}=%0.3f$, Hmag=%0.2f" 
-                        % (sci, ldd_fit, sci_h))
+                text = (r"%s, $\theta_{\rm LDD}=%0.3f$, $\theta_{\rm JSDC}$=%0.3f, Hmag=%0.2f" 
+                        % (sci, ldd_fit, sci_jsdc, sci_h))
                 
                 axes[0].text(text_x, text_y, text, fontsize="x-small",
                              horizontalalignment="center")
                 
                 cal_ldd = []
                 cal_h = []
+                 
+                # Print ESO's quality information about the observations
+                if sequence == "bright" or sequence == "combined":
+                    # Bright
+                    text_x = axes[0].get_xlim()[1] * 5/8 
+                    text_y = 3/4 + 0.075
+                    
+                    text = "Bright Quality: %s" % complete_sequences[(period, sci, "bright")][1]
+                    
+                    axes[0].text(text_x, text_y, text, fontsize="x-small",
+                                 horizontalalignment="center")
+                                 
+                # Faint
+                if sequence == "faint" or sequence == "combined":
+                    text_x = axes[0].get_xlim()[1] * 5/8 
+                    text_y = 3/4 + 0.05
+                    
+                    text = "Faint Quality: %s" % complete_sequences[(period, sci, "faint")][1]
+                    
+                    axes[0].text(text_x, text_y, text, fontsize="x-small",
+                                 horizontalalignment="center")
+                 
                              
                 # Print calibrator details
                 for star_i, star in enumerate(stars):
                     star_info = tgt_info.loc[star]
                     
-                    text_x = axes[0].get_xlim()[1] * 3/4 
+                    text_x = axes[0].get_xlim()[1] * 5/8 
                     text_y = 3/4 - (0.025 * star_i)
                     
                     # Cross out stars we have ignored
@@ -364,9 +406,15 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                         st = u"\u0336"
                         star = st.join(star) + st
                     
-                    text = (r"%s, $\theta_{\rm LDD}=%0.3f$, Hmag=%0.2f" 
-                            % (star, star_info["LDD_VW3_dr"], 
-                               star_info["Hmag"]))
+                    ldd_diff = star_info["LDD_VW3_dr"] - star_info["JSDC_LDD"]
+                    
+                    text = (r"%s, Hmag=%0.2f $\theta_{\rm LDD}=%0.3f\pm %0.3f$, "
+                            r"$\theta_{\rm JSDC}=%0.3f\pm %0.3f$,   "
+                            r"[$\theta_{\rm diff}=%0.3f$]" 
+                            % (star, star_info["Hmag"], star_info["LDD_VW3_dr"], 
+                               star_info["e_LDD_VW3_dr"], 
+                               star_info["JSDC_LDD"], star_info["e_JSDC_LDD"],
+                               ldd_diff))
                     
                     cal_ldd.append(star_info["LDD_VW3_dr"])
                     cal_h.append(star_info["Hmag"])
