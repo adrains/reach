@@ -60,6 +60,9 @@ for obs_log in all_logs:
     # 
     ob_type = None
     
+    # Construct a list of the station used
+    station_ids = ""
+    
     # Extract the relevant information
     for row in content:
         # Night grade
@@ -92,26 +95,37 @@ for obs_log in all_logs:
             
             if obfname in obs_log:
                 ob_type = "FRINGE"
+                det_mode = row.split("\t")[6]
         
         elif row[:16] == "PIONIER_GEN_DARK":
             obfname = row.split("\t")[1]
             
             if obfname in obs_log:
                 ob_type = "DARK"
+                det_mode = row.split("\t")[6]
         
         elif row[:17] == "PIONIER_GEN_KAPPA":
             obfname = row.split("\t")[1]
             
             if obfname in obs_log:
                 ob_type = "KAPPA"
+                det_mode = row.split("\t")[6]
+        
+        # Extract the station information        
+        elif row[:7] == "STATION":
+            station_ids += row.split(" ")[-1] + "-"
+            
             
     # In addition to the text file, grab the fits file of the data itself, 
     # which has the same path bar ".fits.Z" instead of ".NL.txt"
     ob_fits = obs_log.replace("NL.txt", "fits.Z")
     
+    # Strip the final dash of the station IDs
+    station_ids = station_ids[:-1]
+    
     # Select details of observation to save
     ob_details = [container, OB, target, grade, ob_time, obs_log, run, ob_fits,
-                  ob_type]
+                  ob_type, station_ids, det_mode]
     
     # Now store the observation details in the dictionary
     # If night entry exists, append observation
