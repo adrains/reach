@@ -279,15 +279,17 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             ldd_pred = results.iloc[star_i]["LDD_PRED"]
             e_ldd_pred = results.iloc[star_i]["e_LDD_PRED"]
             u_lld = results.iloc[star_i]["u_LLD"]
-    
+            
+            c_scale = results.iloc[star_i]["C_SCALE"]
+            
             x = np.arange(1*10**6, 25*10**7, 10000)
-            y_fit = rdiam.calculate_vis2(x, ldd_fit, u_lld)
-            y_fit_low = rdiam.calculate_vis2(x, ldd_fit - e_ldd_fit, u_lld)
-            y_fit_high = rdiam.calculate_vis2(x, ldd_fit + e_ldd_fit, u_lld)    
+            y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, u_lld)
+            y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
+            y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
     
-            y_pred = rdiam.calculate_vis2(x, ldd_pred, u_lld)
-            y_pred_low = rdiam.calculate_vis2(x, ldd_pred - e_ldd_pred, u_lld)
-            y_pred_high = rdiam.calculate_vis2(x, ldd_pred + e_ldd_pred, u_lld)
+            y_pred = rdiam.calc_vis2(x, ldd_pred, 1, u_lld)
+            y_pred_low = rdiam.calc_vis2(x, ldd_pred - e_ldd_pred, 1, u_lld)
+            y_pred_high = rdiam.calc_vis2(x, ldd_pred + e_ldd_pred, 1, u_lld)
     
             fig, axes = plt.subplots(1, 2)
             axes = axes.flatten()
@@ -320,13 +322,13 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             axes[0].set_title(sci_key + r" (%i vis$^2$ points)" % len(vis2))
             axes[0].legend(loc="best")
             axes[0].set_xlim([0.0,25E7])
-            axes[0].set_ylim([0.0,1.0])
+            axes[0].set_ylim([0.0,1.1])
             axes[0].grid()
             
             # Plot residuals below the vis2 plot
             axes[0].set_xticks([])
-            residuals = vis2 - rdiam.calculate_vis2(b_on_lambda, ldd_fit,
-                                                    u_lld)
+            residuals = vis2 - rdiam.calc_vis2(b_on_lambda, ldd_fit, c_scale,
+                                                u_lld)
             
             res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 
                             label="Residuals", elinewidth=0.1, capsize=0.2, 
@@ -346,6 +348,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                 sequence = sci_key.split(" ")[1][1:-1]
                 
                 sci_h = tgt_info[tgt_info["Primary"]==sci]["Hmag"].values[0]
+                sci_e_h = tgt_info[tgt_info["Primary"]==sci]["e_Hmag"].values[0]
                 sci_jsdc = tgt_info[tgt_info["Primary"]==sci]["JSDC_LDD"].values[0]
                 
                 if sequence == "combined":
@@ -361,12 +364,19 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                 
                 # Print science details
                 text_x = axes[0].get_xlim()[1] * 5/8 
+                text_y = 3/4 + 0.125
+                text = "C = %0.2f" % c_scale
+                axes[0].text(text_x, text_y, text, fontsize="x-small",
+                             horizontalalignment="center")
+                
+                text_x = axes[0].get_xlim()[1] * 5/8 
                 text_y = 3/4 + 0.1
                 
-                text = (r"%s, $\theta_{\rm LDD}=%0.3f$, $\theta_{\rm JSDC}$=%0.3f, Hmag=%0.2f" 
-                        % (sci, ldd_fit, sci_jsdc, sci_h))
+                text = (r"%s, $\theta_{\rm LDD}=%0.3f$, "
+                        r"$\theta_{\rm JSDC}$=%0.3f, Hmag=%0.2f$\pm$ %0.2f" 
+                        % (sci, ldd_fit, sci_jsdc, sci_h, sci_e_h))
                 
-                axes[0].text(text_x, text_y, text, fontsize="x-small",
+                axes[0].text(text_x, text_y, text, fontsize="xx-small",
                              horizontalalignment="center")
                 
                 cal_ldd = []
@@ -380,7 +390,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                     
                     text = "Bright Quality: %s" % complete_sequences[(period, sci, "bright")][1]
                     
-                    axes[0].text(text_x, text_y, text, fontsize="x-small",
+                    axes[0].text(text_x, text_y, text, fontsize="xx-small",
                                  horizontalalignment="center")
                                  
                 # Faint
@@ -390,7 +400,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                     
                     text = "Faint Quality: %s" % complete_sequences[(period, sci, "faint")][1]
                     
-                    axes[0].text(text_x, text_y, text, fontsize="x-small",
+                    axes[0].text(text_x, text_y, text, fontsize="xx-small",
                                  horizontalalignment="center")
                  
                              
@@ -408,10 +418,11 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                     
                     ldd_diff = star_info["LDD_VW3_dr"] - star_info["JSDC_LDD"]
                     
-                    text = (r"%s, Hmag=%0.2f $\theta_{\rm LDD}=%0.3f\pm %0.3f$, "
+                    text = (r"%s, Hmag=%0.2f$\pm$ %0.2f, $\theta_{\rm LDD}=%0.3f\pm %0.3f$, "
                             r"$\theta_{\rm JSDC}=%0.3f\pm %0.3f$,   "
                             r"[$\theta_{\rm diff}=%0.3f$]" 
-                            % (star, star_info["Hmag"], star_info["LDD_VW3_dr"], 
+                            % (star, star_info["Hmag"], star_info["e_Hmag"],
+                               star_info["LDD_VW3_dr"], 
                                star_info["e_LDD_VW3_dr"], 
                                star_info["JSDC_LDD"], star_info["e_JSDC_LDD"],
                                ldd_diff))
@@ -419,7 +430,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                     cal_ldd.append(star_info["LDD_VW3_dr"])
                     cal_h.append(star_info["Hmag"])
                     
-                    axes[0].text(text_x, text_y, text, fontsize="x-small",
+                    axes[0].text(text_x, text_y, text, fontsize="xx-small",
                                  horizontalalignment="center")
             
                                  
@@ -453,7 +464,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             
             plt.gcf().set_size_inches(16, 9)
             pdf.savefig()
-            plt.close() 
+            plt.close()
  
     
 def plot_vis2(oi_fits_file, star_id):

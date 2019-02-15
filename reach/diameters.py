@@ -16,7 +16,9 @@ from scipy.interpolate import LinearNDInterpolator
 class UnknownOIFitsFileFormat(Exception):
     pass
 
-
+# -----------------------------------------------------------------------------
+# Predicting LDD
+# -----------------------------------------------------------------------------
 def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, 
                          colour_rel="V-W3"):
     """Calculate the limb darkened angular diameter as predicted by 
@@ -107,8 +109,10 @@ def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
                                        
     return log_ldd, log_ldd_err, ldd, ldd_err   
      
-
-def calculate_vis2(b_on_lambda, ldd, u_lld):
+# -----------------------------------------------------------------------------
+# Fitting LDD
+# -----------------------------------------------------------------------------
+def calc_vis2(b_on_lambda, ldd, c_scale, u_lld):
     """Calculates squared fringe visibility assuming a linearly limb-darkened 
     disk. As outlined in Hanbury Brown et al. 1974: 
      - http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
@@ -122,6 +126,9 @@ def calculate_vis2(b_on_lambda, ldd, u_lld):
     
     ldd: float or float array
         The limb-darkened angular diameter (mas)
+        
+    c_scale: float
+        Scaling parameter to not force the fit to be anchored at 1.
     
     u_lld: float or float array
         The wavelength dependent linear limb-darkening coefficient
@@ -140,7 +147,7 @@ def calculate_vis2(b_on_lambda, ldd, u_lld):
           ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
     
     # Square visibility and return       
-    return vis**2
+    return c_scale * vis**2
           
           
 def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
@@ -173,11 +180,11 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
         
     Returns
     -------
-    ldd_opt: float
-        Optimal value for the limb-darkened diameter (mas)
+    popt: float
+        Optimal values for limb-darkened diameter (mas) and scaling param C
         
-    e_ldd_opt: float
-        Error (one standard deviation) of ldd_opt (mas)
+    pcov: float
+        Errors (one standard deviation) oon LDD and C
     """
     # Baseline/lambda should have dimensions [B,W], where B is the number of 
     # baselines, and W is the number of wavelengths
@@ -187,32 +194,23 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
     b_on_lambda = (bl_grid / wl_grid).flatten()
     
+    # Initial C param
+    c_scale = 1
+    
     # Don't consider bad data during fitting process
     valid_i = (vis2.flatten() >= 0) & (e_vis2.flatten() > 0) & (~np.isnan(vis2.flatten()))
     
     # Fit for LDD. The lambda function means that we can fix u_lld and not have
     # to optimise for it too. Loose, but physically realistic bounds on LDD for
     # science targets (LDD cannot be zero else the fitting/formula will fail) 
-    try:
-        ldd_opt, ldd_cov = curve_fit((lambda b_on_lambda, ldd_pred: 
-                                 calculate_vis2(b_on_lambda, ldd_pred, u_lld)), 
-                                 b_on_lambda[valid_i], vis2.flatten()[valid_i], 
-                                 sigma=e_vis2.flatten()[valid_i], 
-                                 bounds=(0.1, 10))
-    except:
-        import pdb
-        pdb.set_trace()
-    # Compute standard deviation of ldd 
-    e_ldd_opt = np.sqrt(np.diag(ldd_cov))
-    
-    # Diagnostic checks on fitting perfomance. 
-    # TODO: move out of this function later
-    #print("Predicted: %f, Actual: %f" % (ldd_pred, ldd_opt[0]))
-    #rplt.plot_vis2_fit(b_on_lambda, vis2.flatten(), e_vis2.flatten(), 
-    #                  ldd_opt[0], ldd_pred, u_lld)
-     
-    # Only estimating one parameter, so no need to send back N=1 array                       
-    return ldd_opt[0], e_ldd_opt[0]
+    popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred, c_scale: 
+                            calc_vis2(b_on_lambda, ldd_pred, c_scale, 
+                                       u_lld)), 
+                            b_on_lambda[valid_i], vis2.flatten()[valid_i], 
+                            sigma=e_vis2.flatten()[valid_i], 
+                            bounds=(0.1, (10, 2)))
+
+    return popt, pcov                    
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
@@ -232,6 +230,11 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
     
     wavelengths: list
         List recording the wavelengths observed at (m)
+    
+    Returns
+    -------
+    successful_fits: list
+        List containing ldd_opt, e_ldd_opt, c_scale, e_c_scale.
     """
     successful_fits = {}
     #print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
@@ -245,13 +248,20 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
         else:
             print("\tFitting linear LDD to %s" % sci, end="")
             
-        ldd_opt, e_ldd_opt = fit_for_ldd(vis2[sci], e_vis2[sci], 
-                                         baselines[sci], wavelengths[sci], 
-                                         sci_data["u_lld"].values[0], 
-                                         sci_data[pred_ldd_col].values[0])
+        popt, pcov = fit_for_ldd(vis2[sci], e_vis2[sci], 
+                                 baselines[sci], wavelengths[sci], 
+                                 sci_data["u_lld"].values[0], 
+                                 sci_data[pred_ldd_col].values[0])
         print("...fit successful")
         
-        successful_fits[sci] = [ldd_opt, e_ldd_opt]                          
+        # Extract parameters from fit
+        ldd_opt = popt[0]
+        c_scale = popt[1]
+    
+        e_ldd_opt = np.sqrt(np.diag(pcov[0]))
+        e_c_scale = np.sqrt(np.diag(pcov[1]))
+        
+        successful_fits[sci] = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]                          
             
     return successful_fits
 
@@ -697,7 +707,8 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
     # entirely preallocate memory, but we'll try to at least preallocate the
     # rows
     cols1 = ["MJD", "TEL_PAIR", "VIS2", "FLAG", "BASELINE", 
-            "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+            "WAVELENGTH", "LDD_FIT",  "LDD_PRED", "e_LDD_PRED", "u_LLD",
+            "C_SCALE"]
             
     # Store the results for each star in a pandas dataframe, accessed by key 
     # from a dictionary
@@ -719,6 +730,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
         bs_results[star]["BASELINE"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["C_SCALE"] = np.zeros((n_bootstraps, 0)).tolist()
     
     # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
     # baseline, and wavelength information from each iteration
@@ -727,7 +739,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             collate_vis2_from_file(results_path, bs_i, separate_sequences)
           
-        # Fit LDD
+        # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col)  
@@ -742,6 +754,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
             bs_results[star]["BASELINE"][bs_i] = baselines[star]
             bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
             bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
+            bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
             
             #bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
             #bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
@@ -804,7 +817,7 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
     """    
     # Initialise
     cols = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
-            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD"]
+            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD", "C_SCALE"]
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
@@ -841,13 +854,17 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
         results.iloc[star_i]["e_LDD_PRED"] = tgt_info.loc[pid, e_pred_ldd_col]   
         results.iloc[star_i]["u_LLD"] = tgt_info.loc[pid, "u_lld"]    
         
+        results.iloc[star_i]["C_SCALE"] = \
+            np.nanmean(np.hstack(bs_results[star]["C_SCALE"]), axis=0)
+        
         # Print some simple diagnostics                
         sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]
                            / results.iloc[star_i]["LDD_FIT"]) * 100
            
-        print("%-12s\tLDD = %f +/- %f (%0.2f%%)" 
+        print("%-12s\tLDD = %f +/- %f (%0.2f%%), C=%0.2f" 
               % (star, results.iloc[star_i]["LDD_FIT"], 
-                 results.iloc[star_i]["e_LDD_FIT"], sci_percent_fit))
+                 results.iloc[star_i]["e_LDD_FIT"], sci_percent_fit, 
+                 results.iloc[star_i]["C_SCALE"]))
     
     return results
     
