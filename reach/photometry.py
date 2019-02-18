@@ -12,7 +12,36 @@ from scipy.interpolate import interp1d
 class ColourOutOfBoundsException(Exception):
     pass
 
-  
+# -----------------------------------------------------------------------------
+# Colour Conversion
+# -----------------------------------------------------------------------------
+def calc_vk_colour(VTmag, RPmag):
+    """Calculate a synthetic V-K colour given Vt and Rp
+    """
+    # Import Casagrande 1M simulated stars and their BC
+    bc_stars = pd.read_csv("data/casagrande_bc_ext.csv", header=0)
+    
+    # Compute Vt-Rp and V-K from these relations, keeping in mind that since
+    # the bolometric correction takes the form: BC_F1 = M_b - M_1, this 
+    # translates to a colour relation of BC_1 - BC_2 = M2 - M1
+    vtrp_colour = bc_stars["BC_RP"] - bc_stars["BC_Vt"]
+    vk_colour = bc_stars["BC_K"] - bc_stars["BC_V"]
+    
+    # Fit (Vt-Rp) vs (V-K) with a polynomial (third order)
+    coeff = np.polyfit(vtrp_colour, vk_colour, 3)
+    
+    # Determine equivalent V-K colour using relation
+    vk_real = np.polynomial.polynomial.polyval(VTmag-RPmag, coeff)
+    
+    return vk_real
+    
+    
+def calc_2mass_h():
+    """Use colour relations to compute H for given photometry
+    """
+    pass
+    
+
 def convert_vtbt_to_vb(BTmag, VTmag):
     """Convert Tycho BT and VT band magnitudes to Cousins-Johnson B and V band  
     using relations from Bessell 2000:
@@ -52,11 +81,11 @@ def convert_vtbt_to_vb(BTmag, VTmag):
     
     # Interpolation only works for colour range in Bessell 2000 - reject values
     # that fall outside of this
-    if not np.min(BT_minus_VT) > np.min(colour_rel[:,0]):
-       raise ColourOutOfBoundsException("Minimum (B_T-V_T) colour must be >"
+    if not np.min(BT_minus_VT) > np.min(colour_rel[:,0]): 
+        raise ColourOutOfBoundsException("Minimum (B_T-V_T) colour must be >"
                                         " %f20" % np.min(colour_rel[:,0]))
     elif not np.max(BT_minus_VT) < np.max(colour_rel[:,0]):
-       raise ColourOutOfBoundsException("Maximum (B_T-V_T) colour must be <"
+        raise ColourOutOfBoundsException("Maximum (B_T-V_T) colour must be <"
                                         " %f0" % np.max(colour_rel[:,0]))
     
     # Predict (V-VT) from (BT-VT)
@@ -73,7 +102,9 @@ def convert_vtbt_to_vb(BTmag, VTmag):
     
     return Bmag, Vmag
 
-
+# -----------------------------------------------------------------------------
+# Extinction
+# -----------------------------------------------------------------------------
 def create_spt_uv_grid(do_interpolate=True):
     """Create a grid of stellar instrinic (B-V) colours across spectral types.
     This is currently done for dwarfs using the following table, originally 
