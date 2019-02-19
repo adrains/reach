@@ -88,11 +88,6 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, colour=None,
     # error given in the paper, and does not treat errors in either magnitude
     e_ldd = ldd * diam_rel_err[colour_rel]/100
     
-    # Return zeroes rather than nans
-    # NOTE: This should be considered placeholder code only
-    ldd[np.isnan(ldd)] = 1    
-    e_ldd[np.isnan(e_ldd)] = 0.1 
-    
     return ldd, e_ldd
     
     
@@ -163,10 +158,13 @@ def predict_all_ldd(tgt_info):
         if type(ldd_rel) is str:
             ldd_pred.append(star_data[ldd_rel])
             e_ldd_pred.append(star_data["e_%s" % ldd_rel])
-            
+        
+        # For those stars without a relation (entirely bad calibrators that 
+        # will be excluded), assign placeholder diameters so the PIONIER
+        # pipeline is happy    
         else:
-            ldd_pred.append(np.nan)
-            e_ldd_pred.append(np.nan)
+            ldd_pred.append(1.0)
+            e_ldd_pred.append(0.1)
             
     tgt_info["LDD_pred"] = ldd_pred
     tgt_info["e_LDD_pred"] = e_ldd_pred
