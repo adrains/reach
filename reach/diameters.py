@@ -19,7 +19,7 @@ class UnknownOIFitsFileFormat(Exception):
 # -----------------------------------------------------------------------------
 # Predicting LDD
 # -----------------------------------------------------------------------------
-def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, 
+def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, colour=None,
                          colour_rel="V-W3"):
     """Calculate the limb darkened angular diameter as predicted by 
     colour-diameter relations from Boyajian et al. 2014:
@@ -43,13 +43,18 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     ldd: float
         The predicted limb darkened angular diameter
     """
-    num_exponents = 4
-    
     # Convert to numpy arrays
     F1_mag = np.array(F1_mag)
     F1_mag_err = np.array(F1_mag_err)
     F2_mag = np.array(F2_mag)
     F2_mag_err = np.array(F2_mag_err)
+    
+    # Determine whether we have been provided with a pre-existing colour, and
+    # if not compute it. If given a colour, we will use that instead.
+    if colour is None:
+        colour = F1_mag - F2_mag
+    
+    num_exponents = 4
     
     # Import the Boyajian relations, columns are:
     # [Colour Index, Num Points, Range (mag), a0, a0_err, a1, a1_err,
@@ -71,7 +76,6 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err,
     # Calculate diameters
     # Relationship is log_diam = Sigma(i=0) a_i * (F1_mag-F2_mag) ** i
     exponents = np.arange(0, num_exponents)
-    colour = F1_mag - F2_mag
     
     # Repeat along new direction so operation is vectorised
     colour = np.repeat(np.array(colour)[:,None], num_exponents, 1)
@@ -108,6 +112,65 @@ def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
     ldd_err = 10**(np.log(10)*log_ldd_err)
                                        
     return log_ldd, log_ldd_err, ldd, ldd_err   
+
+
+def predict_all_ldd(tgt_info):
+    """
+    
+    Given 2MASS is saturated, there are three colour relations available:
+     1 - V-W3 (where V is converted from Vt through Bessell 2000 relations)
+     2 - V-W4 (where V is converted from Vt through Bessell 2000 relations)
+     3 - V-K (where V-K is computed using Vt-Rp/V-K relation)
+     
+    This is also the order of preference for the relations, with most stars
+    having V-W3. V-W4 is only used for stars with saturated W3, and V-K for
+    those stars without ALLWISE data.
+    """
+    # V-K from Vt-Rp relation
+    ldd_vk, e_ldd_vk = predict_ldd_boyajian(tgt_info["Vmag_dr"],
+                                            tgt_info["e_VTmag"], None, None,
+                                            tgt_info["V-K_calc"], "V-K")
+    # V-W3                                              
+    ldd_vw3, e_ldd_vw3 = predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+                                              tgt_info["e_VTmag"], 
+                                              tgt_info["W3mag"], 
+                                              tgt_info["e_W3mag"], None, 
+                                              "V-W3") 
+    # V-W4                                                
+    ldd_vw4, e_ldd_vw4 = predict_ldd_boyajian(tgt_info["Vmag_dr"], 
+                                              tgt_info["e_VTmag"], 
+                                              tgt_info["W4mag"], 
+                                              tgt_info["e_W4mag"], None, 
+                                              "V-W4") 
+    
+    # Save these values
+    tgt_info["LDD_VK"] = ldd_vk
+    tgt_info["e_LDD_VK"] = e_ldd_vk
+
+    tgt_info["LDD_VW3"] = ldd_vw3
+    tgt_info["e_LDD_VW3"] = e_ldd_vw3
+    
+    tgt_info["LDD_VW4"] = ldd_vw4
+    tgt_info["e_LDD_VW4"] = e_ldd_vw4
+    
+    ldd_pred = []
+    e_ldd_pred = []
+    
+    # Save the 
+    for star, star_data in tgt_info.iterrows():
+        ldd_rel = star_data["LDD_rel"]
+        
+        if type(ldd_rel) is str:
+            ldd_pred.append(star_data[ldd_rel])
+            e_ldd_pred.append(star_data["e_%s" % ldd_rel])
+            
+        else:
+            ldd_pred.append(np.nan)
+            e_ldd_pred.append(np.nan)
+            
+    tgt_info["LDD_pred"] = ldd_pred
+    tgt_info["e_LDD_pred"] = e_ldd_pred
+        
      
 # -----------------------------------------------------------------------------
 # Fitting LDD

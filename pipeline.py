@@ -105,11 +105,10 @@ do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
 separate_sequences = True
-do_ldd_fitting = True
 combine_previous_bootstraps = False
-n_bootstraps = 250
-pred_ldd_col = "LDD_VW3_dr"
-e_pred_ldd_col = "e_LDD_VW3_dr"
+n_bootstraps = 100
+pred_ldd_col = "LDD_pred"
+e_pred_ldd_col = "e_LDD_pred"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
 results_path = "/home/arains/code/reach/results/" + str_date + "/"
 
@@ -131,8 +130,13 @@ print("<i>Strap in</i> for bootstrapping.")
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
 tgt_info = rutils.load_target_information()
 
-# Calculate distances
+# Calculate distances, first for stars with Gaia parallaxes, then for those 
+# without
 tgt_info["Dist"] = 1000 / tgt_info["Plx"]
+
+tgt_info["Dist"].where(~np.isnan(tgt_info["Dist"]), 
+                       1000/tgt_info["Plx_alt"][np.isnan(tgt_info["Dist"])],
+                       inplace=True)
 
 # -----------------------------------------------------------------------------
 # (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
@@ -205,6 +209,9 @@ tgt_info["W2mag_dr"] = tgt_info["W2mag"] - a_mags[:,6] * lb_mask
 tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,7] * lb_mask
 tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,8] * lb_mask
 
+# Calculate predicted V-K colour
+tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], tgt_info["RPmag"])
+
 # -----------------------------------------------------------------------------
 # (4) Estimate angular diameters
 # -----------------------------------------------------------------------------
@@ -217,7 +224,7 @@ ldd_bv_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Bmag_dr"],
                                                     tgt_info["e_BTmag"], 
                                                     tgt_info["Vmag_dr"], 
                                                     tgt_info["e_VTmag"], "B-V")
-"""                                            
+                                           
 ldd_vk_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
                                                     tgt_info["e_VTmag"], 
                                                     tgt_info["Kmag_dr"], 
@@ -236,6 +243,8 @@ tgt_info["e_LDD_VK_dr"] = e_ldd_vk_dr
 
 tgt_info["LDD_VW3_dr"] = ldd_vw3_dr
 tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
+""" 
+rdiam.predict_all_ldd(tgt_info)
 
 #rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", 
                                #"(V-W3)")

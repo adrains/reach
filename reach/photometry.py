@@ -102,6 +102,7 @@ def convert_vtbt_to_vb(BTmag, VTmag):
     
     return Bmag, Vmag
 
+
 # -----------------------------------------------------------------------------
 # Extinction
 # -----------------------------------------------------------------------------
@@ -198,7 +199,6 @@ def create_spt_uv_grid(do_interpolate=True):
     
     # Save and return the grid
     return grid
-    
     
     
 def calculate_selective_extinction(B_mag, V_mag, sptypes, grid):
@@ -370,3 +370,11 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
                                             r_v)
     
     return a_mags
+    
+# -----------------------------------------------------------------------------
+# 
+# -----------------------------------------------------------------------------    
+def compute_all_photometry(tgt_info):
+    """
+    """
+    pass
