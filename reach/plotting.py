@@ -416,18 +416,18 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
                         st = u"\u0336"
                         star = st.join(star) + st
                     
-                    ldd_diff = star_info["LDD_VW3_dr"] - star_info["JSDC_LDD"]
+                    ldd_diff = star_info["LDD_pred"] - star_info["JSDC_LDD"]
                     
-                    text = (r"%s, Hmag=%0.2f$\pm$ %0.2f, $\theta_{\rm LDD}=%0.3f\pm %0.3f$, "
+                    text = (r"%s, Hmag=%0.2f$\pm$ %0.2f, $\theta_{\rm LDD}=%0.3f\pm %0.3f$ (%s), "
                             r"$\theta_{\rm JSDC}=%0.3f\pm %0.3f$,   "
                             r"[$\theta_{\rm diff}=%0.3f$]" 
                             % (star, star_info["Hmag"], star_info["e_Hmag"],
-                               star_info["LDD_VW3_dr"], 
-                               star_info["e_LDD_VW3_dr"], 
+                               star_info["LDD_pred"], 
+                               star_info["e_LDD_pred"], star_info["LDD_rel"],
                                star_info["JSDC_LDD"], star_info["e_JSDC_LDD"],
                                ldd_diff))
                     
-                    cal_ldd.append(star_info["LDD_VW3_dr"])
+                    cal_ldd.append(star_info["LDD_pred"])
                     cal_h.append(star_info["Hmag"])
                     
                     axes[0].text(text_x, text_y, text, fontsize="xx-small",

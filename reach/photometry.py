@@ -28,7 +28,7 @@ def calc_vk_colour(VTmag, RPmag):
     vk_colour = bc_stars["BC_K"] - bc_stars["BC_V"]
     
     # Fit (Vt-Rp) vs (V-K) with a polynomial (third order)
-    coeff = np.polyfit(vtrp_colour, vk_colour, 3)
+    coeff = np.polynomial.polynomial.polyfit(vtrp_colour, vk_colour, 3)
     
     # Determine equivalent V-K colour using relation
     vk_real = np.polynomial.polynomial.polyval(VTmag-RPmag, coeff)
