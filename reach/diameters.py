@@ -877,8 +877,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
         computed from respective parameter distributions.
     """    
     # Initialise
-    cols = ["STAR", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
-            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD", "C_SCALE"]
+    cols = ["STAR", "HD", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
+            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD", "C_SCALE",
+            "R_STAR", "e_R_STAR"]
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
@@ -891,6 +892,8 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
         results.iloc[star_i]["STAR"] = star
         
         pid = tgt_info[tgt_info["Primary"]==star.split(" ")[0]].index.values[0]
+        
+        results.iloc[star_i]["HD"] = pid
         
         # Stack and compute mean and standard deviations 
         results.iloc[star_i]["LDD_FIT"] = \
@@ -917,6 +920,20 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
         
         results.iloc[star_i]["C_SCALE"] = \
             np.nanmean(np.hstack(bs_results[star]["C_SCALE"]), axis=0)
+        
+        # Compute the physical radii
+        pc = 3.0857*10**13 # km / pc
+        r_sun = 6.957 *10**5 # km
+        dist_km = tgt_info.loc[pid]["Dist"] * pc
+        e_dist_km = tgt_info.loc[pid]["e_Dist"] * pc
+        ldd_fit_rad = results.iloc[star_i]["LDD_FIT"] * np.pi/180/3600/1000
+        e_ldd_fit_rad = results.iloc[star_i]["e_LDD_FIT"] * np.pi/180/3600/1000
+        r_star = 0.5 * ldd_fit_rad * dist_km / r_sun
+        e_r_star = r_star * ((e_ldd_fit_rad/ldd_fit_rad)**2
+                             + (e_dist_km/dist_km)**2)**0.5
+        
+        results.iloc[star_i]["R_STAR"] = r_star
+        results.iloc[star_i]["e_R_STAR"] = e_r_star
         
         # Print some simple diagnostics                
         sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]

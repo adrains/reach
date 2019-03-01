@@ -209,3 +209,25 @@ def get_unique_key(tgt_info, id_list):
         unique_ids.append(prim_id[0])
         
     return unique_ids
+    
+    
+def compute_dist(tgt_info):
+    """Calculate distances and distance errors for both stars with Gaia and HIP
+    parallaxes
+    """
+    # Compute distance
+    tgt_info["Dist"] = 1000 / tgt_info["Plx"]
+
+    tgt_info["Dist"].where(~np.isnan(tgt_info["Dist"]), 
+                       1000/tgt_info["Plx_alt"][np.isnan(tgt_info["Dist"])],
+                       inplace=True)
+    
+    # Compute distance error
+    # e_dist = |D*-1*e_plx / plx|                   
+    tgt_info["e_Dist"] = np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
+                                / tgt_info["Plx"])
+    tgt_info["e_Dist"].where(~np.isnan(tgt_info["e_Dist"]),
+                        np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
+                               / tgt_info["Plx"]))
+    
+    

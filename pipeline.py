@@ -106,11 +106,12 @@ do_gaussian_diam_sampling = True
 test_one_seq_only = False
 separate_sequences = True
 combine_previous_bootstraps = False
-n_bootstraps = 100
+n_bootstraps = 200
 pred_ldd_col = "LDD_pred"
 e_pred_ldd_col = "e_LDD_pred"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
-results_path = "/home/arains/code/reach/results/" + str_date + "/"
+results_path = "/home/arains/code/reach/results/%s_i%i/" % (str_date, 
+                                                            n_bootstraps)
 
 print("\nBeginning calibration and fitting run. Parameters set as follow:")
 print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
@@ -219,35 +220,7 @@ tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], tgt_info["RPmag"]
 # as many colour combos as is feasible, as this can be a useful diagnostic
 # TODO: Is not correcting reddening for W1-3 appropriate given the laws don't
 # extend that far?
-"""
-ldd_bv_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Bmag_dr"], 
-                                                    tgt_info["e_BTmag"], 
-                                                    tgt_info["Vmag_dr"], 
-                                                    tgt_info["e_VTmag"], "B-V")
-                                           
-ldd_vk_dr, e_ldd_vk_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
-                                                    tgt_info["e_VTmag"], 
-                                                    tgt_info["Kmag_dr"], 
-                                                    tgt_info["e_Kmag"], "V-K")
-                                                  
-ldd_vw3_dr, e_ldd_vw3_dr = rdiam.predict_ldd_boyajian(tgt_info["Vmag_dr"], 
-                                                    tgt_info["e_VTmag"], 
-                                                    tgt_info["W3mag"], 
-                                                    tgt_info["e_W3mag"],"V-W3")                                            
-                                                     
-#tgt_info["LDD_BV_dr"] = ldd_bv_dr
-#tgt_info["e_LDD_BV_dr"] = e_ldd_bv_dr
-
-tgt_info["LDD_VK_dr"] = ldd_vk_dr
-tgt_info["e_LDD_VK_dr"] = e_ldd_vk_dr
-
-tgt_info["LDD_VW3_dr"] = ldd_vw3_dr
-tgt_info["e_LDD_VW3_dr"] = e_ldd_vw3_dr
-""" 
 rdiam.predict_all_ldd(tgt_info)
-
-#rplt.plot_diameter_comparison(ldd_vk, ldd_vw3, ldd_vk_dr, ldd_vw3_dr, "(V-K)", 
-                               #"(V-W3)")
 
 # Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
 n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps, 
