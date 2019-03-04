@@ -6,6 +6,8 @@ import csv
 import pickle
 import numpy as np
 import pandas as pd
+import reach.photometry as rphot
+import reach.diameters as rdiam
 from collections import OrderedDict
 
 # -----------------------------------------------------------------------------
@@ -230,4 +232,118 @@ def compute_dist(tgt_info):
                         np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
                                / tgt_info["Plx"]))
     
+def initialise_tgt_info():
+    """
+    """
+    # Import the base target info sans calculations
+    tgt_info = load_target_information()
+
+    # Calculate distances and distance errors
+    compute_dist(tgt_info)
+
+    # -----------------------------------------------------------------------------
+    # (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
+    # -----------------------------------------------------------------------------
+    # Convert Tycho V to Johnson system using Bessell 2000
+
+    # For simplification during testing, remove any stars that fall outside the 
+    # VT --> V conversion from Bessell 2000
+    tgt_info = tgt_info.drop(["GJ551","HD133869"])
+
+    # Convert VT and BT to V and B
+    # TODO: proper treatment of magnitude errors
+    Bmag, Vmag = rphot.convert_vtbt_to_vb(tgt_info["BTmag"], tgt_info["VTmag"])
+
+    tgt_info["Bmag"] = Bmag   
+    tgt_info["e_Bmag"] = tgt_info["e_BTmag"]
+
+    tgt_info["Vmag"] = Vmag   
+    tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
+
+    # -----------------------------------------------------------------------------
+    # (3) Correct photometry for interstellar extinction
+    # -----------------------------------------------------------------------------
+    # These are the filter effective wavelengths *not* considering the effect of 
+    # spectral type (Angstroms)
+    filter_eff_lambda = {"B":4450, "V":5510, "J":12200, "H":16300, "K":21900, 
+                         "W1":34000, "W2":46000, "W3":120000, "W4":220000}
+                     
+    filter_eff_lambda = np.array([4450., 5510., 12200., 16300., 21900., 34000., 
+                                  46000., 120000., 220000.])
+
+    # Import/create the SpT vs B-V grid
+    grid = rphot.create_spt_uv_grid()
+                     
+    # Calculate selective extinction (i.e. (B-V) colour excess)
+    tgt_info["eb_v"] = rphot.calculate_selective_extinction(tgt_info["Bmag"], 
+                                                            tgt_info["Vmag"], 
+                                                            tgt_info["SpT_simple"],
+                                                            grid)
+
+    # Calculate V band extinction
+    tgt_info["A_V"] = rphot.calculate_v_band_extinction(tgt_info["eb_v"])
+
+    # Calculate the filter effective wavelength *considering* spectral type
+    #eff_lambda = rch.calculate_effective_wavelength(tgt_info["SpT"], filter_list)
+
+    # Determine extinction
+    a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
+                                                "Kmag", "W1mag","W2mag", "W3mag", 
+                                                "W4mag"]], 
+                                      tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
+                                                "e_Hmag", "e_Kmag", "e_W1mag",  
+                                                "e_W2mag", "e_W3mag", "e_W4mag"]], 
+                                      filter_eff_lambda, tgt_info["A_V"])
+
+    # Create a mask which has values of 1 for stars outside the local bubble, and
+    # values of 0 for stars within it. This is multiplied by the calculated 
+    # extinction in each band, treating it as zero for stars within the bubble and
+    # as calculated for those stars outside it.
+    lb_mask = (tgt_info["Dist"] > 150).astype(int)
+                                 
+    # Correct for extinction only for those stars outside the Local Bubble
+    tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0] * lb_mask
+    tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1] * lb_mask
+    tgt_info["Jmag_dr"] = tgt_info["Jmag"] - a_mags[:,2] * lb_mask
+    tgt_info["Hmag_dr"] = tgt_info["Hmag"] - a_mags[:,3] * lb_mask
+    tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4] * lb_mask
+    tgt_info["W1mag_dr"] = tgt_info["W1mag"] - a_mags[:,5] * lb_mask
+    tgt_info["W2mag_dr"] = tgt_info["W2mag"] - a_mags[:,6] * lb_mask
+    tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,7] * lb_mask
+    tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,8] * lb_mask
+
+    # Calculate predicted V-K colour
+    tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], tgt_info["RPmag"])
+
+    # -----------------------------------------------------------------------------
+    # (4) Estimate angular diameters
+    # -----------------------------------------------------------------------------
+    # Estimate angular diameters using colour relations. We want to do this using 
+    # as many colour combos as is feasible, as this can be a useful diagnostic
+    # TODO: Is not correcting reddening for W1-3 appropriate given the laws don't
+    # extend that far?
+    rdiam.predict_all_ldd(tgt_info)
+
+    # Determine the linear LDD coefficents
+    tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
+                                                              tgt_info["Teff"],
+                                                              tgt_info["FeH_rel"], 
+                                                              "H")
+
+    # Don't have parameters for HD187289, assume u_lld=0.5 for now
+    tgt_info.loc["HD187289", "u_lld"] = 0.5
     
+    return tgt_info
+    
+def load_sequence_logs():
+    """
+    """
+    pkl_obslog = open("data/pionier_observing_log.pkl", "r")
+    complete_sequences = pickle.load(pkl_obslog)
+    pkl_obslog.close()
+
+    pkl_sequences = open("data/sequences.pkl", "r")
+    sequences = pickle.load(pkl_sequences)
+    pkl_sequences.close()
+    
+    return complete_sequences, sequences

@@ -257,7 +257,14 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
     with PdfPages("plots/bootstrapped_summary.pdf") as pdf:
         for star_i in np.arange(0, len(results)):
             # Get the science target name
-            sci_key = results.iloc[star_i]["STAR"]
+            sci = results.iloc[star_i]["STAR"]
+            period = results.iloc[star_i]["PERIOD"]
+            sequence = results.iloc[star_i]["SEQUENCE"]
+            
+            if "SEQUENCE" == "combined":
+                stitle = sci
+            else:
+                stitle = "%s (%s, %s)" % (sci, sequence, period)
             
             # -----------------------------------------------------------------
             # Plot vis^2 fits
@@ -319,7 +326,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
     
             #axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
             axes[0].set_ylabel(r"Visibility$^2$")
-            axes[0].set_title(sci_key + r" (%i vis$^2$ points)" % len(vis2))
+            axes[0].set_title(stitle + r" (%i vis$^2$ points)" % len(vis2))
             axes[0].legend(loc="best")
             axes[0].set_xlim([0.0,25E7])
             axes[0].set_ylim([0.0,1.1])
@@ -343,10 +350,6 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             # purposes
             # -----------------------------------------------------------------
             if plot_cal_info:
-                period = int(sci_key.split(" ")[-1][:-1])
-                sci = sci_key.split(" ")[0]
-                sequence = sci_key.split(" ")[1][1:-1]
-                
                 sci_h = tgt_info[tgt_info["Primary"]==sci]["Hmag"].values[0]
                 sci_e_h = tgt_info[tgt_info["Primary"]==sci]["e_Hmag"].values[0]
                 sci_jsdc = tgt_info[tgt_info["Primary"]==sci]["JSDC_LDD"].values[0]
@@ -447,12 +450,12 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             # -----------------------------------------------------------------
             # Plot histograms
             # -----------------------------------------------------------------
-            axes[1].hist(bs_results[sci_key]["LDD_FIT"].values.tolist(), n_bins)
+            axes[1].hist(bs_results[stitle]["LDD_FIT"].values.tolist(), n_bins)
         
             text_y = axes[1].get_ylim()[1]
         
-            axes[1].set_title(sci_key + r" (${\rm N}_{\rm bootstraps} = $%i)" 
-                             % len(bs_results[sci_key]["LDD_FIT"].values.tolist()))
+            axes[1].set_title(stitle + r" (${\rm N}_{\rm bootstraps} = $%i)" 
+                             % len(bs_results[stitle]["LDD_FIT"].values.tolist()))
             y_height = axes[1].get_ylim()[1]
             axes[1].vlines(ldd_fit, 0, y_height, linestyles="dashed")
             axes[1].vlines(ldd_fit-e_ldd_fit, 0, y_height, colors="red", 
@@ -494,3 +497,23 @@ def plot_vis2(oi_fits_file, star_id):
     plt.grid()
     #plt.gcf().set_size_inches(16, 9)
     #plt.savefig("plots/vis2_fit.pdf")
+    
+
+def plot_c_hist(results, n_bins=5):
+    """
+    """
+    faint_cs = results[results["SEQUENCE"]=="faint"]["C_SCALE"].values.tolist()
+    faint_cs.sort()
+    faint_cs = faint_cs[:-1]
+    bright_cs = results[results["SEQUENCE"]=="bright"]["C_SCALE"].values.tolist()
+    
+    plt.hist(faint_cs, bins=n_bins, label="Faint", alpha=0.60)
+    plt.hist(bright_cs, bins=n_bins, label="Bright", alpha=0.60)
+    
+    plt.text(1.08, 5, r"C$_{\rm med}$ (bright) = %0.2f" % np.median(bright_cs))
+    plt.text(1.08, 4.5, r"C$_{\rm med}$ (faint) = %0.2f" % np.median(faint_cs))
+    
+    plt.xlabel("C")
+    plt.ylabel("#")
+    plt.legend(loc="best")
+    plt.savefig("plots/c_hist.png")

@@ -5,7 +5,7 @@ from __future__ import division, print_function
 import extinction
 import numpy as np
 import pandas as pd
-import reach.plotting as rplt
+#import reach.plotting as rplt
 from scipy.interpolate import interp1d
 
 

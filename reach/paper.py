@@ -37,9 +37,9 @@ def make_table_results(results):
     for star, row in results.iterrows():
         table_row = ""
         
-        id = row["STAR"].split(" ")[0]
-        period = row["STAR"].split(" ")[-1][:-1]
-        sequence = row["STAR"].split(" ")[-2][1:-1]
+        id = row["STAR"]
+        period = row["PERIOD"]
+        sequence = row["SEQUENCE"]
         
         # Step through column by column
         table_row += "%s & " % id

@@ -460,6 +460,17 @@ def extract_vis2(oi_fits_file):
             order = np.concatenate((pairs_obs[:6].argsort(), 
                                     pairs_obs[6:].argsort() + 6))
             
+            # New solution to keep sequences separate is to simply append them
+            # to the list as they come in, which per the oifits standard are
+            # already sorted in time
+            mjds.append(mjds_obs[order])
+            pairs.append(pairs_obs[order])
+            vis2.append(vis2_obs[order])
+            e_vis2.append(e_vis2_obs[order])
+            flags.append(flags_obs[order])
+            baselines.append(baselines_obs[order])
+            
+            """
             if (len(mjds)==0 and len(pairs)==0 and len(vis2)==0 
                 and len(e_vis2)==0 and len(flags)==0 and len(baselines)==0):
                 # Arrays are empty
@@ -481,7 +492,7 @@ def extract_vis2(oi_fits_file):
                 baselines = np.hstack((baselines, baselines_obs[order]))
                 #wavelengths = np.vstack((wavelengths, 
                                          #oifits[2].data["EFF_WAVE"])
-    
+            """
         # Assume that we'll always be using same wavelength mode within a night      
         wavelengths = oifits[2].data["EFF_WAVE"]
     
@@ -550,47 +561,65 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
         # begin bootstrapping)
         sci = oifits.split("SCI")[1].split("oidata")[0].replace("_", "")
         
-        # If keeping separate sequences, record bright/faint and period in key
-        if separate_sequences:
-            
-            night = oifits.split("/")[-1].split("_SCI")[0]
-            
-            faint_entry = dates_obs[np.logical_and(dates_obs["Star"]==sci, 
-                                                   dates_obs["Faint"]==night)]
-            
-            bright_entry = dates_obs[np.logical_and(dates_obs["Star"]==sci, 
-                                                   dates_obs["Bright"]==night)]
-                                                   
-            if len(bright_entry) > 0 and len(faint_entry) > 0:
-                sci = sci + " (combined, %s)" % faint_entry["Period"].values[0]
-            
-            elif len(bright_entry) > 0 and len(faint_entry) == 0:
-                sci = sci + " (bright, %s)" % bright_entry["Period"].values[0]
-                
-            elif len(bright_entry) == 0 and len(faint_entry) > 0:
-                sci = sci + " (faint, %s)" % faint_entry["Period"].values[0]
-        
-        # Extract data from oifits file and stack as appropriate
+        # Extract data from oifits file. If multiple sequences were observed
+        # on the same night, each of the retuned lists will contain more than
+        # one list of results
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             extract_vis2(oifits)
-
-        if sci not in all_vis2.keys():
-            all_mjds[sci] = mjds
-            all_tel_pairs[sci] = pairs
-            all_vis2[sci] = vis2
-            all_e_vis2[sci] = e_vis2
-            all_flags[sci] = flags
-            all_baselines[sci] = baselines
-            all_wavelengths[sci] = wavelengths
+        
+        for seq_i in np.arange(0, len(mjds)):
+            # Initialise 
+            seq_id = sci
+        
+            # If keeping separate sequences, record bright/faint and period in key
+            if separate_sequences:
             
-        else:
-            all_mjds[sci] = np.hstack((all_mjds[sci], mjds))
-            all_tel_pairs[sci] = np.hstack((all_tel_pairs[sci], pairs))
-            all_vis2[sci] = np.vstack((all_vis2[sci], vis2))
-            all_e_vis2[sci] = np.vstack((all_e_vis2[sci], e_vis2))
-            all_flags[sci] = np.vstack((all_flags[sci], flags))
-            all_baselines[sci] = np.hstack((all_baselines[sci], baselines))
-            all_wavelengths[sci] = wavelengths # Fix if bootstrapping over this
+                night = oifits.split("/")[-1].split("_SCI")[0]
+            
+                faint_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
+                                                       dates_obs["f_night"]==night)]
+            
+                bright_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
+                                                       dates_obs["b_night"]==night)]
+                
+                # If returning both a faint and bright entry, need to define 
+                # which is which                                   
+                if len(bright_entry) > 0 and len(faint_entry) > 0:
+                    # Bright
+                    
+                    if seq_i == bright_entry["b_order"].values[0]:
+                        seq_id += " (bright, %s)" % bright_entry["period"].values[0]
+                    
+                    elif seq_i == faint_entry["f_order"].values[0]:
+                        seq_id += " (faint, %s)" % faint_entry["period"].values[0]
+                                    
+                elif len(bright_entry) > 0 and len(faint_entry) == 0:
+                    seq_id += " (bright, %s)" % bright_entry["period"].values[0]
+                
+                elif len(bright_entry) == 0 and len(faint_entry) > 0:
+                    seq_id += " (faint, %s)" % faint_entry["period"].values[0]
+        
+        # Extract data from oifits file and stack as appropriate
+        #mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+            #extract_vis2(oifits)
+
+            if seq_id not in all_vis2.keys():
+                all_mjds[seq_id] = mjds[seq_i]
+                all_tel_pairs[seq_id] = pairs[seq_i]
+                all_vis2[seq_id] = vis2[seq_i]
+                all_e_vis2[seq_id] = e_vis2[seq_i]
+                all_flags[seq_id] = flags[seq_i]
+                all_baselines[seq_id] = baselines[seq_i]
+                all_wavelengths[seq_id] = wavelengths
+            
+            else:
+                all_mjds[seq_id] = np.hstack((all_mjds[seq_id], mjds[seq_i]))
+                all_tel_pairs[seq_id] = np.hstack((all_tel_pairs[seq_id], pairs[seq_i]))
+                all_vis2[seq_id] = np.vstack((all_vis2[seq_id], vis2[seq_i]))
+                all_e_vis2[seq_id] = np.vstack((all_e_vis2[seq_id], e_vis2[seq_i]))
+                all_flags[seq_id] = np.vstack((all_flags[seq_id], flags[seq_i]))
+                all_baselines[seq_id] = np.hstack((all_baselines[seq_id], baselines[seq_i]))
+                all_wavelengths[seq_id] = wavelengths # Fix if bootstrapping over this
                                                    
     return all_mjds, all_tel_pairs, all_vis2, all_e_vis2, all_flags, \
            all_baselines, all_wavelengths
@@ -877,9 +906,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
         computed from respective parameter distributions.
     """    
     # Initialise
-    cols = ["STAR", "HD", "VIS2", "e_VIS2", "BASELINE", "WAVELENGTH", "LDD_FIT",
-            "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", "u_LLD", "C_SCALE",
-            "R_STAR", "e_R_STAR"]
+    cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
+            "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", 
+            "u_LLD", "C_SCALE", "R_STAR", "e_R_STAR"]
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
@@ -889,11 +918,20 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
     # All done collating, combine bootstrapped values into mean and std
     for star_i, star in enumerate(stars):
         # Set the common ID, and get the primary ID
-        results.iloc[star_i]["STAR"] = star
+        results.iloc[star_i]["STAR"] = star.split(" ")[0]
         
         pid = tgt_info[tgt_info["Primary"]==star.split(" ")[0]].index.values[0]
         
+        if "(" in star:
+            sequence = star.split(" ")[1][1:-1]
+            period = int(star.split(" ")[-1][:-1])
+        else:
+            sequence = "combined"
+            period = ""
+        
         results.iloc[star_i]["HD"] = pid
+        results.iloc[star_i]["PERIOD"] = period
+        results.iloc[star_i]["SEQUENCE"] = sequence
         
         # Stack and compute mean and standard deviations 
         results.iloc[star_i]["LDD_FIT"] = \
