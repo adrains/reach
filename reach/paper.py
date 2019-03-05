@@ -19,7 +19,7 @@ def make_table_results(results):
                            ("Sequence", ""),
                            (r"$\theta_{\rm LD}$", "(mas)"),
                            ("C", ""),
-                           (r"R ($R_\odot$)", ""), 
+                           (r"R", "($R_\odot$)"), 
                            (r"T$_{\rm eff}$", "(K)")])
                            
     header = []
@@ -62,6 +62,88 @@ def make_table_results(results):
     table_1 = header + table_rows + footer
     
     np.savetxt("paper/table_results.tex", table_1, fmt="%s")
+    
+    
+def make_table_fbol(tgt_info, results):
+    """
+    """
+    columns = OrderedDict([("Star", ""),
+                           ("HD", ""),
+                           (r"f$_{\rm bol}$ (MARCS)", r"(ergs s$^{-1}$ cm $^{-2}$)"),
+                           (r"$\sigma_{f_{\rm bol}} (\zeta)$", r"(\%)"),
+                           (r"f$_{\rm bol} (avg)$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
+                           #(r"$\sigma_{f_{\rm bol}}$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
+                     
+    header = []
+    table_rows = []
+    footer = []
+    
+    # Construct the header of the table
+    table_rows.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    table_rows.append("\hline")
+    table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    table_rows.append("\hline")    
+    
+    
+    bands = [r"H$_p$", r"B$_T$", r"V$_T$", r"B$_P$", r"R$_P$"]
+    
+    f_bols = ["f_bol_Hpmag", "f_bol_BTmag", "f_bol_VTmag", "f_bol_BPmag", 
+             "f_bol_RPmag"]
+    e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
+               "e_f_bol_BPmag", "e_f_bol_RPmag"]
+    
+    # Compute medians
+    e_hp_med = (tgt_info["e_f_bol_Hpmag"][tgt_info["Science"]]
+                / tgt_info["f_bol_Hpmag"][tgt_info["Science"]])
+    
+     # Populate the table for every science target
+    for star_i, star in tgt_info[tgt_info["Science"]].iterrows():
+        table_row = ""
+        
+        # Only continue if we have data on this particular star
+        if not star["in_paper"]:
+            continue
+        
+        # Step through column by column
+        table_row += "%s & " % star["Primary"]
+        table_row += "%s & " % star.name.replace("HD", "")
+        
+        if not np.isnan(star["f_bol_Hpmag"]):
+            table_row += r"H$_p$: %.3E & " % star["f_bol_Hpmag"]
+        
+            e_pc_f_bol_hp = star["e_f_bol_Hpmag"] / star["f_bol_Hpmag"]
+        
+            table_row += "%.2f & " % (e_pc_f_bol_hp * 100)
+        else:
+            table_row += r"H$_p$: %s & &" % ("-"*9)
+        
+        table_row += r"%.3E $\pm$ %0.3E \\" % (star[f_bols].median(), 0)
+        
+        table_rows.append(table_row)
+        
+        # Now have a separate row for each of the remaining filters
+        for band_i in np.arange(1, len(bands)):
+            table_row = r" & & %s: %.3E &" % (bands[band_i], star[f_bols[band_i]])
+            
+            e_pc_f_bol = star[e_f_bols[band_i]] / star[f_bols[band_i]]
+        
+            table_row += r"%.2f & \\" % (e_pc_f_bol*100)
+            
+            table_rows.append(table_row)
+    
+    
+    # Finish the table
+    table_rows.append("\hline")
+    table_rows.append("\end{tabular}")
+    
+    # Write the table
+    np.savetxt("paper/table_fbol.tex", table_rows, fmt="%s")      
+        
+        
+        
+        
+    
     
     
 

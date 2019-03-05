@@ -27,6 +27,8 @@ def sample_stellar_params(tgt_info, n_samples):
                         np.array(teffs).flatten())).T
     
     np.savetxt("data/input.sample", params, delimiter=" ", fmt=["%0.2f","%0.2f","%i"])
+    
+    return params
 
 
 def calc_teff_from_bc(tgt_info, results, n_samples):
@@ -37,7 +39,7 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
     
     # Import in the sampled bolometric corrections
     #bcs = pd.read_csv("data/bc_science.data", header=0, delim_whitespace=True)
-    bcs = np.loadtxt("data/bc_science.data", skiprows=1)[:, 1:]
+    bcs = np.loadtxt("data/bc_science.data", skiprows=1)#[:, 1:]
     
     n_science = len(tgt_info[tgt_info["Science"]])
     n_filt = bcs.shape[-1]
@@ -47,10 +49,10 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
     bcs_mean = bcs.mean(axis=1)
     bcs_std = bcs.std(axis=1)
     
-    #bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RP_mag"]
-    #e_bands = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RP_mag"]
-    bands = ["BTmag", "VTmag", "BPmag", "RPmag"]
-    e_bands = ["e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
+    bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    e_bands = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
+    #bands = ["BTmag", "VTmag", "BPmag", "RPmag"]
+    #e_bands = ["e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
     
     for band in bands:
         results["Teff_%s" % band] = np.zeros(len(results))
@@ -89,7 +91,21 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
                 
                 results.loc[res, "Teff_%s" % band] = teff
                 results.loc[res, "e_Teff_%s" % band] = e_teff
-                
+  
+def print_mean_flux_errors(tgt_info):
+    """
+    """
+    bands = ["Hp", "BT", "VT", "BP", "RP"]
+    f_bols = ["f_bol_Hpmag", "f_bol_BTmag", "f_bol_VTmag", "f_bol_BPmag", 
+             "f_bol_RPmag"]
+    e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
+               "e_f_bol_BPmag", "e_f_bol_RPmag"]       
+     
+    print("Band | % err")           
+    for f_i in np.arange(0, len(f_bols)):
+        med_e_f_bol = (tgt_info[e_f_bols[f_i]][tgt_info["Science"]]
+                       / tgt_info[f_bols[f_i]][tgt_info["Science"]]).median()
+        print("%s --- %0.2f" % (bands[f_i], med_e_f_bol*100))         
     
 
 def calc_f_bol(bc, mag):
@@ -103,7 +119,4 @@ def calc_f_bol(bc, mag):
     
     f_bol = (np.pi * L_sun / (1.296 * 10**9 * au)**2) * 10**exp
     
-    return f_bol
-    
-    
-        
+    return f_bol      

@@ -750,8 +750,9 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
     return n_pred_ldd, e_pred_ldd
     
     
-def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
-                          prune_errant_baselines=True, separate_sequences=False):
+def collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
+                          pred_ldd_col="LDD_pred", prune_errant_baselines=True, 
+                          separate_sequences=True):
     """Collates all bootstrapped oifits files within results_path into
     sumarising pandas dataframes. 
     
@@ -878,8 +879,8 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, pred_ldd_col,
     return bs_results
 
 
-def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col,
-                           e_pred_ldd_col):
+def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
+                           e_pred_ldd_col="e_LDD_pred"):
     """Summarise N boostrapping results by computing mean and standard 
     deviations for each distribution.
     
