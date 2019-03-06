@@ -13,6 +13,9 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
+n_bootstraps = 200
+results_path = "/home/arains/code/reach/results/19-02-22_i200/"
+
 # Load in files
 tgt_info = rutils.initialise_tgt_info()
 complete_sequences, sequences = rutils.load_sequence_logs()
@@ -26,7 +29,6 @@ sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
 
 # Collate bootstrapped results
-results_path = "/home/arains/code/reach/results/19-02-22_i200/"
 bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path) 
 
 # Summarise results

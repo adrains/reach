@@ -51,16 +51,21 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
     
     bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
     e_bands = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
-    #bands = ["BTmag", "VTmag", "BPmag", "RPmag"]
-    #e_bands = ["e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
+
+    f_bol_bands = ["f_bol_%s" % band for band in bands] 
+    e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
     
     for band in bands:
         results["Teff_%s" % band] = np.zeros(len(results))
         results["e_Teff_%s" % band] = np.zeros(len(results))
         tgt_info["f_bol_%s" % band] = np.zeros(len(tgt_info))
         tgt_info["e_f_bol_%s" % band] = np.zeros(len(tgt_info))
+        
+    # And the averaged fbol value
+    tgt_info["f_bol_avg"] = np.zeros(len(tgt_info))
+    tgt_info["e_f_bol_avg"] = np.zeros(len(tgt_info))
     
-    # Go through every star
+    # Calculate bolometric fluxes for each band for every star
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
         print(star)
         for band_i, (band, e_band) in enumerate(zip(bands, e_bands)):
@@ -73,24 +78,40 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
             f_bol = np.mean(f_bols)
             e_f_bol = np.std(f_bols)
             
-            tgt_info.loc[star, "f_bol_%s" % band] = f_bol
-            tgt_info.loc[star, "e_f_bol_%s" % band] = e_f_bol
+            tgt_info.loc[star, f_bol_bands[band_i]] = f_bol
+            tgt_info.loc[star, e_f_bol_bands[band_i]] = e_f_bol
+   
+   # TODO: Split the function here
+    
+    # Calculate the average bolometric flux for every star and the resulting Teff        
+    for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
+        # Now use a weighted average to work out fbol, using the reciprocal of
+        # the variance as weights
+        weights = row[e_f_bol_bands][row[e_f_bol_bands] > 0].values**(-2)
+        f_bol_avg = np.average(row[f_bol_bands][row[f_bol_bands] > 0].values, weights=weights)
+        e_f_bol_avg = (np.sum(weights)**-1)**0.5
+        
+        tgt_info.loc[star, "f_bol_avg"] = f_bol_avg
+        tgt_info.loc[star, "e_f_bol_avg"] = e_f_bol_avg
             
-            # Calculate Teff for each result for this star
-            for res, res_row in results[results["HD"]==star].iterrows():
-                # Sample LDD
-                ldds = np.random.normal(res_row["LDD_FIT"], res_row["e_LDD_FIT"], n_samples)
-                ldds = ldds * np.pi/180/3600/1000
-                
-                # Calculate Teff
-                teffs = (4*f_bols / (sigma * ldds**2))**0.25 
-                
-                # Calculate final teff and error
-                teff = np.mean(teffs)
-                e_teff = np.std(teffs)
-                
-                results.loc[res, "Teff_%s" % band] = teff
-                results.loc[res, "e_Teff_%s" % band] = e_teff
+        # Calculate Teff for each result for this star
+        for res, res_row in results[results["HD"]==star].iterrows():
+            # Sample LDD
+            ldds = np.random.normal(res_row["LDD_FIT"], res_row["e_LDD_FIT"], n_samples)
+            ldds = ldds * np.pi/180/3600/1000
+            
+            # Sample Fbol
+            f_bols = np.random.normal(f_bol_avg, e_f_bol_avg, n_samples)
+            
+            # Calculate Teff
+            teffs = (4*f_bols / (sigma * ldds**2))**0.25 
+            
+            # Calculate final teff and error
+            teff = np.mean(teffs)
+            e_teff = np.std(teffs)
+            
+            results.loc[res, "teff_avg"] = teff
+            results.loc[res, "e_teff_avg"] = e_teff
   
 def print_mean_flux_errors(tgt_info):
     """
@@ -107,6 +128,10 @@ def print_mean_flux_errors(tgt_info):
                        / tgt_info[f_bols[f_i]][tgt_info["Science"]]).median()
         print("%s --- %0.2f" % (bands[f_i], med_e_f_bol*100))         
     
+    # For the averaged Fbol
+    med_e_f_bol = (tgt_info["e_f_bol_avg"][tgt_info["Science"]]
+                       / tgt_info["f_bol_avg"][tgt_info["Science"]]).median()
+    print("\nAVG --- %0.2f" % (med_e_f_bol*100))
 
 def calc_f_bol(bc, mag):
     """

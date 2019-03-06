@@ -678,7 +678,8 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
     return u_lld
     
 
-def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col, e_pred_ldd_col,
+def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred", 
+                      e_pred_ldd_col="e_LDD_pred",
                       do_gaussian_diam_sampling=True):
     """Prepares a pandas dataframe of predicted target diameters for 
     bootstrapping over. Each row will either be sampled from a Gaussian 

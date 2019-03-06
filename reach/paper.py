@@ -49,7 +49,7 @@ def make_table_results(results):
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["LDD_FIT"], row["e_LDD_FIT"])
         table_row += "%0.3f & " % row["C_SCALE"]
         table_row += r"%0.2f $\pm$ %0.2f &" % (row["R_STAR"], row["e_R_STAR"])
-        table_row += r"%0.0f $\pm$ %0.0f " % (row["Teff_VTmag"], row["e_Teff_VTmag"])
+        table_row += r"%0.0f $\pm$ %0.0f " % (row["teff_avg"], row["e_teff_avg"])
         
         table_rows.append(table_row + r"\\")
     
@@ -118,7 +118,8 @@ def make_table_fbol(tgt_info, results):
         else:
             table_row += r"H$_p$: %s & &" % ("-"*9)
         
-        table_row += r"%.3E $\pm$ %0.3E \\" % (star[f_bols].median(), 0)
+        table_row += r"%.3E $\pm$ %0.3E \\" % (star["f_bol_avg"], 
+                                               star["e_f_bol_avg"])
         
         table_rows.append(table_row)
         
