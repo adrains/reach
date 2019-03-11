@@ -469,6 +469,85 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             pdf.savefig()
             plt.close()
  
+
+def plot_lit_diam_comp(tgt_info):
+    """
+    """
+    # Load in the literature diameters
+    lit_diam_file = "data/literature_diameters.tsv"
+    lit_diam_info = pd.read_csv(lit_diam_file, sep="\t", header=0)
+    
+    instruments = set(lit_diam_info[lit_diam_info["has_diam"]]["instrument"])
+    
+    plt.close("all")
+    fig, ax = plt.subplots()
+            
+    # Setup lower panel for residuals
+    divider = make_axes_locatable(ax)
+    res_ax = divider.append_axes("bottom", size="20%", pad=0)
+    ax.figure.add_axes(res_ax)
+    
+    # For every different instrument, plot the comparison between our results
+    # and those from the literature
+    for instrument in instruments:
+        print(instrument)
+        mask = np.logical_and(lit_diam_info["has_diam"], 
+                              lit_diam_info["instrument"]==instrument).values
+        
+        # Initialise arrays
+        calc_diams = []
+        e_calc_diams = []
+        lit_diams = []
+        e_lit_diams = []
+        
+        for index, star in lit_diam_info[mask].iterrows():
+            # Get the two LDDs to compare
+            lit_diams.append(star["theta_ldd"])
+            e_lit_diams.append(star["e_theta_ldd"])
+            calc_diams.append(tgt_info.loc[star["HD"]]["LDD_pred"])
+            e_calc_diams.append(tgt_info.loc[star["HD"]]["e_LDD_pred"])
+            
+            # Plot the name of the star
+            ax.annotate(star["Primary"], xy=(calc_diams[-1], lit_diams[-1]), 
+                        xytext=(calc_diams[-1]+0.01, lit_diams[-1]+0.01), 
+                        arrowprops=dict(facecolor="black", width=0.1, 
+                                        headwidth=0.1),
+                        fontsize="xx-small")
+                        
+        # Plot the points
+        ax.errorbar(calc_diams, lit_diams, xerr=e_calc_diams, yerr=e_lit_diams, 
+                    fmt="o", label=instrument, elinewidth=0.5, capsize=0.8, 
+                    capthick=0.5)
+            
+        # Plot residuals
+        ax.set_xticks([])
+        residuals = np.array(lit_diams) / np.array(calc_diams)
+            
+        res_ax.errorbar(calc_diams, residuals, xerr=e_calc_diams, 
+                        yerr=e_lit_diams, fmt="o", elinewidth=0.5, capsize=0.8,
+                        capthick=0.5)
+    
+    # Plot the two lines
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot(np.arange(0, 10), np.arange(0, 10), "--", color="black")
+    res_ax.hlines(1, xmin=0, xmax=10, linestyles="dashed")
+                      
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    res_ax.set_xlim(xlim)
+    
+    
+    # Setup the rest of the plot
+    ax.set_ylabel(r"$\theta_{\rm Lit}$")  
+    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
+    res_ax.set_ylabel(r"$\theta_{\rm Lit} / \theta_{\rm PIONIER}$")  
+    ax.legend(loc="best")
+    
+    plt.tight_layout()
+    plt.savefig("plots/lit_diam_comp.pdf")    
+    
+
     
 def plot_vis2(oi_fits_file, star_id):
     """
