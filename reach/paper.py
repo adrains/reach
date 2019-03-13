@@ -9,18 +9,64 @@ import numpy as np
 import reach.utils as rutils
 from collections import OrderedDict
 
-
-def make_table_results(results):
+def make_table_final_results(tgt_info):
     """
     """
     columns = OrderedDict([("Star", ""),
-                           ("HD", ""),
+                           #("HD", ""),
+                           ("u", ""),
+                           (r"$\theta_{\rm LD}$", "(mas)"),
+                           (r"R", "($R_\odot$)"), 
+                           (r"f$_{\rm bol}$", r"(ergs s$^{-1}$ cm $^{-2}$)"),
+                           (r"T$_{\rm eff}$", "(K)"),
+                           ("L", ("($L_\odot$)"))])
+                           
+    header = []
+    table_rows = []
+    footer = []
+    
+    # Construct the header of the table
+    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    header.append("\hline")
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append("\hline")
+    
+    # Populate the table for every science target
+    for star_i, row in tgt_info[tgt_info["Science"]].iterrows():
+        table_row = ""
+        
+        # Step through column by column
+        table_row += "%s & " % row["Primary"]
+        table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], 0)
+        table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
+        table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
+        table_row += r"%0.3E $\pm$ %0.3E &" % (row["f_bol_final"], row["e_f_bol_final"])
+        table_row += r"%0.0f $\pm$ %0.0f & " % (row["teff_final"], row["e_teff_final"])
+        table_row += r"%0.3f $\pm$ %0.3f " % (row["L_star_final"], row["e_L_star_final"])
+        
+        table_rows.append(table_row + r"\\")
+    
+    
+    # Finish the table
+    footer.append("\hline")
+    footer.append("\end{tabular}")
+    
+    # Write the tables
+    table_1 = header + table_rows + footer
+    
+    np.savetxt("paper/table_final_results.tex", table_1, fmt="%s")
+
+
+def make_table_seq_results(results):
+    """
+    """
+    columns = OrderedDict([("Star", ""),
+                           #("HD", ""),
                            ("Period", ""),
                            ("Sequence", ""),
                            (r"$\theta_{\rm LD}$", "(mas)"),
-                           ("C", ""),
-                           (r"R", "($R_\odot$)"), 
-                           (r"T$_{\rm eff}$", "(K)")])
+                           ("C", "")])
                            
     header = []
     table_rows = []
@@ -43,13 +89,11 @@ def make_table_results(results):
         
         # Step through column by column
         table_row += "%s & " % id
-        table_row += "%s & " % row["HD"].replace("HD", "")
+        #table_row += "%s & " % row["HD"].replace("HD", "")
         table_row += "%s & " % period
         table_row += "%s & " % sequence
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["LDD_FIT"], row["e_LDD_FIT"])
-        table_row += "%0.3f & " % row["C_SCALE"]
-        table_row += r"%0.2f $\pm$ %0.2f &" % (row["R_STAR"], row["e_R_STAR"])
-        table_row += r"%0.0f $\pm$ %0.0f " % (row["teff_avg"], row["e_teff_avg"])
+        table_row += "%0.3f " % row["C_SCALE"]
         
         table_rows.append(table_row + r"\\")
     
@@ -61,29 +105,28 @@ def make_table_results(results):
     # Write the tables
     table_1 = header + table_rows + footer
     
-    np.savetxt("paper/table_results.tex", table_1, fmt="%s")
+    np.savetxt("paper/table_sequence_results.tex", table_1, fmt="%s")
     
     
-def make_table_fbol(tgt_info, results):
+def make_table_fbol(tgt_info):
     """
     """
     columns = OrderedDict([("Star", ""),
                            ("HD", ""),
                            (r"f$_{\rm bol}$ (MARCS)", r"(ergs s$^{-1}$ cm $^{-2}$)"),
-                           (r"$\sigma_{f_{\rm bol}} (\zeta)$", r"(\%)"),
-                           (r"f$_{\rm bol} (avg)$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
-                           #(r"$\sigma_{f_{\rm bol}}$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
+                           (r"$\sigma_{f_{\rm bol}} (\zeta)$", r"(\%)")])
+                           #(r"f$_{\rm bol} (avg)$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
                      
     header = []
     table_rows = []
     footer = []
     
     # Construct the header of the table
-    table_rows.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
-    table_rows.append("\hline")
-    table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
-    table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
-    table_rows.append("\hline")    
+    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    header.append("\hline")
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append("\hline")    
     
     
     bands = [r"H$_p$", r"B$_T$", r"V$_T$", r"B$_P$", r"R$_P$"]
@@ -92,10 +135,6 @@ def make_table_fbol(tgt_info, results):
              "f_bol_RPmag"]
     e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
                "e_f_bol_BPmag", "e_f_bol_RPmag"]
-    
-    # Compute medians
-    e_hp_med = (tgt_info["e_f_bol_Hpmag"][tgt_info["Science"]]
-                / tgt_info["f_bol_Hpmag"][tgt_info["Science"]])
     
      # Populate the table for every science target
     for star_i, star in tgt_info[tgt_info["Science"]].iterrows():
@@ -114,12 +153,12 @@ def make_table_fbol(tgt_info, results):
         
             e_pc_f_bol_hp = star["e_f_bol_Hpmag"] / star["f_bol_Hpmag"]
         
-            table_row += "%.2f & " % (e_pc_f_bol_hp * 100)
+            table_row += r"%.2f \\" % (e_pc_f_bol_hp * 100)
         else:
-            table_row += r"H$_p$: %s & &" % ("-"*9)
+            table_row += r"H$_p$: %s & %s \\" % ("-"*13, "-"*5)
         
-        table_row += r"%.3E $\pm$ %0.3E \\" % (star["f_bol_avg"], 
-                                               star["e_f_bol_avg"])
+        #table_row += r"%.3E $\pm$ %0.3E \\" % (star["f_bol_final"], 
+        #                                       star["e_f_bol_final"])
         
         table_rows.append(table_row)
         
@@ -129,22 +168,22 @@ def make_table_fbol(tgt_info, results):
             
             e_pc_f_bol = star[e_f_bols[band_i]] / star[f_bols[band_i]]
         
-            table_row += r"%.2f & \\" % (e_pc_f_bol*100)
+            table_row += r"%.2f \\" % (e_pc_f_bol*100)
             
             table_rows.append(table_row)
     
     
     # Finish the table
-    table_rows.append("\hline")
-    table_rows.append("\end{tabular}")
+    footer.append("\hline")
+    footer.append("\end{tabular}")
+    
+    # Write the tables
+    table_1 = header + table_rows[:60] + footer
+    table_2 = header + table_rows[60:] + footer
     
     # Write the table
-    np.savetxt("paper/table_fbol.tex", table_rows, fmt="%s")      
-        
-        
-        
-        
-    
+    np.savetxt("paper/table_fbol_1.tex", table_1, fmt="%s")      
+    np.savetxt("paper/table_fbol_2.tex", table_2, fmt="%s")     
     
     
 

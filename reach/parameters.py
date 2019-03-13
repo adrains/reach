@@ -4,7 +4,10 @@ from __future__ import division, print_function
 import numpy as np
 
 def sample_stellar_params(tgt_info, n_samples):
-    """
+    """Sample stellar parameters for use with the bolometric correction code
+    from Casagrande & VandenBerg (2014, 2018a, 2018b):
+    
+    https://github.com/casaluca/bolometric-corrections
     """
     loggs = []
     fehs = []
@@ -20,50 +23,66 @@ def sample_stellar_params(tgt_info, n_samples):
     
     for star, row in tgt_info[tgt_info["Science"]].iterrows():
         loggs.append(np.random.normal(row["logg"], row["e_logg"], n_samples))
-        fehs.append(np.random.normal(row["FeH_rel"], row["e_FeH_rel"], n_samples))
+        fehs.append(np.random.normal(row["FeH_rel"], row["e_FeH_rel"], 
+                                     n_samples))
         teffs.append(np.random.normal(row["Teff"], row["e_teff"], n_samples))
         
     params = np.vstack((np.array(loggs).flatten(), np.array(fehs).flatten(), 
                         np.array(teffs).flatten())).T
     
-    np.savetxt("data/input.sample", params, delimiter=" ", fmt=["%0.2f","%0.2f","%i"])
+    np.savetxt("data/input.sample", params, delimiter=" ", 
+               fmt=["%0.2f","%0.2f","%i"])
     
     return params
 
 
-def calc_teff_from_bc(tgt_info, results, n_samples):
+def combine_seq_ldd(tgt_info, results):
+    """Combine independent measures of LDD from multiple different sequences to
+    a single measurement of LDD +/- e_LDD
     """
-    """
-    # Stefan-Boltzmann constant
-    sigma = 5.6704 * 10**-5 #erg cm^-2 s^-1 K^-4
+    stars = set(results["HD"])
     
+    tgt_info["ldd_final"] = np.zeros(len(tgt_info))
+    tgt_info["e_ldd_final"] = np.zeros(len(tgt_info))
+    
+    # For every star, do a weighted average of the angular diameters, with 
+    # weights equal to the inverse variance. 
+    for star_i, star in enumerate(stars):
+        weights = results[results["HD"]==star]["e_LDD_FIT"].values**(-2)
+        ldd_avg = np.average(results[results["HD"]==star]["LDD_FIT"], 
+                             weights=weights)
+        e_ldd_avg = (np.sum(weights)**-1)**0.5
+        
+        # Save the final values
+        tgt_info.loc[star, "ldd_final"] = ldd_avg
+        tgt_info.loc[star, "e_ldd_final"] = e_ldd_avg
+        
+
+def calc_all_f_bol(tgt_info, n_samples):
+    """f_bol in ergs s^-1 cm^-2
+    """
     # Import in the sampled bolometric corrections
-    #bcs = pd.read_csv("data/bc_science.data", header=0, delim_whitespace=True)
-    bcs = np.loadtxt("data/bc_science.data", skiprows=1)#[:, 1:]
+    bcs = np.loadtxt("data/bc_science.data", skiprows=1)
     
+    # Reshape the n_samples bolometric corrections per star
     n_science = len(tgt_info[tgt_info["Science"]])
     n_filt = bcs.shape[-1]
     
     bcs = np.reshape(bcs, (n_science, n_samples, n_filt))
     
-    bcs_mean = bcs.mean(axis=1)
-    bcs_std = bcs.std(axis=1)
-    
+    # Define bands to reference, construct new headers
     bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
-    e_bands = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
-
+    e_bands = ["e_%s" % band for band in bands] 
     f_bol_bands = ["f_bol_%s" % band for band in bands] 
     e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
     
     for band in bands:
-        results["Teff_%s" % band] = np.zeros(len(results))
-        results["e_Teff_%s" % band] = np.zeros(len(results))
         tgt_info["f_bol_%s" % band] = np.zeros(len(tgt_info))
         tgt_info["e_f_bol_%s" % band] = np.zeros(len(tgt_info))
         
     # And the averaged fbol value
-    tgt_info["f_bol_avg"] = np.zeros(len(tgt_info))
-    tgt_info["e_f_bol_avg"] = np.zeros(len(tgt_info))
+    tgt_info["f_bol_final"] = np.zeros(len(tgt_info))
+    tgt_info["e_f_bol_final"] = np.zeros(len(tgt_info))
     
     # Calculate bolometric fluxes for each band for every star
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
@@ -80,38 +99,114 @@ def calc_teff_from_bc(tgt_info, results, n_samples):
             
             tgt_info.loc[star, f_bol_bands[band_i]] = f_bol
             tgt_info.loc[star, e_f_bol_bands[band_i]] = e_f_bol
-   
-   # TODO: Split the function here
-    
-    # Calculate the average bolometric flux for every star and the resulting Teff        
+            
+    # Now use a weighted average to work out fbol, using the reciprocal of
+    # the variance as weights
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
-        # Now use a weighted average to work out fbol, using the reciprocal of
-        # the variance as weights
         weights = row[e_f_bol_bands][row[e_f_bol_bands] > 0].values**(-2)
-        f_bol_avg = np.average(row[f_bol_bands][row[f_bol_bands] > 0].values, weights=weights)
+        f_bol_avg = np.average(row[f_bol_bands][row[f_bol_bands] > 0].values, 
+                               weights=weights)
         e_f_bol_avg = (np.sum(weights)**-1)**0.5
         
-        tgt_info.loc[star, "f_bol_avg"] = f_bol_avg
-        tgt_info.loc[star, "e_f_bol_avg"] = e_f_bol_avg
-            
-        # Calculate Teff for each result for this star
-        for res, res_row in results[results["HD"]==star].iterrows():
-            # Sample LDD
-            ldds = np.random.normal(res_row["LDD_FIT"], res_row["e_LDD_FIT"], n_samples)
-            ldds = ldds * np.pi/180/3600/1000
-            
-            # Sample Fbol
-            f_bols = np.random.normal(f_bol_avg, e_f_bol_avg, n_samples)
-            
-            # Calculate Teff
-            teffs = (4*f_bols / (sigma * ldds**2))**0.25 
-            
-            # Calculate final teff and error
-            teff = np.mean(teffs)
-            e_teff = np.std(teffs)
-            
-            results.loc[res, "teff_avg"] = teff
-            results.loc[res, "e_teff_avg"] = e_teff
+        tgt_info.loc[star, "f_bol_final"] = f_bol_avg
+        tgt_info.loc[star, "e_f_bol_final"] = e_f_bol_avg
+        
+
+def calc_all_r_star(tgt_info):
+    """
+    """
+    # Constants
+    pc = 3.0857*10**13 # km / pc
+    r_sun = 6.957 *10**5 # km
+    
+    # Compute the physical radii
+    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
+                              tgt_info["ldd_final"] > 0)].iterrows():
+        # Convert to km and radians
+        dist_km = row["Dist"] * pc
+        e_dist_km = row["e_Dist"] * pc
+        ldd_rad = row["ldd_final"] * np.pi/180/3600/1000
+        e_ldd_rad = row["e_ldd_final"] * np.pi/180/3600/1000
+        
+        # Calculate the stellar radii
+        r_star = 0.5 * ldd_rad * dist_km / r_sun
+        e_r_star = r_star * ((e_ldd_rad/ldd_rad)**2
+                             + (e_dist_km/dist_km)**2)**0.5
+    
+        tgt_info.loc[star, "r_star_final"] = r_star
+        tgt_info.loc[star, "e_r_star_final"] = e_r_star        
+    
+    
+def calc_all_teff(tgt_info, n_samples):
+    """Calculate the effective temperature for all stars
+    """ 
+    # Stefan-Boltzmann constant
+    sigma = 5.6704 * 10**-5 #erg cm^-2 s^-1 K^-4
+    
+    # Define bands to reference, construct new headers
+    bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    
+    for band in bands:
+        tgt_info["teff_%s" % band] = np.zeros(len(tgt_info))
+        tgt_info["e_teff_%s" % band] = np.zeros(len(tgt_info))
+    
+    # And the averaged fbol value
+    tgt_info["teff_final"] = np.zeros(len(tgt_info))
+    tgt_info["e_teff_final"] = np.zeros(len(tgt_info))
+    
+    # Calculate the Teff for every star using an MC sampling approach         
+    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
+                              tgt_info["ldd_final"] > 0)].iterrows():
+        # Sample the diameters
+        ldds = np.random.normal(row["ldd_final"], row["e_ldd_final"], n_samples)
+        ldds = ldds * np.pi/180/3600/1000
+        
+        # Sample fbol
+        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], n_samples)
+        
+        # Calculate Teff
+        teffs = (4*f_bols / (sigma * ldds**2))**0.25 
+        
+        # Calculate final teff and error
+        teff = np.mean(teffs)
+        e_teff = np.std(teffs)
+        
+        # Store final value
+        tgt_info.loc[star, "teff_final"] = teff
+        tgt_info.loc[star, "e_teff_final"] = e_teff
+
+
+def calc_all_L_bol(tgt_info, n_samples):
+    """
+    """
+    # Constants
+    L_sun = 3.839 * 10**33 # erg s^-1
+    pc = 3.0857*10**18 # cm / pc
+    
+    # Initialise L_star column
+    tgt_info["L_star_final"] = np.zeros(len(tgt_info))
+    tgt_info["e_L_star_final"] = np.zeros(len(tgt_info))
+    
+    # Calculate the Teff for every star using an MC sampling approach         
+    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
+                              tgt_info["ldd_final"] > 0)].iterrows():
+        # Sample fbol
+        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], n_samples)
+        
+        # Sample distances
+        dists = np.random.normal(row["Dist"], row["e_Dist"], n_samples) * pc
+        
+        # Calculate luminosities
+        L_stars = 4 * np.pi * f_bols * dists**2
+        
+        # Calculate final L_star (in solar units) and error
+        L_star = np.mean(L_stars) / L_sun
+        e_L_star = np.std(L_stars) / L_sun
+        
+        # Store final value
+        tgt_info.loc[star, "L_star_final"] = L_star
+        tgt_info.loc[star, "e_L_star_final"] = e_L_star
+        
   
 def print_mean_flux_errors(tgt_info):
     """
@@ -145,3 +240,14 @@ def calc_f_bol(bc, mag):
     f_bol = (np.pi * L_sun / (1.296 * 10**9 * au)**2) * 10**exp
     
     return f_bol      
+    
+
+def calc_L_star(tgt_info):
+    """
+    """
+    L_sun = 3.839 * 10**33 # erg s^-1
+    au = 1.495978707*10**13 # cm
+    M_bol_sun = 4.75
+    
+    tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
+    

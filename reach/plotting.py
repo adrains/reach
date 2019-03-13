@@ -468,10 +468,147 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             plt.gcf().set_size_inches(16, 9)
             pdf.savefig()
             plt.close()
+
+
+
+
+
+
+def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
+    """Plot side by side vis^2 points and fit, with histogram of LDD dist.
+    """
+    plt.close("all")
+    with PdfPages("paper/seq_vis2_plots.pdf") as pdf:
+        # Figure out how many sets of plots are needed
+        num_sets = int(np.ceil(len(bs_results) / n_rows / n_cols))
+        
+        # For every set, save a page
+        for set_i in np.arange(0, num_sets):
+        
+            # Setup the axes
+            fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True)
+            axes = axes.flatten()
+    
+            for star_i in np.arange(set_i*n_rows*n_cols, (set_i+1)*n_rows*n_cols):
+                # Subplot index < n_rows
+                plt_i = star_i % (n_rows * n_cols)
+               
+                # Might not be able to finish
+                if star_i >= len(results):
+                    axes[plt_i].axis("off")
+                    continue
+            
+                # Get the science target name
+                sci = results.iloc[star_i]["STAR"]
+                period = results.iloc[star_i]["PERIOD"]
+                sequence = results.iloc[star_i]["SEQUENCE"]
+            
+                stitle = "%s (%s, %s)" % (sci, sequence, period)
+            
+                print("%i, %i, %s %s %s" % (set_i, plt_i, sci, period, sequence))
+            
+                # -----------------------------------------------------------------
+                # Plot vis^2 fits
+                # -----------------------------------------------------------------
+                n_bl = len(results.iloc[star_i]["BASELINE"])
+                n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+                bl_grid = np.tile(results.iloc[star_i]["BASELINE"], 
+                                  n_wl).reshape([n_wl, n_bl]).T
+                wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], 
+                                  n_bl).reshape([n_bl, n_wl])
+            
+                b_on_lambda = (bl_grid / wl_grid).flatten()
+            
+                vis2 = results.iloc[star_i]["VIS2"].flatten()
+                e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
+                ldd_fit = results.iloc[star_i]["LDD_FIT"]
+                e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+            
+                u_lld = results.iloc[star_i]["u_LLD"]
+            
+                c_scale = results.iloc[star_i]["C_SCALE"]
+            
+                x = np.arange(1*10**6, 25*10**7, 10000)
+                y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, u_lld)
+                y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
+                y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
+            
+                # Setup lower panel for residuals
+                divider = make_axes_locatable(axes[plt_i])
+                res_ax = divider.append_axes("bottom", size="20%", pad=0)
+                axes[plt_i].figure.add_axes(res_ax, sharex=axes[plt_i])
+    
+                # Plot the data points and best fit curve
+                axes[plt_i].errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", 
+                                label="Data", elinewidth=0.1, capsize=0.2, 
+                                capthick=0.1, markersize=0.5)
+    
+                axes[plt_i].plot(x, y_fit, "--", linewidth=0.25,
+                         label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
+                               % (ldd_fit, e_ldd_fit, e_ldd_fit/ldd_fit*100))
+                #axes[plt_i].fill_between(x, y_fit_low, y_fit_high, alpha=0.25,
+                                     #color="C1")
+                
+                # Annotate the sequence name
+                xx = (axes[plt_i].get_xlim()[1] - axes[plt_i].get_xlim()[0]) * 0.05
+                yy = (axes[plt_i].get_ylim()[1] - axes[plt_i].get_ylim()[0]) * 0.05
+                axes[plt_i].text(xx, yy, stitle, fontsize="xx-small")
+                
+                # Set up ticks
+                
+                
+                axes[plt_i].set_xlim([0.0,10E7])
+                axes[plt_i].set_ylim([0.0,1.1])
+                
+                axes[plt_i].set_xticklabels([])
+                #axes[plt_i].set_yticklabels([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.1])
+                #ax.xaxis.set_ticks(np.arange(start, end, stepsize))
+                
+                #axes[plt_i].grid()
+            
+                # Plot residuals below the vis2 plot
+                residuals = vis2 - rdiam.calc_vis2(b_on_lambda, ldd_fit, c_scale,
+                                                    u_lld)
+            
+                res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 
+                                label="Residuals", elinewidth=0.1, capsize=0.2, 
+                                capthick=0.1, markersize=0.5)
+                res_ax.set_xlim([0.0,10E7])
+                res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
+                #res_ax.set_ylabel("Residuals")
+                #res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+                
+                plt.setp(axes[plt_i].get_xticklabels(), fontsize="xx-small")
+                plt.setp(axes[plt_i].get_yticklabels(), fontsize="xx-small")
+                plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
+                plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
+                res_ax.xaxis.offsetText.set_fontsize("xx-small")
+                res_ax.yaxis.offsetText.set_fontsize("xx-small")
+                
+                
+                # Only show res_ax x labels on the bottom row
+                if not (plt_i >= (n_rows*n_cols - n_cols)):
+                    res_ax.set_xticklabels([])
+                
+                # Only show res_ax y labels if on left
+                if not (plt_i % n_cols == 0):
+                    res_ax.set_yticklabels([])
+            # -----------------------------------------------------------------
+            # Finalise
+            # -----------------------------------------------------------------
+            fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
+            fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
+            
+            plt.gcf().set_size_inches(9, 8)
+            plt.tight_layout(pad=1.0)
+            pdf.savefig()
+            plt.close()
+
+
  
 
 def plot_lit_diam_comp(tgt_info):
-    """
+    """Plot for paper comparing measured LDD vs any literature values
     """
     # Load in the literature diameters
     lit_diam_file = "data/literature_diameters.tsv"
@@ -504,8 +641,8 @@ def plot_lit_diam_comp(tgt_info):
             # Get the two LDDs to compare
             lit_diams.append(star["theta_ldd"])
             e_lit_diams.append(star["e_theta_ldd"])
-            calc_diams.append(tgt_info.loc[star["HD"]]["LDD_pred"])
-            e_calc_diams.append(tgt_info.loc[star["HD"]]["e_LDD_pred"])
+            calc_diams.append(tgt_info.loc[star["HD"]]["ldd_final"])
+            e_calc_diams.append(tgt_info.loc[star["HD"]]["e_ldd_final"])
             
             # Plot the name of the star
             ax.annotate(star["Primary"], xy=(calc_diams[-1], lit_diams[-1]), 

@@ -910,7 +910,7 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     # Initialise
     cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
             "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", 
-            "u_LLD", "C_SCALE", "R_STAR", "e_R_STAR"]
+            "u_LLD", "C_SCALE"]
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
@@ -960,20 +960,6 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
         
         results.iloc[star_i]["C_SCALE"] = \
             np.nanmean(np.hstack(bs_results[star]["C_SCALE"]), axis=0)
-        
-        # Compute the physical radii
-        pc = 3.0857*10**13 # km / pc
-        r_sun = 6.957 *10**5 # km
-        dist_km = tgt_info.loc[pid]["Dist"] * pc
-        e_dist_km = tgt_info.loc[pid]["e_Dist"] * pc
-        ldd_fit_rad = results.iloc[star_i]["LDD_FIT"] * np.pi/180/3600/1000
-        e_ldd_fit_rad = results.iloc[star_i]["e_LDD_FIT"] * np.pi/180/3600/1000
-        r_star = 0.5 * ldd_fit_rad * dist_km / r_sun
-        e_r_star = r_star * ((e_ldd_fit_rad/ldd_fit_rad)**2
-                             + (e_dist_km/dist_km)**2)**0.5
-        
-        results.iloc[star_i]["R_STAR"] = r_star
-        results.iloc[star_i]["e_R_STAR"] = e_r_star
         
         # Print some simple diagnostics                
         sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]
