@@ -135,6 +135,19 @@ tgt_info = rutils.initialise_tgt_info()
 n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps, 
                                                  pred_ldd_col, e_pred_ldd_col,
                                                  do_gaussian_diam_sampling)
+                                                 
+# Sample stellar parameters
+n_logg, n_teff, n_feh = rparam.sample_stellar_params_pd(tgt_info, n_bootstraps)
+
+# Use sampled stellar parameters to obtain limb darkening coefficients
+n_u_lld = rdiam.get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, "H")
+
+# Save these distributions
+n_pred_ldd.to_csv(results_path + "n_pred_ldd.csv", index=False) 
+n_logg.to_csv(results_path + "n_logg.csv", index=False) 
+n_teff.to_csv(results_path + "n_teff.csv", index=False) 
+n_feh.to_csv(results_path + "n_feh.csv", index=False) 
+n_u_lld.to_csv(results_path + "n_u_lld.csv", index=False) 
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
@@ -208,7 +221,7 @@ rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
 # -----------------------------------------------------------------------------
 # Collate the bootstrapping run
 bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
-                                         pred_ldd_col, 
+                                         n_u_lld, pred_ldd_col,
                                          prune_errant_baselines=True, 
                                          separate_sequences=separate_sequences)
 

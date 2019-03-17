@@ -38,7 +38,7 @@ def make_table_final_results(tgt_info):
         
         # Step through column by column
         table_row += "%s & " % row["Primary"]
-        table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], 0)
+        table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
         table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
         table_row += r"%0.3E $\pm$ %0.3E &" % (row["f_bol_final"], row["e_f_bol_final"])

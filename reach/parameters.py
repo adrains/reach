@@ -2,6 +2,7 @@
 """
 from __future__ import division, print_function
 import numpy as np
+import pandas as pd
 
 def sample_stellar_params(tgt_info, n_samples):
     """Sample stellar parameters for use with the bolometric correction code
@@ -34,6 +35,41 @@ def sample_stellar_params(tgt_info, n_samples):
                fmt=["%0.2f","%0.2f","%i"])
     
     return params
+    
+    
+def sample_stellar_params_pd(tgt_info, n_bootstraps, 
+                             assign_default_uncertainties=True):
+    """Sample stellar parameters for use when calculating the limb-darkening
+    coefficient.
+    """
+    # Make new dataframes for each stellar parameter
+    ids = tgt_info[tgt_info["Science"]].index.values
+    
+    n_logg = pd.DataFrame(np.zeros([n_bootstraps, len(ids)]), columns=ids)
+    n_teff = pd.DataFrame(np.zeros([n_bootstraps, len(ids)]), columns=ids)
+    n_feh = pd.DataFrame(np.zeros([n_bootstraps, len(ids)]), columns=ids)
+    
+    if assign_default_uncertainties:
+        tgt_info[np.logical_and(np.isnan(tgt_info["e_logg"]), 
+                                         tgt_info["Science"])]["e_logg"] = 0.2
+        tgt_info[np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
+                                      tgt_info["Science"])]["e_FeH_rel"] = 0.1
+        tgt_info[np.logical_and(np.isnan(tgt_info["e_teff"]), 
+                                      tgt_info["Science"])]["e_teff"] = 100        
+    
+    
+    for id in ids:
+        n_logg[id] = np.random.normal(tgt_info.loc[id, "logg"],
+                                      tgt_info.loc[id, "e_logg"],
+                                      n_bootstraps)   
+        n_teff[id] = np.random.normal(tgt_info.loc[id, "Teff"],
+                                      tgt_info.loc[id, "e_teff"],
+                                      n_bootstraps) 
+        n_feh[id] = np.random.normal(tgt_info.loc[id, "FeH_rel"],
+                                      tgt_info.loc[id, "e_FeH_rel"],
+                                      n_bootstraps)                                             
+    return n_logg, n_teff, n_feh 
+    
 
 
 def combine_seq_ldd(tgt_info, results):

@@ -325,13 +325,13 @@ def initialise_tgt_info():
     rdiam.predict_all_ldd(tgt_info)
 
     # Determine the linear LDD coefficents
-    tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
-                                                              tgt_info["Teff"],
-                                                              tgt_info["FeH_rel"], 
-                                                              "H")
+    #tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
+    #                                                          tgt_info["Teff"],
+    #                                                          tgt_info["FeH_rel"], 
+    #                                                          "H")
 
     # Don't have parameters for HD187289, assume u_lld=0.5 for now
-    tgt_info.loc["HD187289", "u_lld"] = 0.5
+    #tgt_info.loc["HD187289", "u_lld"] = 0.5
     
     return tgt_info
     

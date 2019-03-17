@@ -274,7 +274,8 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     return popt, pcov                    
 
 
-def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
+def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
+                u_lld):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -302,16 +303,17 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col):
     for sci in vis2.keys():
         # Only take the ID part of sci - could have " (Sequence)" after it
         sci_data = tgt_info[tgt_info["Primary"]==sci.split(" ")[0]]
+        id = sci_data.index.values[0]
         
         if not sci_data["Science"].values:
             print("%s is not science target, aborting fit" % sci)
             continue
         else:
             print("\tFitting linear LDD to %s" % sci, end="")
-            
+        
         popt, pcov = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                  baselines[sci], wavelengths[sci], 
-                                 sci_data["u_lld"].values[0], 
+                                 u_lld[id], 
                                  sci_data[pred_ldd_col].values[0])
         print("...fit successful")
         
@@ -625,7 +627,7 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
            all_baselines, all_wavelengths
     
     
-def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
+def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
     """Function to interpolate the linear-limb darkening coefficients given 
     values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
     photometric filter. The interpolated grid is from Claret and Bloemen 2011:
@@ -671,11 +673,19 @@ def get_linear_limb_darkening_coeff(logg, teff, feh, filt="H", xi=2.0):
     # Interpolate along logg and Teff for all entries for filter
     calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
     
+    # Compute u_lld for every star
+    ids = n_teff.columns.values
+    
+    n_params = np.zeros([len(n_teff), len(ids)])
+    
+    n_u_lld = pd.DataFrame(n_params, columns=ids)
+    
     # Determine value for u given logg and teff
-    u_lld = calc_u(logg, teff, feh)
+    for id in ids:
+        n_u_lld[id] = calc_u(n_logg[id], n_teff[id], n_feh[id])
     
     # Return the results    
-    return u_lld
+    return n_u_lld
     
 
 def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred", 
@@ -751,8 +761,9 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
     return n_pred_ldd, e_pred_ldd
     
     
-def collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
-                          pred_ldd_col="LDD_pred", prune_errant_baselines=True, 
+def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
+                          pred_ldd_col="LDD_pred", 
+                          prune_errant_baselines=True, 
                           separate_sequences=True):
     """Collates all bootstrapped oifits files within results_path into
     sumarising pandas dataframes. 
@@ -834,7 +845,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path,
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
-                               pred_ldd_col)  
+                               pred_ldd_col, n_u_lld.iloc[bs_i])  
                           
         # Populate
         for star in mjds.keys():
