@@ -250,7 +250,8 @@ def plot_ldd_hists(n_ldd_fit, n_bins=10):
 
 def plot_bootstrapping_summary(results, bs_results, n_bins=20, 
                                plot_cal_info=True, sequences=None, 
-                               complete_sequences=None, tgt_info=None):
+                               complete_sequences=None, tgt_info=None, 
+                               e_wl_frac=0.03):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
     plt.close("all")
@@ -290,13 +291,13 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             c_scale = results.iloc[star_i]["C_SCALE"]
             
             x = np.arange(1*10**6, 25*10**7, 10000)
-            y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, u_lld)
-            y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
-            y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
+            y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
+            y_fit_low = rdiam.calc_vis2_ls(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
+            y_fit_high = rdiam.calc_vis2_ls(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
     
-            y_pred = rdiam.calc_vis2(x, ldd_pred, 1, u_lld)
-            y_pred_low = rdiam.calc_vis2(x, ldd_pred - e_ldd_pred, 1, u_lld)
-            y_pred_high = rdiam.calc_vis2(x, ldd_pred + e_ldd_pred, 1, u_lld)
+            y_pred = rdiam.calc_vis2_ls(x, ldd_pred, 1, u_lld)
+            y_pred_low = rdiam.calc_vis2_ls(x, ldd_pred - e_ldd_pred, 1, u_lld)
+            y_pred_high = rdiam.calc_vis2_ls(x, ldd_pred + e_ldd_pred, 1, u_lld)
     
             fig, axes = plt.subplots(1, 2)
             axes = axes.flatten()
@@ -307,22 +308,23 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             axes[0].figure.add_axes(res_ax)
     
             # Plot the data points and best fit curve
-            axes[0].errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", 
+            axes[0].errorbar(b_on_lambda, vis2, xerr=b_on_lambda*e_wl_frac,
+                            yerr=e_vis2, fmt=".", 
                             label="Data", elinewidth=0.1, capsize=0.2, 
                             capthick=0.1)
     
             axes[0].plot(x, y_fit, "--", 
                      label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
                            % (ldd_fit, e_ldd_fit, e_ldd_fit/ldd_fit*100))
-            axes[0].fill_between(x, y_fit_low, y_fit_high, alpha=0.25,
-                                 color="C1")
+            #axes[0].fill_between(x, y_fit_low, y_fit_high, alpha=0.25,
+                                 #color="C1")
     
             # Plot the predicted diameter with error
             label=(r"Predicted ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
                    % (ldd_pred, e_ldd_pred, e_ldd_pred/ldd_pred*100))
             axes[0].plot(x, y_pred, "--", label=label)
-            axes[0].fill_between(x, y_pred_low, y_pred_high, alpha=0.25, 
-                                 color="C2")
+            #axes[0].fill_between(x, y_pred_low, y_pred_high, alpha=0.25, 
+                                 #color="C2")
     
             #axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
             axes[0].set_ylabel(r"Visibility$^2$")
@@ -334,10 +336,11 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             
             # Plot residuals below the vis2 plot
             axes[0].set_xticks([])
-            residuals = vis2 - rdiam.calc_vis2(b_on_lambda, ldd_fit, c_scale,
+            residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
                                                 u_lld)
             
-            res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 
+            res_ax.errorbar(b_on_lambda, residuals, xerr=b_on_lambda*e_wl_frac,
+                            yerr=e_vis2, fmt=".", 
                             label="Residuals", elinewidth=0.1, capsize=0.2, 
                             capthick=0.1)
             res_ax.set_xlim([0.0,25E7])
@@ -469,11 +472,6 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             pdf.savefig()
             plt.close()
 
-
-
-
-
-
 def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
@@ -529,9 +527,9 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
                 c_scale = results.iloc[star_i]["C_SCALE"]
             
                 x = np.arange(1*10**6, 25*10**7, 10000)
-                y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, u_lld)
-                y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
-                y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
+                y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
+                y_fit_low = rdiam.calc_vis2_ls(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
+                y_fit_high = rdiam.calc_vis2_ls(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
             
                 # Setup lower panel for residuals
                 divider = make_axes_locatable(axes[plt_i])
@@ -567,7 +565,7 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
                 #axes[plt_i].grid()
             
                 # Plot residuals below the vis2 plot
-                residuals = vis2 - rdiam.calc_vis2(b_on_lambda, ldd_fit, c_scale,
+                residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
                                                     u_lld)
             
                 res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 

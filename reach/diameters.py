@@ -11,6 +11,7 @@ from astropy.io import fits
 from scipy.special import jv
 from scipy.optimize import curve_fit
 from scipy.interpolate import LinearNDInterpolator
+from scipy.odr import ODR, Model, Data, RealData
 
 
 class UnknownOIFitsFileFormat(Exception):
@@ -173,7 +174,7 @@ def predict_all_ldd(tgt_info):
 # -----------------------------------------------------------------------------
 # Fitting LDD
 # -----------------------------------------------------------------------------
-def calc_vis2(b_on_lambda, ldd, c_scale, u_lld):
+def calc_vis2_ls(b_on_lambda, ldd, c_scale, u_lld):
     """Calculates squared fringe visibility assuming a linearly limb-darkened 
     disk. As outlined in Hanbury Brown et al. 1974: 
      - http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
@@ -209,9 +210,45 @@ def calc_vis2(b_on_lambda, ldd, c_scale, u_lld):
     
     # Square visibility and return       
     return c_scale * vis**2
+
+
+def calc_vis2_odr(beta, b_on_lambda):
+    """Calculates squared fringe visibility assuming a linearly limb-darkened 
+    disk. As outlined in Hanbury Brown et al. 1974: 
+     - http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
+        
+    This function is called from fit_for_ldd using scipy.odr.ODR.
+        
+    Parameters
+    ----------
+    beta: tuple
+        Tuple containing ldd, c_scale, and u_lld
+        
+    b_on_lambda: float or float array
+        The projected baseline B (m), divided by the wavelength lambda (m)
+        
+    Returns
+    -------
+    vis2: float or float array
+        Calibrated squared fringe visibility
+    """
+    # Unpack
+    ldd, c_scale, u_lld = beta
+    
+    # Calculate x and convert ldd to radians (this serves two purposes: making
+    # the input/output more human readable, and the fitting function performs
+    # better
+    x = np.pi * b_on_lambda * (ldd / 1000 / 3600 / 180 * np.pi)
+    
+    vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
+          ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
+    
+    # Square visibility and return       
+    return c_scale * vis**2
           
           
-def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
+def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
+                method="odr", e_wl_frac=0.02):
     """Fit to calibrated squared visibilities to obtain the measured limb-
     darkened stellar diameter in mas.
     
@@ -264,18 +301,32 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred):
     # Fit for LDD. The lambda function means that we can fix u_lld and not have
     # to optimise for it too. Loose, but physically realistic bounds on LDD for
     # science targets (LDD cannot be zero else the fitting/formula will fail) 
-    popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred, c_scale: 
-                            calc_vis2(b_on_lambda, ldd_pred, c_scale, 
-                                       u_lld)), 
-                            b_on_lambda[valid_i], vis2.flatten()[valid_i], 
-                            sigma=e_vis2.flatten()[valid_i], 
-                            bounds=(0.1, (10, 2)))
+    if method == "ls":
+        popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred, c_scale: 
+                                calc_vis2_ls(b_on_lambda, ldd_pred, c_scale, 
+                                           u_lld)), 
+                                b_on_lambda[valid_i], vis2.flatten()[valid_i], 
+                                sigma=e_vis2.flatten()[valid_i], 
+                                bounds=(0.1, (10, 2)))
 
-    return popt, pcov                    
+        return popt, [np.sqrt(np.diag(pcov_i)) for pcov_i in pcov] 
+    
+    # Run instead using Orthogonal Distance Regression so we can have 
+    # uncertainties on the wavelength calibration    
+    elif method == "odr":
+        data = RealData(b_on_lambda[valid_i], vis2.flatten()[valid_i], 
+                        e_vis2.flatten()[valid_i], 
+                        e_wl_frac*b_on_lambda[valid_i])
+        model = Model(calc_vis2_odr)
+        odr = ODR(data, model, [ldd_pred, c_scale, u_lld], ifixb=[1,1,0])
+        odr.set_job(fit_type=2)
+        output = odr.run()   
+        
+        return output.beta, output.sd_beta   
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
-                u_lld):
+                u_lld, method="odr"):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -311,18 +362,19 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
         else:
             print("\tFitting linear LDD to %s" % sci, end="")
         
-        popt, pcov = fit_for_ldd(vis2[sci], e_vis2[sci], 
+        popt, pstd = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                  baselines[sci], wavelengths[sci], 
                                  u_lld[id], 
-                                 sci_data[pred_ldd_col].values[0])
+                                 sci_data[pred_ldd_col].values[0], 
+                                 method=method)
         print("...fit successful")
         
         # Extract parameters from fit
         ldd_opt = popt[0]
         c_scale = popt[1]
     
-        e_ldd_opt = np.sqrt(np.diag(pcov[0]))
-        e_c_scale = np.sqrt(np.diag(pcov[1]))
+        e_ldd_opt = pstd[0]
+        e_c_scale = pstd[1]
         
         successful_fits[sci] = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]                          
             

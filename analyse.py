@@ -1,4 +1,4 @@
-"""
+"""Script to take bootstrapped oifits files and combine for final results
 """
 from __future__ import division, print_function
 
@@ -73,5 +73,7 @@ rpaper.make_table_final_results(tgt_info)
 
 # Generate plots
 rplt.plot_lit_diam_comp(tgt_info)
-
-
+rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 
+                                sequences=sequences, 
+                                complete_sequences=complete_sequences, 
+                                tgt_info=tgt_info)
