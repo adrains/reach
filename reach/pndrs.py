@@ -129,7 +129,7 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
         for ref_id in ref_ids:
             
             rec = tgt_info.loc[ids][tgt_info.loc[ids][ref_id].notnull()]
-            rec = rec[["Hmag", "Kmag", "Vmag", "Science", ref_id]]
+            rec = rec[["Hmag", "Kmag", "Vmag", "Science", ref_id, "LDD_rel"]]
             
             # Insert the diameters - these are now coming from a separate data
             # structure to facilitate potential bootstrapping. The variable
@@ -141,21 +141,31 @@ def save_nightly_ldd(sequences, complete_sequences, tgt_info,
             rec.insert(1,"e_pred_LDD", e_pred_ldd[appropriate_ids].values[0])     
                        
             rec.rename(columns={ref_id:"Ref_ID"}, inplace=True)
+            rec.rename(columns={"LDD_rel":"INFO"}, inplace=True)
             
             if len(rec) > 0:
                 recs.append(rec.copy(deep=True))
 
         rec = pd.concat(recs)
+        
+        # Replace any nans with zeroes to keep pndrs from throwing a
+        # Floating point interrupt (SIGFPE) error
+        rec["pred_LDD"].where(~np.isnan(rec["pred_LDD"].values), 1, inplace=True)
+        rec["e_pred_LDD"].where(~np.isnan(rec["e_pred_LDD"].values), 0.1, inplace=True)
+        
+        cols_to_check = ["Hmag", "Kmag", "Vmag"]
+        for col in cols_to_check:
+            rec[col].where(~np.isnan(rec[col].values), 0, inplace=True)
 
         # Invert, as column is for calibrator status
         rec.Science =  np.abs(rec.Science - 1)
-        rec["INFO"] = np.repeat("(V-W3) diameter from Boyajian et al. 2014",
-                                len(rec))
-
+        #rec["INFO"] = np.repeat("(V-W3) diameter from Boyajian et al. 2014",
+                                #len(rec))
+        
         rec.insert(0,"TARGET_ID", np.arange(1,len(rec)+1))
         
         max_id = np.max([len(id) for id in rec["Ref_ID"]])
-        max_info = np.max([len(info) for info in rec["INFO"]])
+        max_info = np.max([len(str(info)) for info in rec["INFO"]])
         
         formats = "int16,float64,float64,float64,float64,float64,int32,a%s,a%s"
         formats = formats % (max_id, max_info)

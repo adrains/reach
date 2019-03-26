@@ -73,6 +73,7 @@ Required Catalogues
 """
 from __future__ import division, print_function
 
+import os
 import time
 import glob
 import numpy as np
@@ -83,11 +84,10 @@ import reach.plotting as rplt
 import reach.photometry as rphot
 import reach.pndrs as rpndrs
 import reach.utils as rutils
+import reach.parameters as rparam
 import pickle
 import platform
 from sys import exit
-from astroquery.simbad import Simbad
-from astroquery.vizier import Vizier
 
 # -----------------------------------------------------------------------------
 # (0) Parameters
@@ -104,23 +104,21 @@ already_calibrated = False
 do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
-separate_sequences = True
-combine_previous_bootstraps = False
-n_bootstraps = 200
+n_bootstraps = 1000
 pred_ldd_col = "LDD_pred"
 e_pred_ldd_col = "e_LDD_pred"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
 results_path = "/home/arains/code/reach/results/%s_i%i/" % (str_date, 
                                                             n_bootstraps)
+if not os.path.exists(results_path):
+    os.mkdir(results_path)
 
 print("\nBeginning calibration and fitting run. Parameters set as follow:")
 print(" - n_bootstraps\t\t\t=\t%i" % n_bootstraps)
 print(" - run_local\t\t\t=\t%s" % run_local)
-print(" - separate_sequences\t\t=\t%s" % separate_sequences)
 print(" - already_calibrated\t\t=\t%s" % already_calibrated)
 print(" - do_random_ifg_sampling\t=\t%s" % do_random_ifg_sampling)
 print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
-print(" - combine_previous_bootstraps\t=\t%s" % combine_previous_bootstraps)
 
 print("<i>Strap in</i> for bootstrapping.")
 
@@ -215,35 +213,3 @@ rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                         run_local=run_local, 
                         already_calibrated=already_calibrated,
                         do_random_ifg_sampling=do_random_ifg_sampling)
-
-# -----------------------------------------------------------------------------
-# (N) Create summary pdf with vis^2 plots for all science targets
-# -----------------------------------------------------------------------------
-# Collate the bootstrapping run
-bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path, 
-                                         n_u_lld, pred_ldd_col,
-                                         prune_errant_baselines=True, 
-                                         separate_sequences=separate_sequences)
-
-# Save the results from this bootstrapping run                   
-pkl_bs_results = open("results/bootstrapped_results_%s_n%i.pkl" 
-                      % (str_date, n_bootstraps), "wb")
-pickle.dump(bs_results, pkl_bs_results)
-pkl_bs_results.close()
-                             
-if combine_previous_bootstraps:                                         
-    # Combine these bootstrapping results with any previous ones
-    pkl_list = glob.glob("results/*results*pkl")
-    all_bs_results = rutils.combine_independent_boostrap_runs(pkl_list)
-
-    # Summarise the bootstrapping run                                
-    results = rdiam.summarise_bootstrapping(all_bs_results, tgt_info, 
-                                            pred_ldd_col, e_pred_ldd_col)
-
-    rplt.plot_bootstrapping_summary(results, all_bs_results)
-
-else:
-    results = rdiam.summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col, 
-                                            e_pred_ldd_col)
-
-    rplt.plot_bootstrapping_summary(results, bs_results)

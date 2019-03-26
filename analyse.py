@@ -24,6 +24,7 @@ complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Load in distributions
 n_pred_ldd = pd.read_csv(results_path + "n_pred_ldd.csv") 
+e_pred_ldd = pd.read_csv(results_path + "e_pred_ldd.csv") 
 n_logg = pd.read_csv(results_path + "n_logg.csv") 
 n_teff = pd.read_csv(results_path + "n_teff.csv") 
 n_feh = pd.read_csv(results_path + "n_feh.csv") 

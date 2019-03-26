@@ -50,12 +50,20 @@ def sample_stellar_params_pd(tgt_info, n_bootstraps,
     n_feh = pd.DataFrame(np.zeros([n_bootstraps, len(ids)]), columns=ids)
     
     if assign_default_uncertainties:
-        tgt_info[np.logical_and(np.isnan(tgt_info["e_logg"]), 
-                                         tgt_info["Science"])]["e_logg"] = 0.2
-        tgt_info[np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
-                                      tgt_info["Science"])]["e_FeH_rel"] = 0.1
-        tgt_info[np.logical_and(np.isnan(tgt_info["e_teff"]), 
-                                      tgt_info["Science"])]["e_teff"] = 100        
+        # logg
+        logg_mask = np.logical_and(np.isnan(tgt_info["e_logg"]), 
+                                   tgt_info["Science"])
+        tgt_info["e_logg"].where(~logg_mask, 0.2, inplace=True)
+        
+        # [Fe/H]
+        feh_mask = np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
+                                  tgt_info["Science"])
+        tgt_info["e_FeH_rel"].where(~feh_mask, 0.1, inplace=True)
+        
+        # Teff
+        teff_mask = np.logical_and(np.isnan(tgt_info["e_teff"]), 
+                                   tgt_info["Science"])
+        tgt_info["e_teff"].where(~teff_mask, 100, inplace=True)      
     
     
     for id in ids:
