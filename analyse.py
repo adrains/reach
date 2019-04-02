@@ -14,8 +14,8 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
-n_bootstraps = 200
-results_path = "/home/arains/code/reach/results/19-02-22_i200/"
+n_bootstraps = 1000
+results_path = "/home/arains/code/reach/results/19-03-26_i1000/"
 e_wl_cal_percent = 1
 
 # Load in files

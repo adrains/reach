@@ -34,6 +34,11 @@ def make_table_final_results(tgt_info):
     
     # Populate the table for every science target
     for star_i, row in tgt_info[tgt_info["Science"]].iterrows():
+        
+        # Only continue if we have data on this particular star
+        if not row["in_paper"]:
+            continue
+        
         table_row = ""
         
         # Step through column by column

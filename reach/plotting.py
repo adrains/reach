@@ -472,6 +472,90 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             pdf.savefig()
             plt.close()
 
+
+def plot_single_vis2(results, e_wl_frac=0.03):
+    """Plot side by side vis^2 points and fit, with histogram of LDD dist.
+    """
+    for star_i in np.arange(0, len(results)):
+        # Get the science target name
+        sci = results.iloc[star_i]["STAR"]
+        period = results.iloc[star_i]["PERIOD"]
+        sequence = results.iloc[star_i]["SEQUENCE"]
+        
+        stitle = "%s (%s, P%s)" % (sci, sequence, period)
+        
+        # -----------------------------------------------------------------
+        # Plot vis^2 fits
+        # -----------------------------------------------------------------
+        n_bl = len(results.iloc[star_i]["BASELINE"])
+        n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+        bl_grid = np.tile(results.iloc[star_i]["BASELINE"], 
+                          n_wl).reshape([n_wl, n_bl]).T
+        wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], 
+                          n_bl).reshape([n_bl, n_wl])
+        
+        b_on_lambda = (bl_grid / wl_grid).flatten()
+        
+        vis2 = results.iloc[star_i]["VIS2"].flatten()
+        e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
+        ldd_fit = results.iloc[star_i]["LDD_FIT"]
+        e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+        
+        u_lld = results.iloc[star_i]["u_LLD"]
+        
+        c_scale = results.iloc[star_i]["C_SCALE"]
+        
+        x = np.arange(1*10**6, 25*10**7, 10000)
+        y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
+
+        plt.close("all")
+        fig, ax = plt.subplots()
+        
+        # Setup lower panel for residuals
+        divider = make_axes_locatable(ax)
+        res_ax = divider.append_axes("bottom", size="20%", pad=0)
+        ax.figure.add_axes(res_ax)
+
+        # Plot the data points and best fit curve
+        ax.errorbar(b_on_lambda, vis2, xerr=b_on_lambda*e_wl_frac,
+                        yerr=e_vis2, fmt=".", 
+                        label="Data", elinewidth=0.1, capsize=0.2, 
+                        capthick=0.1)
+
+        ax.plot(x, y_fit, "--", 
+                 label=r"Fit ($\theta_{\rm LDD}$=%0.3f mas)"# $\pm$ %f mas)" 
+                       % (ldd_fit))#, e_ldd_fit))
+
+        #axes[0].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+        ax.set_ylabel(r"Visibility$^2$")
+        ax.set_title(stitle)
+        ax.legend(loc="best")
+        ax.set_xlim([0.0,10E7])
+        ax.set_ylim([0.0, c_scale+0.1])
+        ax.grid()
+        
+        # Plot residuals below the vis2 plot
+        ax.set_xticks([])
+        residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
+                                            u_lld)
+        
+        res_ax.errorbar(b_on_lambda, residuals, xerr=b_on_lambda*e_wl_frac,
+                        yerr=e_vis2, fmt=".", 
+                        label="Residuals", elinewidth=0.1, capsize=0.2, 
+                        capthick=0.1)
+        res_ax.set_xlim([0.0,10E7])
+        res_ax.hlines(0, 0, 25E7, linestyles="dotted")
+        res_ax.set_ylabel("Residuals")
+        res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+        
+        # -----------------------------------------------------------------
+        # Save figs
+        # -----------------------------------------------------------------
+        #plt.gcf().set_size_inches(16, 9)
+        plt.savefig("plots/single_vis2/vis2_%s_%s_%s.pdf" % (sci, period, sequence))
+        plt.close()
+
+
 def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
@@ -731,3 +815,68 @@ def plot_c_hist(results, n_bins=5):
     plt.ylabel("#")
     plt.legend(loc="best")
     plt.savefig("plots/c_hist.png")
+    
+    
+    
+def presentation_vis2_plot():
+    """
+    """
+    # CHARA
+    chara_min_bl = 34
+    chara_max_bl = 330
+    chara_min_lambda = 630 * 10**-9
+    chara_max_lambda = 950 * 10**-9
+    chara_lims = np.array([chara_min_bl/chara_max_lambda, 
+                                   chara_max_bl/chara_min_lambda])
+                                
+    # PIONIER
+    vlti_min_bl = 58
+    vlti_max_bl = 132
+    vlti_min_lambda = 1533 * 10**-9
+    vlti_max_lambda = 1773 * 10**-9
+    vlti_lims = np.array([vlti_min_bl/vlti_max_lambda, 
+                                     vlti_max_bl/vlti_min_lambda])
+    
+    # Diameters to plot
+    ldds = [0.5, 1.0, 2.0, 4.0]
+    u_lld = 0.3
+    c_scale = 1
+    xmax = 55*10**7
+    nsteps = 25
+    
+    freqs = np.arange(1*10**6, xmax, 10000)
+    chara_freqs = np.arange(chara_lims[0], chara_lims[1], 
+                           (chara_lims[1]-chara_lims[0])/nsteps)
+    vlti_freqs = np.arange(vlti_lims[0], vlti_lims[1], 
+                          (vlti_lims[1]-vlti_lims[0])/nsteps)
+    
+    plt.close("all")
+    
+    for ldd in ldds:
+        vis2 = rdiam.calc_vis2_ls(freqs, ldd, c_scale, u_lld)
+        
+        plt.plot(freqs, vis2, label="LDD = %0.1f" % ldd)
+    
+        # CHARA
+        ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
+        chara_vis2 = rdiam.calc_vis2_ls(chara_freqs, ldd, c_scale, u_lld)
+        plt.plot(chara_freqs, chara_vis2, "+", color="blue")
+        
+        # PIONIER
+        ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
+        vlti_vis2 = rdiam.calc_vis2_ls(vlti_freqs, ldd, c_scale, u_lld)
+        plt.plot(vlti_freqs, vlti_vis2, ".", color="darkred") 
+    
+    plt.text(0.5*xmax, 0.95, "PAVO: 34-330m, R band", color="blue", ha='center')
+    plt.text(0.5*xmax, 0.9, "PIONIER: 58-132m, H band", color="darkred", ha='center')
+    
+    plt.xlim([0.0, xmax])
+    plt.ylim([0.0, 1.0])
+    plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
+    plt.ylabel(r"Visibility$^2$")
+    plt.legend(loc="best")
+    
+    plt.tight_layout()
+    plt.savefig("plots/presentation_vis2_vs_ldd.pdf")
+    plt.savefig("plots/presentation_vis2_vs_ldd.png")
+    
