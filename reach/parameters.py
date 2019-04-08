@@ -155,7 +155,7 @@ def calc_all_f_bol(tgt_info, n_samples):
     
     # Calculate bolometric fluxes for each band for every star
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
-        print(star)
+        #print(star)
         for band_i, (band, e_band) in enumerate(zip(bands, e_bands)):
             # Sample the magnitudes
             mags = np.random.normal(row[band], row[e_band], n_samples) 

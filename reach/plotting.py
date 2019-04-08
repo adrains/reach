@@ -703,13 +703,13 @@ def plot_lit_diam_comp(tgt_info):
             
     # Setup lower panel for residuals
     divider = make_axes_locatable(ax)
-    res_ax = divider.append_axes("bottom", size="20%", pad=0)
+    res_ax = divider.append_axes("bottom", size="20%", pad=0.1)
     ax.figure.add_axes(res_ax)
     
     # For every different instrument, plot the comparison between our results
     # and those from the literature
     for instrument in instruments:
-        print(instrument)
+        #print(instrument)
         mask = np.logical_and(lit_diam_info["has_diam"], 
                               lit_diam_info["instrument"]==instrument).values
         
@@ -766,6 +766,82 @@ def plot_lit_diam_comp(tgt_info):
     plt.tight_layout()
     plt.savefig("plots/lit_diam_comp.pdf")    
     
+
+
+def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3"):
+    """Plot for paper comparing measured LDD vs Boyajian colour relation diams.
+    """
+    # Format the colour relation
+    colour_rel_col = "LDD_" + colour_rel.replace("-", "")
+    
+    plt.close("all")
+    fig, ax = plt.subplots()
+            
+    # Setup lower panel for residuals
+    divider = make_axes_locatable(ax)
+    res_ax = divider.append_axes("bottom", size="20%", pad=0.1)
+    ax.figure.add_axes(res_ax)
+    
+    # Initialise arrays
+    fit_diams = []
+    e_fit_diams = []
+    colour_rel_diams = []
+    e_colour_rel_diams = []
+    
+    # For every science target, plot using the given relation
+    for star, star_data in tgt_info[tgt_info["Science"]].iterrows():
+        # If star doesn't have a diameter using this relation, skip
+        if np.isnan(star_data[colour_rel_col]) or not star_data["in_paper"]:
+            continue
+        elif colour_rel=="V-K" and star_data["LDD_rel"] != colour_rel_col:
+            continue
+        
+       # Get the two LDDs to compare
+        fit_diams.append(star_data["ldd_final"])
+        e_fit_diams.append(star_data["e_ldd_final"])
+        colour_rel_diams.append(star_data[colour_rel_col])
+        e_colour_rel_diams.append(star_data["e_%s" % colour_rel_col])
+        
+        # Plot the name of the star
+        ax.annotate(star_data["Primary"], xy=(fit_diams[-1], colour_rel_diams[-1]), 
+                    xytext=(fit_diams[-1]+0.05, colour_rel_diams[-1]-0.1), 
+                    arrowprops=dict(facecolor="black", width=0.1, 
+                                    headwidth=0.1),
+                    fontsize="xx-small")
+                        
+    # Plot the points
+    ax.errorbar(fit_diams, colour_rel_diams, xerr=e_fit_diams, 
+                yerr=e_colour_rel_diams, fmt="o",# label=colour_rel, 
+                elinewidth=0.5, capsize=0.8, capthick=0.5)
+        
+    # Plot residuals
+    ax.set_xticklabels([])
+    residuals = np.array(colour_rel_diams) / np.array(fit_diams)
+        
+    res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
+                    yerr=e_colour_rel_diams, fmt="o", elinewidth=0.5, 
+                    capsize=0.8, capthick=0.5)
+    
+    # Plot the two lines
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot(np.arange(0, 10), np.arange(0, 10), "--", color="black")
+    res_ax.hlines(1, xmin=0, xmax=10, linestyles="dashed")
+                      
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    res_ax.set_xlim(xlim)
+    
+    
+    # Setup the rest of the plot
+    ax.set_ylabel(r"$\theta_{\rm %s}$" % colour_rel)  
+    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
+    res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" % colour_rel)  
+    #ax.legend(loc="best")
+    
+    plt.tight_layout()
+    plt.savefig("plots/colour_rel_diam_comp_%s.pdf" % colour_rel)     
+            
 
     
 def plot_vis2(oi_fits_file, star_id):
@@ -855,18 +931,18 @@ def presentation_vis2_plot():
     for ldd in ldds:
         vis2 = rdiam.calc_vis2_ls(freqs, ldd, c_scale, u_lld)
         
-        plt.plot(freqs, vis2, label="LDD = %0.1f" % ldd)
+        plt.plot(freqs, vis2, label=r"$\theta_{\rm LD}$ = %0.1f mas" % ldd)
+    
+        # PIONIER
+        ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
+        vlti_vis2 = rdiam.calc_vis2_ls(vlti_freqs, ldd, c_scale, u_lld)
+        plt.plot(vlti_freqs, vlti_vis2, ".", color="darkred") 
     
         # CHARA
         ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
         chara_vis2 = rdiam.calc_vis2_ls(chara_freqs, ldd, c_scale, u_lld)
         plt.plot(chara_freqs, chara_vis2, "+", color="blue")
         
-        # PIONIER
-        ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
-        vlti_vis2 = rdiam.calc_vis2_ls(vlti_freqs, ldd, c_scale, u_lld)
-        plt.plot(vlti_freqs, vlti_vis2, ".", color="darkred") 
-    
     plt.text(0.5*xmax, 0.95, "PAVO: 34-330m, R band", color="blue", ha='center')
     plt.text(0.5*xmax, 0.9, "PIONIER: 58-132m, H band", color="darkred", ha='center')
     

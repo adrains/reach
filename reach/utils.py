@@ -347,3 +347,17 @@ def load_sequence_logs():
     pkl_sequences.close()
     
     return complete_sequences, sequences
+    
+
+def load_results(folder):
+    """
+    """
+    pkl_bs_results = open("results/%s/bs_results.pkl" % folder, "r")
+    bs_results = pickle.load(pkl_bs_results)
+    pkl_bs_results.close()
+
+    pkl_results = open("results/%s/results.pkl" % folder, "r")
+    results = pickle.load(pkl_results)
+    pkl_results.close()
+    
+    return bs_results, results    

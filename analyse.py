@@ -14,11 +14,14 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
+load_saved_results = True
 n_bootstraps = 1000
-results_path = "/home/arains/code/reach/results/19-03-26_i1000/"
+results_folder = "19-03-26_i1000"
+results_path = "/home/arains/code/reach/results/%s/" % results_folder
 e_wl_cal_percent = 1
 
 # Load in files
+print("Loading in files...")
 tgt_info = rutils.initialise_tgt_info()
 complete_sequences, sequences = rutils.load_sequence_logs()
 
@@ -38,16 +41,25 @@ sequences.pop((102, 'gamPav', 'faint'))
 sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
 
-# Collate bootstrapped results
-bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path,
-                                         n_u_lld) 
-
 # Determine u_lld from its distribution
 tgt_info.loc[n_u_lld.columns.values, "u_lld"] = n_u_lld.mean().values
 tgt_info.loc[n_u_lld.columns.values, "e_u_lld"] = n_u_lld.std().values
 
-# Summarise results
-results = rdiam.summarise_bootstrapping(bs_results, tgt_info)
+# Collate bootstrapped results
+if load_saved_results:
+    print("Loading saved results...")
+    bs_results, results = rutils.load_results(results_folder)
+
+else:
+    # Get results
+    print("Getting results of bootstrapping...")
+    bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path,
+                                         n_u_lld) 
+
+    # Summarise results
+    results = rdiam.summarise_bootstrapping(bs_results, tgt_info)
+
+print("Determining fundamental parameters...")
 
 # Combine angular diameter measurements
 rparam.combine_seq_ldd(tgt_info, results)
@@ -65,6 +77,7 @@ rparam.calc_all_teff(tgt_info, 10000)
 rparam.calc_all_L_bol(tgt_info, 10000)
 
 # Generate tables
+print("Generating tables...")
 rpaper.make_table_targets(tgt_info)
 rpaper.make_table_calibrators(tgt_info, sequences)
 rpaper.make_table_observation_log(tgt_info, complete_sequences, sequences)
@@ -73,7 +86,10 @@ rpaper.make_table_seq_results(results)
 rpaper.make_table_final_results(tgt_info)
 
 # Generate plots
+print("Generating plots...")
 rplt.plot_lit_diam_comp(tgt_info)
+rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")
+rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W4")
 rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 
                                 sequences=sequences, 
                                 complete_sequences=complete_sequences, 
