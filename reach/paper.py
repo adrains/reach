@@ -232,7 +232,7 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
         table_row = ("%s & "*len(columns)) % (star_id, ut_date, period,  
                                               seq_type, baselines, cals)
                 
-        table_rows[(ut_date, star_id)] = table_row + r"\\"
+        table_rows[(ut_date, star_id)] = table_row[:-2] + r"\\"
         
         
     # Finish the table
@@ -245,12 +245,9 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
     
     sorted_rows = [table_rows[row] for row in ut_sorted]
     
-    # Write the tables
-    table_1 = header + sorted_rows[:30] + footer
-    table_2 = header + sorted_rows[30:] + footer
-    
-    np.savetxt("paper/table_observations_1.tex", table_1, fmt="%s")
-    np.savetxt("paper/table_observations_2.tex", table_2, fmt="%s")
+    # Write the table
+    table = header + sorted_rows + footer
+    np.savetxt("paper/table_observations.tex", table, fmt="%s")
     
 
 def make_table_targets(tgt_info):
@@ -277,13 +274,10 @@ def make_table_targets(tgt_info):
                            ("T$_{\\rm eff}$", "(K)"),
                            ("logg", "(dex)"), 
                            ("[Fe/H]", "(dex)"),
+                           ("vsini", r"(km$\,$s$^{-1}$)"),
                            ("Ref", ""),
-                           ("Plx", "(mas)"),
-                           ("Mission", "")])
-    
-    labels = ["Primary", "index", "SpT", "VTmag", "Hmag", "Teff", "logg", 
-              "FeH_rel", "Plx"]
-               
+                           ("Plx", "(mas)")])#,
+                           #("Mission", "")])         
     
     table_rows = []
     
@@ -311,18 +305,19 @@ def make_table_targets(tgt_info):
         table_row += r"%0.0f $\pm$ %0.0f & " % (star["Teff"], star["e_teff"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["logg"], star["e_logg"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["FeH_rel"], star["e_FeH_rel"])
+        table_row += r"%0.2f $ &" % star["vsini"]
         table_row += "TODO &"
         
         
         # Parallax is not from Gaia DR2
         if np.isnan(star["Plx"]):
-            table_row += r"%0.2f $\pm$ %0.2f &" % (star["Plx_alt"], star["e_Plx_alt"])
-            table_row += "\\textit{Hipparcos}"
+            table_row += r"%0.2f $\pm$ %0.2f" % (star["Plx_alt"], star["e_Plx_alt"])
+            #table_row += "\\textit{Hipparcos}"
         
         # From Gaia DR2
         else:
-            table_row += r"%0.2f $\pm$ %0.2f &" % (star["Plx"], star["e_Plx"])
-            table_row += "\\textit{Gaia}"
+            table_row += r"%0.2f $\pm$ %0.2f" % (star["Plx"], star["e_Plx"])
+            #table_row += "\\textit{Gaia}"
         
         table_rows.append(table_row + r"\\")
         
