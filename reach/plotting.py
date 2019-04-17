@@ -557,19 +557,24 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         plt.close()
 
 
-def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
+def plot_paper_vis2_fits(results, bs_results, n_rows=8, n_cols=2):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
     plt.close("all")
     with PdfPages("paper/seq_vis2_plots.pdf") as pdf:
         # Figure out how many sets of plots are needed
         num_sets = int(np.ceil(len(bs_results) / n_rows / n_cols))
+        n_rows_init = n_rows
         
         # For every set, save a page
         for set_i in np.arange(0, num_sets):
-        
+            # Ensure we don't have an incomplete set of subplots
+            if set_i + 1 == num_sets:
+                n_rows = int((len(bs_results) - set_i*n_rows*n_cols) / n_cols)
+            
             # Setup the axes
-            fig, axes = plt.subplots(n_rows, n_cols, sharex=True, sharey=True)
+            fig, axes = plt.subplots(n_rows, n_cols)#), sharex=True, sharey=True)
+            plt.subplots_adjust(wspace=0.3, hspace=0.4)
             axes = axes.flatten()
     
             for star_i in np.arange(set_i*n_rows*n_cols, (set_i+1)*n_rows*n_cols):
@@ -618,7 +623,7 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
             
                 # Setup lower panel for residuals
                 divider = make_axes_locatable(axes[plt_i])
-                res_ax = divider.append_axes("bottom", size="20%", pad=0)
+                res_ax = divider.append_axes("bottom", size="35%", pad=0.1)
                 axes[plt_i].figure.add_axes(res_ax, sharex=axes[plt_i])
     
                 # Plot the data points and best fit curve
@@ -629,8 +634,6 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
                 axes[plt_i].plot(x, y_fit, "--", linewidth=0.25,
                          label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
                                % (ldd_fit, e_ldd_fit, e_ldd_fit/ldd_fit*100))
-                #axes[plt_i].fill_between(x, y_fit_low, y_fit_high, alpha=0.25,
-                                     #color="C1")
                 
                 # Annotate the sequence name
                 xx = (axes[plt_i].get_xlim()[1] - axes[plt_i].get_xlim()[0]) * 0.05
@@ -638,16 +641,22 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
                 axes[plt_i].text(xx, yy, stitle, fontsize="xx-small")
                 
                 # Set up ticks
-                
-                
                 axes[plt_i].set_xlim([0.0,10E7])
                 axes[plt_i].set_ylim([0.0,1.1])
                 
                 axes[plt_i].set_xticklabels([])
-                #axes[plt_i].set_yticklabels([0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.1])
-                #ax.xaxis.set_ticks(np.arange(start, end, stepsize))
                 
-                #axes[plt_i].grid()
+                axes[plt_i].tick_params(axis="both", top=True, right=True)
+                res_ax.tick_params(axis="y", right=True)
+                
+                maj_loc = plticker.MultipleLocator(base=0.2)
+                min_loc = plticker.MultipleLocator(base=0.1)
+                
+                axes[plt_i].yaxis.set_major_locator(maj_loc)
+                axes[plt_i].yaxis.set_minor_locator(min_loc)
+                
+
+                
             
                 # Plot residuals below the vis2 plot
                 residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
@@ -670,19 +679,19 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=6, n_cols=3):
                 
                 
                 # Only show res_ax x labels on the bottom row
-                if not (plt_i >= (n_rows*n_cols - n_cols)):
-                    res_ax.set_xticklabels([])
+                #if not (plt_i >= (n_rows*n_cols - n_cols)):
+                    #res_ax.set_xticklabels([])
                 
                 # Only show res_ax y labels if on left
-                if not (plt_i % n_cols == 0):
-                    res_ax.set_yticklabels([])
+                #if not (plt_i % n_cols == 0):
+                    #res_ax.set_yticklabels([])
             # -----------------------------------------------------------------
             # Finalise
             # -----------------------------------------------------------------
             fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
             fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
             
-            plt.gcf().set_size_inches(9, 8)
+            plt.gcf().set_size_inches(8, 8*(n_rows/n_rows_init))
             plt.tight_layout(pad=1.0)
             pdf.savefig()
             plt.close()
@@ -922,7 +931,7 @@ def plot_vis2(oi_fits_file, star_id):
     
 
 def plot_c_hist(results, n_bins=5):
-    """
+    """Plot histograms of the scaling/intercept parameter C.
     """
     faint_cs = results[results["SEQUENCE"]=="faint"]["C_SCALE"].values.tolist()
     faint_cs.sort()
@@ -943,7 +952,8 @@ def plot_c_hist(results, n_bins=5):
     
     
 def presentation_vis2_plot():
-    """
+    """Plot spatial frequency coverage of PAVO and POINIER for use as a visial
+    aid when giving talks.
     """
     # CHARA
     chara_min_bl = 34
