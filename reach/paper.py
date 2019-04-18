@@ -268,6 +268,8 @@ def make_table_targets(tgt_info):
     # Column names and associated units
     columns = OrderedDict([("Star", ""), 
                            ("HD", ""),
+                           ("RA", "(hh mm ss.ss)"),
+                           ("DEC", "(dd mm ss.ss)"),
                            ("SpT", ""),
                            ("VTmag", "(mag)"), 
                            ("Hmag", "(mag)"),
@@ -296,9 +298,22 @@ def make_table_targets(tgt_info):
         if not star["in_paper"]:
             continue
         
+        # Format RA and DEC
+        ra_hr = np.floor(star["RA"] / 15)
+        ra_min = np.floor((star["RA"] / 15 - ra_hr) * 60)
+        ra_sec = ((star["RA"] / 15 - ra_hr) * 60 - ra_min) * 60
+        ra = "%02i %02i %05.2f" % (ra_hr, ra_min, ra_sec)
+        
+        dec_deg = np.floor(star["DEC"])
+        dec_min = np.floor((star["DEC"] - dec_deg) * 60)
+        dec_sec = ((star["DEC"] - dec_deg) * 60 - dec_min) * 60
+        dec = "%02i %02i %05.2f" % (dec_deg, dec_min, dec_sec)
+        
         # Step through column by column
         table_row += "%s & " % star["Primary"]
         table_row += "%s & " % star.name.replace("HD", "")
+        table_row += "%s & " % ra
+        table_row += "%s & " % dec
         table_row += "%s & " % star["SpT"]
         table_row += "%0.2f & " % star["VTmag"]
         table_row += "%0.2f & " % star["Hmag"]
