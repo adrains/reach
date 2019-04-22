@@ -263,7 +263,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             period = results.iloc[star_i]["PERIOD"]
             sequence = results.iloc[star_i]["SEQUENCE"]
             
-            if "SEQUENCE" == "combined":
+            if sequence == "combined":
                 stitle = sci
                 star_id = sci
             else:

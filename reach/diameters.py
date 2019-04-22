@@ -351,7 +351,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
         List containing ldd_opt, e_ldd_opt, c_scale, e_c_scale.
     """
     successful_fits = {}
-    #print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
+    
     for sci in vis2.keys():
         # Only take the ID part of sci - could have " (Sequence)" after it
         if type(sci) == tuple:
@@ -857,7 +857,7 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
 def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
                           pred_ldd_col="LDD_pred", 
                           prune_errant_baselines=True, 
-                          separate_sequences=True):
+                          separate_sequences=True, combined_fit=True):
     """Collates all bootstrapped oifits files within results_path into
     sumarising pandas dataframes. 
     
@@ -896,8 +896,12 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
     #stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
                  #for file in oifits_files])
                  
-    star_ids = mjds.keys()
-    star_ids.sort()
+    sequence_ids = mjds.keys()
+    sequence_ids.sort()
+    
+    # If combining, take only the star IDs
+    if combined_fit:
+        sequence_ids = set(np.array(sequence_ids)[:,0])
                 
     # Initialise a pandas dataframe for each star. At present it's hard to
     # entirely preallocate memory, but we'll try to at least preallocate the
@@ -910,7 +914,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
     # from a dictionary
     bs_results = {}
         
-    for star in star_ids:
+    for star in sequence_ids:
         bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
                                      columns=cols1)
         
@@ -934,11 +938,51 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
         # Collate the information
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             collate_vis2_from_file(results_path, bs_i, separate_sequences)
-          
+        
+        # If doing combined fit, combine (i.e. stack) data from the same star
+        if combined_fit:
+            # Combine like stars, add to dict, pop old values 
+            sequence_ids = mjds.keys()
+            sequence_ids.sort()
+            
+            for seq_id in sequence_ids:
+                star = seq_id[0]
+                
+                # Create new dict entry
+                if star not in mjds:
+                    mjds[star] = mjds[seq_id]
+                    pairs[star] = pairs[seq_id]
+                    vis2[star] = vis2[seq_id]
+                    e_vis2[star] = e_vis2[seq_id]
+                    flags[star] = flags[seq_id]
+                    baselines[star] = baselines[seq_id]
+                    wavelengths[star] = wavelengths[seq_id]
+                
+                # Append to old dict entry, don't stack wl dimension
+                else:
+                    mjds[star] = np.hstack((mjds[star], mjds[seq_id]))
+                    pairs[star] = np.hstack((pairs[star], pairs[seq_id]))
+                    vis2[star] = np.vstack((vis2[star], vis2[seq_id]))
+                    e_vis2[star] = np.vstack((e_vis2[star], e_vis2[seq_id]))
+                    flags[star] = np.vstack((flags[star], flags[seq_id]))
+                    baselines[star] = np.hstack((baselines[star], baselines[seq_id]))
+                    #wavelengths[star] = np.hstack((pairs[star], pairs[seq_id]))
+                    
+                # Regardless of what happened, pop old keys
+                mjds.pop(seq_id, None)
+                pairs.pop(seq_id, None)
+                vis2.pop(seq_id, None)
+                e_vis2.pop(seq_id, None)
+                flags.pop(seq_id, None)
+                baselines.pop(seq_id, None)
+                wavelengths.pop(seq_id, None)
+            
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col, n_u_lld.iloc[bs_i])  
+        
+        
                           
         # Populate
         for star in mjds.keys():
@@ -951,6 +995,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
             bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
             bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
             bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
+
             
             #bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
             #bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
@@ -1036,8 +1081,6 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
             
             sequence = "combined"
             period = ""
-            
-        pid = tgt_info[tgt_info["Primary"]==star[0]].index.values[0]
         
         results.iloc[star_i]["HD"] = pid
         results.iloc[star_i]["PERIOD"] = period
