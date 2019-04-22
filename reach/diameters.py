@@ -5,6 +5,7 @@ import os
 import glob
 import numpy as np
 import pandas as pd
+import reach.stagger as rstgr
 import matplotlib.pylab as plt
 from collections import Counter
 from astropy.io import fits
@@ -353,14 +354,18 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
     #print("\n", "-"*79, "\n", "\tFitting for LDD\n", "-"*79)
     for sci in vis2.keys():
         # Only take the ID part of sci - could have " (Sequence)" after it
-        sci_data = tgt_info[tgt_info["Primary"]==sci.split(" ")[0]]
+        if type(sci) == tuple:
+            sci_data = tgt_info[tgt_info["Primary"]==sci[0]]
+        else:
+            sci_data = tgt_info[tgt_info["Primary"]==sci]
+        
         id = sci_data.index.values[0]
         
         if not sci_data["Science"].values:
-            print("%s is not science target, aborting fit" % sci)
+            print("%s is not science target, aborting fit" % str(sci))
             continue
         else:
-            print("\tFitting linear LDD to %s" % sci, end="")
+            print("\tFitting linear LDD to %s" % str(sci), end="")
         
         popt, pstd = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                  baselines[sci], wavelengths[sci], 
@@ -637,21 +642,21 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
                                                        dates_obs["b_night"]==night)]
                 
                 # If returning both a faint and bright entry, need to define 
-                # which is which                                   
+                # which is which - create a tuple of form (id, seq, period)                                
                 if len(bright_entry) > 0 and len(faint_entry) > 0:
                     # Bright
                     
                     if seq_i == bright_entry["b_order"].values[0]:
-                        seq_id += " (bright, %s)" % bright_entry["period"].values[0]
+                        seq_id = (sci, "bright", bright_entry["period"].values[0])
                     
                     elif seq_i == faint_entry["f_order"].values[0]:
-                        seq_id += " (faint, %s)" % faint_entry["period"].values[0]
+                        seq_id = (sci, "faint", faint_entry["period"].values[0])
                                     
                 elif len(bright_entry) > 0 and len(faint_entry) == 0:
-                    seq_id += " (bright, %s)" % bright_entry["period"].values[0]
+                    seq_id = (sci, "bright", bright_entry["period"].values[0])
                 
                 elif len(bright_entry) == 0 and len(faint_entry) > 0:
-                    seq_id += " (faint, %s)" % faint_entry["period"].values[0]
+                    seq_id = (sci, "faint", faint_entry["period"].values[0])
         
         # Extract data from oifits file and stack as appropriate
         #mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
@@ -678,7 +683,9 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
     return all_mjds, all_tel_pairs, all_vis2, all_e_vis2, all_flags, \
            all_baselines, all_wavelengths
     
-    
+# -----------------------------------------------------------------------------
+# Limb darkening coefficients
+# -----------------------------------------------------------------------------    
 def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
     """Function to interpolate the linear-limb darkening coefficients given 
     values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
@@ -739,6 +746,38 @@ def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
     # Return the results    
     return n_u_lld
     
+
+def sample_equivalent_lld_coeff(tgt_info, n_bootstraps):
+    """
+    
+    For every science target, sample linear u_lambda N times, where u_lambda is
+    a vector of length 6, corresponding to each of the wavelength channels of
+    PIONIER. u_lambda in this case is the equivalent linear term for the 4
+    parameter law giving the same side-lobe height, and comes with a scaling
+    parameter to scale the resulting LDD.
+    """
+    # Initialise data structure to hold the results. It should have dimensions
+    # [n_star, n_bootstraps, n_wavelengths, n_wavelengths] where the final two
+    # dimensions correspond to u_lambda, and s_lambda (scaling parameter).
+    pass
+    
+    # For every star, sample u_lambda and s_lambda
+    for star, star_data in tgt_info[tgt_info["Science"]].itterows():
+        # If the target is out of the grid, fill the grid with standard linear
+        # (i.e. non-equivalent) u_lambda, and s_lambda = 1
+        if not rstgr.in_grid_bounds(teff, logg):
+            pass
+            
+        # Otherwise, fill with sampled equivalent u_lambda and s_lambda
+        else:
+            wls, u_lambda, e_u_lambda, s_lambda ,e_s_lambda, ftcs, e_ftcs = \
+                rstgr.elc_stagger(star_data["Teff"], star_data["e_teff"], 
+                                  star_data["logg"], star_data["e_logg"], 
+                                  star_data["FeH_rel"], star_data["e_FeH_rel"],
+                                   1)
+                              
+    return u_lambda, s_lambda
+
 
 def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred", 
                       e_pred_ldd_col="e_LDD_pred",
@@ -812,7 +851,9 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
                                               n_bootstraps)                                           
     return n_pred_ldd, e_pred_ldd
     
-    
+# -----------------------------------------------------------------------------
+# Aggregating results from bootstrapping runs
+# -----------------------------------------------------------------------------    
 def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
                           pred_ldd_col="LDD_pred", 
                           prune_errant_baselines=True, 
@@ -855,8 +896,8 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
     #stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
                  #for file in oifits_files])
                  
-    stars = mjds.keys()
-    stars.sort()
+    star_ids = mjds.keys()
+    star_ids.sort()
                 
     # Initialise a pandas dataframe for each star. At present it's hard to
     # entirely preallocate memory, but we'll try to at least preallocate the
@@ -869,7 +910,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
     # from a dictionary
     bs_results = {}
         
-    for star in stars:
+    for star in star_ids:
         bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
                                      columns=cols1)
         
@@ -977,22 +1018,26 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
-    stars = bs_results.keys()
-    stars.sort()
+    star_ids = bs_results.keys()
+    star_ids.sort()
     
     # All done collating, combine bootstrapped values into mean and std
-    for star_i, star in enumerate(stars):
+    for star_i, star in enumerate(star_ids):
         # Set the common ID, and get the primary ID
-        results.iloc[star_i]["STAR"] = star.split(" ")[0]
-        
-        pid = tgt_info[tgt_info["Primary"]==star.split(" ")[0]].index.values[0]
-        
-        if "(" in star:
-            sequence = star.split(" ")[1][1:-1]
-            period = int(star.split(" ")[-1][:-1])
+        if type(star) == tuple:
+            results.iloc[star_i]["STAR"] = star[0]
+            pid = tgt_info[tgt_info["Primary"]==star[0]].index.values[0]
+            
+            sequence = star[1]
+            period = int(star[2])
         else:
+            results.iloc[star_i]["STAR"] = star
+            pid = tgt_info[tgt_info["Primary"]==star].index.values[0]
+            
             sequence = "combined"
             period = ""
+            
+        pid = tgt_info[tgt_info["Primary"]==star[0]].index.values[0]
         
         results.iloc[star_i]["HD"] = pid
         results.iloc[star_i]["PERIOD"] = period
@@ -1035,7 +1080,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     
     return results
     
-
+# -----------------------------------------------------------------------------
+# Other
+# -----------------------------------------------------------------------------
 def inspect_dr_photometry(tgt_info):
     """Diagnostic function to inspect for issues with reddening/diameters. WIP. 
     """

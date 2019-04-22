@@ -14,10 +14,11 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
-load_saved_results = True
+load_saved_results = False
 n_bootstraps = 1000
 results_folder = "19-03-26_i1000"
-results_path = "/home/arains/code/reach/results/%s/" % results_folder
+#results_path = "/home/arains/code/reach/results/%s/" % results_folder
+results_path = "results/%s/" % results_folder
 e_wl_cal_percent = 1
 
 # Load in files
@@ -49,6 +50,11 @@ tgt_info.loc[n_u_lld.columns.values, "e_u_lld"] = n_u_lld.std().values
 if load_saved_results:
     print("Loading saved results...")
     bs_results, results = rutils.load_results(results_folder)
+    
+    # Pop HD187289
+    results.drop(results[results["STAR"]=="HD187289"].index, inplace=True)
+    bs_results.pop("HD187289 (faint, 99)")
+    bs_results.pop("HD187289 (bright, 99)")
 
 else:
     # Get results
@@ -88,6 +94,7 @@ rpaper.make_table_final_results(tgt_info)
 # Generate plots
 print("Generating plots...")
 rplt.plot_lit_diam_comp(tgt_info)
+rplt.plot_paper_vis2_fits(results, n_rows=8, n_cols=2)
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W4")
 rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 

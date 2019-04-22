@@ -265,8 +265,10 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             
             if "SEQUENCE" == "combined":
                 stitle = sci
+                star_id = sci
             else:
                 stitle = "%s (%s, %s)" % (sci, sequence, period)
+                star_id = (sci, sequence, period)
             
             # -----------------------------------------------------------------
             # Plot vis^2 fits
@@ -454,12 +456,12 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             # -----------------------------------------------------------------
             # Plot histograms
             # -----------------------------------------------------------------
-            axes[1].hist(bs_results[stitle]["LDD_FIT"].values.tolist(), n_bins)
+            axes[1].hist(bs_results[star_id]["LDD_FIT"].values.tolist(), n_bins)
         
             text_y = axes[1].get_ylim()[1]
         
             axes[1].set_title(stitle + r" (${\rm N}_{\rm bootstraps} = $%i)" 
-                             % len(bs_results[stitle]["LDD_FIT"].values.tolist()))
+                             % len(bs_results[star_id]["LDD_FIT"].values.tolist()))
             y_height = axes[1].get_ylim()[1]
             axes[1].vlines(ldd_fit, 0, y_height, linestyles="dashed")
             axes[1].vlines(ldd_fit-e_ldd_fit, 0, y_height, colors="red", 
@@ -557,20 +559,20 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         plt.close()
 
 
-def plot_paper_vis2_fits(results, bs_results, n_rows=8, n_cols=2):
+def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
     """Plot side by side vis^2 points and fit, with histogram of LDD dist.
     """
     plt.close("all")
     with PdfPages("paper/seq_vis2_plots.pdf") as pdf:
         # Figure out how many sets of plots are needed
-        num_sets = int(np.ceil(len(bs_results) / n_rows / n_cols))
+        num_sets = int(np.ceil(len(results) / n_rows / n_cols))
         n_rows_init = n_rows
         
         # For every set, save a page
         for set_i in np.arange(0, num_sets):
             # Ensure we don't have an incomplete set of subplots
             if set_i + 1 == num_sets:
-                n_rows = int((len(bs_results) - set_i*n_rows*n_cols) / n_cols)
+                n_rows = int((len(results) - set_i*n_rows*n_cols) / n_cols)
             
             # Setup the axes
             fig, axes = plt.subplots(n_rows, n_cols)#), sharex=True, sharey=True)
@@ -655,9 +657,6 @@ def plot_paper_vis2_fits(results, bs_results, n_rows=8, n_cols=2):
                 axes[plt_i].yaxis.set_major_locator(maj_loc)
                 axes[plt_i].yaxis.set_minor_locator(min_loc)
                 
-
-                
-            
                 # Plot residuals below the vis2 plot
                 residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
                                                     u_lld)
