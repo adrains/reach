@@ -268,27 +268,36 @@ def make_table_targets(tgt_info):
     # Column names and associated units
     columns = OrderedDict([("Star", ""), 
                            ("HD", ""),
-                           ("RA", "(hh mm ss.ss)"),
-                           ("DEC", "(dd mm ss.ss)"),
-                           ("SpT", ""),
-                           ("VTmag", "(mag)"), 
-                           ("Hmag", "(mag)"),
+                           ("RA$^a$", "(hh mm ss.ss)"),
+                           ("DEC$^a$", "(dd mm ss.ss)"),
+                           ("SpT$^b$", ""),
+                           ("VTmag$^c$", "(mag)"), 
+                           ("Hmag$^d$", "(mag)"),
                            ("T$_{\\rm eff}$", "(K)"),
                            ("logg", "(dex)"), 
                            ("[Fe/H]", "(dex)"),
                            ("vsini", r"(km$\,$s$^{-1}$)"),
-                           ("Ref", ""),
-                           ("Plx", "(mas)")])#,
+                           ("Plx$^a$", "(mas)"),
+                           ("Refs", "")])#,
                            #("Mission", "")])         
     
     table_rows = []
     
     # Construct the header of the table
+    table_rows.append("\\begin{landscape}")
+    table_rows.append("\\begin{table}")
+    table_rows.append("\\centering")
+    table_rows.append("\\caption{Science targets}")
+    table_rows.append("\\label{tab:science_targets}")
+    
     table_rows.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
     table_rows.append("\hline")
     table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
     table_rows.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
     table_rows.append("\hline")
+    
+    ref_i = 0
+    references = []
     
     # Populate the table for every science target
     for star_i, star in tgt_info[tgt_info["Science"]].iterrows():
@@ -320,25 +329,58 @@ def make_table_targets(tgt_info):
         table_row += r"%0.0f $\pm$ %0.0f & " % (star["Teff"], star["e_teff"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["logg"], star["e_logg"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["FeH_rel"], star["e_FeH_rel"])
-        table_row += r"%0.2f $ &" % star["vsini"]
-        table_row += "TODO &"
-        
+        table_row += r"%0.2f & " % star["vsini"]
         
         # Parallax is not from Gaia DR2
         if np.isnan(star["Plx"]):
-            table_row += r"%0.2f $\pm$ %0.2f" % (star["Plx_alt"], star["e_Plx_alt"])
+            table_row += r"%0.2f $\pm$ %0.2f & " % (star["Plx_alt"], star["e_Plx_alt"])
             #table_row += "\\textit{Hipparcos}"
         
         # From Gaia DR2
         else:
-            table_row += r"%0.2f $\pm$ %0.2f" % (star["Plx"], star["e_Plx"])
+            table_row += r"%0.2f $\pm$ %0.2f & " % (star["Plx"], star["e_Plx"])
             #table_row += "\\textit{Gaia}"
-        
-        table_rows.append(table_row + r"\\")
+            
+        # Now do references
+        refs = [star["teff_bib_ref"], star["logg_bib_ref"], 
+                star["feh_bib_ref"], star["vsini_bib_ref"]]
+         
+        for ref in refs:        
+            if ref not in references and ref != "":
+                references.append(ref)
+                ref_i += 1
+            
+            if ref == "":
+                table_row += "-,"
+            else:
+                table_row += "%s," % ref_i
+            
+        # Remove the final comma and append
+        table_rows.append(table_row[:-1] + r"\\")
         
     # Finish the table
-    table_rows.append("\hline")
-    table_rows.append("\end{tabular}")
+    table_rows.append("\\hline")
+    table_rows.append("\\end{tabular}")
+    
+    # Add notes section with references
+    table_rows.append("\\begin{minipage}{\linewidth}")
+    table_rows.append("\\vspace{0.1cm}")
+    
+    table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018}, "
+                      "$^b$SIMBAD, $^c$Tycho \citet{hog_tycho-2_2000}, "
+                      "$^d$2MASS \citet{skrutskie_two_2006} \\\\")
+    table_rows.append(" \\textbf{References for $T_{\\rm eff}$, logg, [Fe/H]"
+                      ", and vsini:}") 
+    
+    for ref_i, ref in enumerate(references):
+        table_rows.append("%i. \\citet{%s}, " % (ref_i+1, ref))
+    
+    # Remove last comma
+    table_rows[-1] = table_rows[-1][:-1]
+    
+    table_rows.append("\\end{minipage}")
+    table_rows.append("\\end{table}")
+    table_rows.append("\\end{landscape}")
     
     # Write the table
     np.savetxt("paper/table_targets.tex", table_rows, fmt="%s")
@@ -354,15 +396,14 @@ def make_table_calibrators(tgt_info, sequences):
     """
     # Column names and associated units
     columns = OrderedDict([("HD", ""),
-                           ("SpT", ""),
-                           ("VTmag", "(mag)"), 
-                           ("Hmag", "(mag)"),
+                           ("SpT$^a$", ""),
+                           ("VTmag$^b$", "(mag)"), 
+                           ("Hmag$^c$", "(mag)"),
                            ("E(B-V)", "(mag)"),
                            ("$\\theta_{\\rm pred}$", "(mas)"),
                            ("$\\theta_{\\rm LD}$ Rel", ""),
                            ("Used", ""),
                            ("Plx", "(mas)"),
-                           ("Mission", ""),
                            ("Target/s", "")])
     
     labels = ["index", "SpT", "VTmag", "Hmag", "Quality", "Target/s"]
@@ -371,6 +412,7 @@ def make_table_calibrators(tgt_info, sequences):
     header = []
     table_rows = []
     footer = []
+    notes = []
     
     # Construct the header of the table
     header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
@@ -423,13 +465,11 @@ def make_table_calibrators(tgt_info, sequences):
         
         # Parallax is not from Gaia DR2
         if np.isnan(star["Plx"]):
-            table_row += r"%0.2f $\pm$ %0.2f &" % (star["Plx_alt"], star["e_Plx_alt"])
-            table_row += "\\textit{Hipparcos} &"
+            table_row += r"%0.2f $\pm$ %0.2f$^b$ &" % (star["Plx_alt"], star["e_Plx_alt"])
         
         # From Gaia DR2
         else:
-            table_row += r"%0.2f $\pm$ %0.2f &" % (star["Plx"], star["e_Plx"])
-            table_row += "\\textit{Gaia} &"        
+            table_row += r"%0.2f $\pm$ %0.2f$^d$ &" % (star["Plx"], star["e_Plx"])    
         
         table_row += ("%s, "*len(scis) % tuple(scis))[:-2]
         
@@ -439,9 +479,22 @@ def make_table_calibrators(tgt_info, sequences):
     footer.append("\hline")
     footer.append("\end{tabular}")
     
+    # Add notes section
+    notes.append("\\begin{minipage}{\linewidth}")
+    notes.append("\\vspace{0.1cm}")
+    
+    notes.append("\\textbf{Notes:} $^a$SIMBAD, "
+                  "$^b$Tycho \citet{hog_tycho-2_2000}, "
+                  "$^c$2MASS \citet{skrutskie_two_2006}, "
+                  "$^d$Gaia \citet{brown_gaia_2018} \\\\")
+    
+    notes.append("\\end{minipage}")
+    notes.append("\\end{table*}")
+    notes.append("\\end{landscape}")
+    
     # Write the tables
-    table_1 = header + table_rows[:62] + footer
-    table_2 = header + table_rows[62:] + footer
+    table_1 = header + table_rows[:60] + footer
+    table_2 = header + table_rows[60:] + footer + notes
     
     np.savetxt("paper/table_calibrators_1.tex", table_1, fmt="%s")
     np.savetxt("paper/table_calibrators_2.tex", table_2, fmt="%s")

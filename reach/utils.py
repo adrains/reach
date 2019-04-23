@@ -97,6 +97,11 @@ def load_target_information(filepath="data/target_info.tsv"):
                                inplace=True)
     tgt_info["Ref_ID_3"].where(tgt_info["Ref_ID_3"].notnull(), None, 
                                inplace=True)
+     
+    # Use empty string for empty references
+    tgt_info["vsini_bib_ref"].where(tgt_info["vsini_bib_ref"].notnull(), "", 
+                                    inplace=True)                           
+                               
     # Return result
     return tgt_info
     
