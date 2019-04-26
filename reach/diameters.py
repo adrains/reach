@@ -213,7 +213,7 @@ def calc_vis2_ls(b_on_lambda, ldd, c_scale, u_lld):
     return c_scale * vis**2
 
 
-def calc_vis2_odr(beta, b_on_lambda):
+def calc_vis2_odr(beta, sfreq):
     """Calculates squared fringe visibility assuming a linearly limb-darkened 
     disk. As outlined in Hanbury Brown et al. 1974: 
      - http://adsabs.harvard.edu/abs/1974MNRAS.167..475H
@@ -225,7 +225,7 @@ def calc_vis2_odr(beta, b_on_lambda):
     beta: tuple
         Tuple containing ldd, c_scale, and u_lld
         
-    b_on_lambda: float or float array
+    sfreq: float or float array
         The projected baseline B (m), divided by the wavelength lambda (m)
         
     Returns
@@ -233,19 +233,64 @@ def calc_vis2_odr(beta, b_on_lambda):
     vis2: float or float array
         Calibrated squared fringe visibility
     """
-    # Unpack
-    ldd, c_scale, u_lld = beta
+    # Unpack beta, whose length depends on how many sequences of data have 
+    # been passed in [ldd, u_lld, c_scale, n_points] where there are n_seq
+    # values of c_scale and n_points.
+    n_seq = (len(beta)-2)//2
     
+    ldd = beta[0]                                   # Limb-darkened diameter
+    u_lld = beta[1]                                 # Limb darkening coeffs
+    c_scale = beta[2:n_seq+2]                       # Intercept/scaling params
+    n_points = np.array(beta[n_seq+2:], dtype=int)  # Num points per vis2 seq
+    
+    # Reformat c_scale and u_lld
+    if len(n_points) > 1:
+        c_array = np.hstack([c_scale[ni]*np.ones(n) 
+                             for ni, n in enumerate(n_points)])
+        
+    # Only one value of c_scale to worry about    
+    else:
+        c_array = c_scale[0] * np.ones(n_points[0])
+        
     # Calculate x and convert ldd to radians (this serves two purposes: making
     # the input/output more human readable, and the fitting function performs
     # better
-    x = np.pi * b_on_lambda * (ldd / 1000 / 3600 / 180 * np.pi)
+    x = np.pi * sfreq * (ldd / 1000 / 3600 / 180 * np.pi)
     
     vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
           ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
     
     # Square visibility and return       
-    return c_scale * vis**2
+    return c_array * vis**2
+         
+
+def format_vis2_data(vis2, e_vis2, baselines, wavelengths, e_wl_frac=0.02,
+                     exclude_bad_data=True):
+    """Given a set of vis2, baseline, and wavelength, and e_wl data, construct
+    flattened arrays of only valid (i.e. non-nan) data to pass to the fitting
+    functions.
+    """
+    # Create and reshape the spatial frequency data
+    n_bl = len(baselines)
+    n_wl = len(wavelengths)
+    bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
+    wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
+    b_on_lambda = (bl_grid / wl_grid).flatten()         
+    
+    # Don't consider bad data during fitting process
+    if exclude_bad_data:
+        valid_i = ((vis2.flatten() >= 0) & (e_vis2.flatten() > 0) 
+                   & (~np.isnan(vis2.flatten())))
+    else:
+        valid_i = np.ones_like(vis2, dtype=int)
+    
+    # Flatten and take only valid data
+    b_on_lambda = b_on_lambda[valid_i]
+    e_b_on_lambda = e_wl_frac * b_on_lambda
+    vis2 = vis2.flatten()[valid_i]
+    e_vis2 = e_vis2.flatten()[valid_i]
+    
+    return b_on_lambda, e_b_on_lambda, vis2, e_vis2
           
           
 def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
@@ -256,6 +301,10 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
     Lambda function per:
      - https://stackoverflow.com/questions/12208634/fitting-only-one-
         parameter-of-a-function-with-many-parameters-in-python
+        
+    ODR per:
+     - https://stackoverflow.com/questions/26058792/correct-fitting-with-
+       scipy-curve-fit-including-errors-in-x
         
     Parameters
     ----------
@@ -285,41 +334,79 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
     pcov: float
         Errors (one standard deviation) oon LDD and C
     """
-    # Baseline/lambda should have dimensions [B,W], where B is the number of 
-    # baselines, and W is the number of wavelengths
-    n_bl = len(baselines)
-    n_wl = len(wavelengths)
-    bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
-    wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
-    b_on_lambda = (bl_grid / wl_grid).flatten()
+    # Two cases here:
+    # 1 - We're fitting multiple sequences, in which case vis2, e_vis2, and 
+    #     baseline vectors will have 3 dimensions [n_seq, n_exp, n_bl]. In this
+    #     case, we need to have a separate C intercept parameter per seq.
+    # 2 - We're fitting to sequences independently, so the same vectors won't
+    #     have the n_seq dimension, and C, whilst still a vector, will only 
+    #     contain a single value.
+    
+    # Case 1: multiple sequences
+    if type(vis2) == list:
+        n_seq = len(vis2)
+        
+        # This will be passed in as a parameter to tell the fitting function
+        # how to reshape the c_scale vector to simultaneously fit to all points
+        n_points = np.zeros(n_seq, dtype=int)
+        
+        # Construct new lists to hold the formatted/flattened results
+        sfreq = []
+        e_sfreq = []
+        fvis2 = []
+        e_fvis2 = []
+        
+        for seq_i in np.arange(0, n_seq):
+            sf, e_sf, v2, e_v2 = format_vis2_data(vis2[seq_i], e_vis2[seq_i], 
+                                                  baselines[seq_i], wavelengths, 
+                                                  e_wl_frac)
+            # Stack to "flatten" the data from multiple sequences                                      
+            sfreq = np.hstack((sfreq, sf))
+            e_sfreq = np.hstack((e_sfreq, e_sf))
+            fvis2 = np.hstack((fvis2, v2))
+            e_fvis2 = np.hstack((e_fvis2, e_v2))
+            
+            n_points[seq_i] = len(sf)
+        
+        n_points = tuple(n_points)
+        
+    # Case 2: single sequence
+    else:
+        n_seq = 1
+    
+        sfreq, e_sfreq, fvis2, e_fvis2 = format_vis2_data(vis2[seq_i], 
+                                                e_vis2[seq_i], baselinesseq_i, 
+                                                wavelengths, e_wl_frac)
+        n_points = (len(sfreq))
     
     # Initial C param
-    c_scale = 1
-    
-    # Don't consider bad data during fitting process
-    valid_i = (vis2.flatten() >= 0) & (e_vis2.flatten() > 0) & (~np.isnan(vis2.flatten()))
+    c_scale = np.ones(n_seq)
     
     # Fit for LDD. The lambda function means that we can fix u_lld and not have
     # to optimise for it too. Loose, but physically realistic bounds on LDD for
     # science targets (LDD cannot be zero else the fitting/formula will fail) 
     if method == "ls":
-        popt, pcov = curve_fit((lambda b_on_lambda, ldd_pred, c_scale: 
-                                calc_vis2_ls(b_on_lambda, ldd_pred, c_scale, 
-                                           u_lld)), 
-                                b_on_lambda[valid_i], vis2.flatten()[valid_i], 
-                                sigma=e_vis2.flatten()[valid_i], 
+        popt, pcov = curve_fit((lambda sfreq, ldd_pred, c_scale: 
+                                calc_vis2_ls(sfreq, ldd_pred, c_scale, u_lld)), 
+                                sfreq, fvis2, sigma=e_fvis2, 
                                 bounds=(0.1, (10, 2)))
 
         return popt, [np.sqrt(np.diag(pcov_i)) for pcov_i in pcov] 
     
-    # Run instead using Orthogonal Distance Regression so we can have 
-    # uncertainties on the wavelength calibration    
+    # Run instead using Orthogonal Distance Regression (ODR) so we can have 
+    # uncertainties on the wavelength calibration. Value of 0 in ifixb fixes
+    # the parameter (in this case u_lld and n_points).
     elif method == "odr":
-        data = RealData(b_on_lambda[valid_i], vis2.flatten()[valid_i], 
-                        e_vis2.flatten()[valid_i], 
-                        e_wl_frac*b_on_lambda[valid_i])
+        data = RealData(sfreq, fvis2, e_sfreq, e_fvis2)
         model = Model(calc_vis2_odr)
-        odr = ODR(data, model, [ldd_pred, c_scale, u_lld], ifixb=[1,1,0])
+        
+        # Construct coefficient vector, which requires "unpacking" all params
+        # into a single 1D vector. Have order: [ldd, u_lld, c_scale, n_points]
+        params = [ldd_pred] + [u_lld] + list(c_scale) + list(n_points)
+        ifixb = np.hstack(([1], [1], np.ones_like(c_scale),
+                           np.zeros_like(n_points)))
+        
+        odr = ODR(data, model, params, ifixb=ifixb)
         odr.set_job(fit_type=2)
         output = odr.run()   
         
@@ -372,14 +459,26 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
                                  u_lld[id], 
                                  sci_data[pred_ldd_col].values[0], 
                                  method=method)
-        print("...fit successful")
         
-        # Extract parameters from fit
+        # Extract parameters from fit. Parameters are ordered as follows, where
+        # n is the number of sequences [LDD, u_lld, C_n, N_n]
+        # Expectation is that this will break for the least-squares method, but
+        # can fix here if that is needed again.
+        n_seq = (len(popt)-2)//2
+        
         ldd_opt = popt[0]
-        c_scale = popt[1]
-    
         e_ldd_opt = pstd[0]
-        e_c_scale = pstd[1]
+        
+        #u_lld = popt[1]     # Constant, so don't need
+        #e_u_lld = pstd[1]   # Constant, so don't need
+        
+        c_scale = popt[2:n_seq+2]
+        e_c_scale = pstd[2:n_seq+2]
+        
+        #n_points = np.array(popt[n_seq+2:], dtype=int) # Constant, don't need
+        
+        print("...fit successful for %i seq, LDD=%0.2f, C=%s" 
+              % (n_seq, ldd_opt, c_scale))
         
         successful_fits[sci] = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]                          
             
@@ -529,29 +628,6 @@ def extract_vis2(oi_fits_file):
             flags.append(flags_obs[order])
             baselines.append(baselines_obs[order])
             
-            """
-            if (len(mjds)==0 and len(pairs)==0 and len(vis2)==0 
-                and len(e_vis2)==0 and len(flags)==0 and len(baselines)==0):
-                # Arrays are empty
-                mjds = mjds_obs[order]
-                pairs = pairs_obs[order]
-                vis2 = vis2_obs[order]
-                e_vis2 = e_vis2_obs[order]
-                flags = flags_obs[order]
-                baselines = baselines_obs[order]
-                #wavelengths = oifits[2].data["EFF_WAVE"]
-                
-            else:
-                # Not empty, stack
-                mjds = np.hstack((mjds, mjds_obs[order]))
-                pairs = np.hstack((pairs, pairs_obs[order]))
-                vis2 = np.vstack((vis2, vis2_obs[order]))
-                e_vis2 = np.vstack((e_vis2, e_vis2_obs[order]))
-                flags = np.vstack((flags, flags_obs[order]))
-                baselines = np.hstack((baselines, baselines_obs[order]))
-                #wavelengths = np.vstack((wavelengths, 
-                                         #oifits[2].data["EFF_WAVE"])
-            """
         # Assume that we'll always be using same wavelength mode within a night      
         wavelengths = oifits[2].data["EFF_WAVE"]
     
@@ -636,21 +712,22 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
                 night = oifits.split("/")[-1].split("_SCI")[0]
             
                 faint_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
-                                                       dates_obs["f_night"]==night)]
+                                                dates_obs["f_night"]==night)]
             
                 bright_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
-                                                       dates_obs["b_night"]==night)]
+                                                dates_obs["b_night"]==night)]
                 
                 # If returning both a faint and bright entry, need to define 
                 # which is which - create a tuple of form (id, seq, period)                                
                 if len(bright_entry) > 0 and len(faint_entry) > 0:
                     # Bright
-                    
                     if seq_i == bright_entry["b_order"].values[0]:
-                        seq_id = (sci, "bright", bright_entry["period"].values[0])
+                        seq_id = (sci, "bright", 
+                                  bright_entry["period"].values[0])
                     
                     elif seq_i == faint_entry["f_order"].values[0]:
-                        seq_id = (sci, "faint", faint_entry["period"].values[0])
+                        seq_id = (sci, "faint", 
+                                  faint_entry["period"].values[0])
                                     
                 elif len(bright_entry) > 0 and len(faint_entry) == 0:
                     seq_id = (sci, "bright", bright_entry["period"].values[0])
@@ -673,15 +750,21 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
             
             else:
                 all_mjds[seq_id] = np.hstack((all_mjds[seq_id], mjds[seq_i]))
-                all_tel_pairs[seq_id] = np.hstack((all_tel_pairs[seq_id], pairs[seq_i]))
-                all_vis2[seq_id] = np.vstack((all_vis2[seq_id], vis2[seq_i]))
-                all_e_vis2[seq_id] = np.vstack((all_e_vis2[seq_id], e_vis2[seq_i]))
-                all_flags[seq_id] = np.vstack((all_flags[seq_id], flags[seq_i]))
-                all_baselines[seq_id] = np.hstack((all_baselines[seq_id], baselines[seq_i]))
-                all_wavelengths[seq_id] = wavelengths # Fix if bootstrapping over this
+                all_tel_pairs[seq_id] = np.hstack((all_tel_pairs[seq_id], 
+                                                   pairs[seq_i]))
+                all_vis2[seq_id] = np.vstack((all_vis2[seq_id], 
+                                              vis2[seq_i]))
+                all_e_vis2[seq_id] = np.vstack((all_e_vis2[seq_id], 
+                                                e_vis2[seq_i]))
+                all_flags[seq_id] = np.vstack((all_flags[seq_id], 
+                                               flags[seq_i]))
+                all_baselines[seq_id] = np.hstack((all_baselines[seq_id], 
+                                                   baselines[seq_i]))
+                all_wavelengths[seq_id] = wavelengths 
                                                    
     return all_mjds, all_tel_pairs, all_vis2, all_e_vis2, all_flags, \
            all_baselines, all_wavelengths
+    
     
 # -----------------------------------------------------------------------------
 # Limb darkening coefficients
@@ -939,7 +1022,8 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
         mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             collate_vis2_from_file(results_path, bs_i, separate_sequences)
         
-        # If doing combined fit, combine (i.e. stack) data from the same star
+        # If doing combined fit, combine (stack in new dimension) data from the 
+        # same star
         if combined_fit:
             # Combine like stars, add to dict, pop old values 
             sequence_ids = mjds.keys()
@@ -948,24 +1032,24 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
             for seq_id in sequence_ids:
                 star = seq_id[0]
                 
-                # Create new dict entry
+                # Create new dict entry, make 
                 if star not in mjds:
-                    mjds[star] = mjds[seq_id]
-                    pairs[star] = pairs[seq_id]
-                    vis2[star] = vis2[seq_id]
-                    e_vis2[star] = e_vis2[seq_id]
-                    flags[star] = flags[seq_id]
-                    baselines[star] = baselines[seq_id]
+                    mjds[star] = [mjds[seq_id]]
+                    pairs[star] = [pairs[seq_id]]
+                    vis2[star] = [vis2[seq_id]]
+                    e_vis2[star] = [e_vis2[seq_id]]
+                    flags[star] = [flags[seq_id]]
+                    baselines[star] = [baselines[seq_id]]
                     wavelengths[star] = wavelengths[seq_id]
                 
                 # Append to old dict entry, don't stack wl dimension
                 else:
-                    mjds[star] = np.hstack((mjds[star], mjds[seq_id]))
-                    pairs[star] = np.hstack((pairs[star], pairs[seq_id]))
-                    vis2[star] = np.vstack((vis2[star], vis2[seq_id]))
-                    e_vis2[star] = np.vstack((e_vis2[star], e_vis2[seq_id]))
-                    flags[star] = np.vstack((flags[star], flags[seq_id]))
-                    baselines[star] = np.hstack((baselines[star], baselines[seq_id]))
+                    mjds[star].append(mjds[seq_id])
+                    pairs[star].append(pairs[seq_id])
+                    vis2[star].append(vis2[seq_id])
+                    e_vis2[star].append(e_vis2[seq_id])
+                    flags[star].append(flags[seq_id])
+                    baselines[star].append(baselines[seq_id])
                     #wavelengths[star] = np.hstack((pairs[star], pairs[seq_id]))
                     
                 # Regardless of what happened, pop old keys
@@ -982,24 +1066,29 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col, n_u_lld.iloc[bs_i])  
         
-        
-                          
+        # Fitting done, no need to have the vis2 results separate anymore                 
         # Populate
         for star in mjds.keys():
-            bs_results[star]["MJD"][bs_i] = mjds[star]
-            bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
-            bs_results[star]["VIS2"][bs_i] = vis2[star]
-            #bs_results[star]["e_VIS2"][bs_i] = e_vis2[star]
-            bs_results[star]["FLAG"][bs_i] = flags[star]
-            bs_results[star]["BASELINE"][bs_i] = baselines[star]
-            bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
-            bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
-            bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
-
+            if combined_fit:
+                bs_results[star]["MJD"][bs_i] = np.hstack(mjds[star])
+                bs_results[star]["TEL_PAIR"][bs_i] = np.hstack(pairs[star])
+                bs_results[star]["VIS2"][bs_i] = np.vstack(vis2[star])
+                bs_results[star]["FLAG"][bs_i] = np.vstack(flags[star])
+                bs_results[star]["BASELINE"][bs_i] = np.hstack(baselines[star])
+                bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
+                bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
+                bs_results[star]["C_SCALE"][bs_i] = np.vstack(ldd_fits[star][2])
             
-            #bs_results[star]["LDD_PRED"][bs_i] = ldd_fits[star][2]
-            #bs_results[star]["e_LDD_PRED"][bs_i] = ldd_fits[star][3]
-            #bs_results[star]["u_LLD"][bs_i] = ldd_fits[star][4]
+            else:
+                bs_results[star]["MJD"][bs_i] = mjds[star]
+                bs_results[star]["TEL_PAIR"][bs_i] = pairs[star]
+                bs_results[star]["VIS2"][bs_i] = vis2[star]
+                bs_results[star]["FLAG"][bs_i] = flags[star]
+                bs_results[star]["BASELINE"][bs_i] = baselines[star]
+                bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
+                bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
+                bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
+
     
     # A minority of bootstraps result in a different number of observed 
     # baseline/vis2 measurements, which cannot be stacked to produce vis2 
