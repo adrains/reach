@@ -374,9 +374,9 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
     else:
         n_seq = 1
     
-        sfreq, e_sfreq, fvis2, e_fvis2 = format_vis2_data(vis2[seq_i], 
-                                                e_vis2[seq_i], baselinesseq_i, 
-                                                wavelengths, e_wl_frac)
+        sfreq, e_sfreq, fvis2, e_fvis2 = format_vis2_data(vis2, e_vis2, 
+                                                baselines, wavelengths, 
+                                                e_wl_frac)
         n_points = (len(sfreq))
     
     # Initial C param
@@ -402,9 +402,14 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
         
         # Construct coefficient vector, which requires "unpacking" all params
         # into a single 1D vector. Have order: [ldd, u_lld, c_scale, n_points]
-        params = [ldd_pred] + [u_lld] + list(c_scale) + list(n_points)
-        ifixb = np.hstack(([1], [1], np.ones_like(c_scale),
-                           np.zeros_like(n_points)))
+        if n_seq == 1:
+            params = [ldd_pred] + [u_lld] + [c_scale] + [n_points]
+            ifixb = [1, 0, 1, 0]
+        
+        else:
+            params = [ldd_pred] + [u_lld] + list(c_scale) + list(n_points)
+            ifixb = np.hstack(([1], [0], np.ones_like(c_scale),
+                            np.zeros_like(n_points)))
         
         odr = ODR(data, model, params, ifixb=ifixb)
         odr.set_job(fit_type=2)
@@ -1198,14 +1203,27 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
         results.iloc[star_i]["e_LDD_PRED"] = tgt_info.loc[pid, e_pred_ldd_col]   
         results.iloc[star_i]["u_LLD"] = tgt_info.loc[pid, "u_lld"]    
         
-        results.iloc[star_i]["C_SCALE"] = \
-            np.nanmean(np.hstack(bs_results[star]["C_SCALE"]), axis=0)
+        # Combined seq case
+        if len(bs_results[star]["C_SCALE"][0]) > 1:
+            results.iloc[star_i]["C_SCALE"] = \
+                np.nanmean(np.hstack(bs_results[star]["C_SCALE"]), axis=1)
+     
+            results.iloc[star_i]["e_C_SCALE"] = \
+                np.nanstd(np.hstack(bs_results[star]["C_SCALE"]), axis=1) 
+                  
+        # Split seq case
+        else:
+            results.iloc[star_i]["C_SCALE"] = \
+                np.nanmean(np.vstack(bs_results[star]["C_SCALE"]), axis=0)
+     
+            results.iloc[star_i]["e_C_SCALE"] = \
+                np.nanstd(np.vstack(bs_results[star]["C_SCALE"]), axis=0)   
         
         # Print some simple diagnostics                
         sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]
                            / results.iloc[star_i]["LDD_FIT"]) * 100
            
-        print("%-12s\tLDD = %f +/- %f (%0.2f%%), C=%0.2f" 
+        print("%-12s\tLDD = %f +/- %f (%0.2f%%), C=%s" 
               % (star, results.iloc[star_i]["LDD_FIT"], 
                  results.iloc[star_i]["e_LDD_FIT"], sci_percent_fit, 
                  results.iloc[star_i]["C_SCALE"]))
