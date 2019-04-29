@@ -66,7 +66,9 @@ def summarise_sequences():
     return sequences
     
     
-def load_target_information(filepath="data/target_info.tsv"):
+def load_target_information(filepath="data/target_info.tsv", 
+                            assign_default_uncertainties=True, def_e_logg=0.2,
+                            def_e_teff=100, def_e_feh=0.1):
     """Loads in the target information tsv (tab separated) as a pandas 
     dataframne with appropriate column labels and rows labelled as each star.
     
@@ -101,6 +103,24 @@ def load_target_information(filepath="data/target_info.tsv"):
     # Use empty string for empty references
     tgt_info["vsini_bib_ref"].where(tgt_info["vsini_bib_ref"].notnull(), "", 
                                     inplace=True)                           
+    
+    # Assign default uncertainties
+    if assign_default_uncertainties:
+        # logg
+        logg_mask = np.logical_and(np.isnan(tgt_info["e_logg"]), 
+                                   tgt_info["Science"])
+        tgt_info["e_logg"].where(~logg_mask, def_e_logg, inplace=True)
+        
+        # Teff
+        teff_mask = np.logical_and(np.isnan(tgt_info["e_teff"]), 
+                                   tgt_info["Science"])
+        tgt_info["e_teff"].where(~teff_mask, def_e_teff, inplace=True)     
+        
+        # [Fe/H]
+        feh_mask = np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
+                                  tgt_info["Science"])
+        tgt_info["e_FeH_rel"].where(~feh_mask, def_e_feh, inplace=True)    
+    
                                
     # Return result
     return tgt_info

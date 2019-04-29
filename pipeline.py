@@ -104,6 +104,7 @@ already_calibrated = False
 do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
+assign_default_uncertainties = True
 n_bootstraps = 1000
 pred_ldd_col = "LDD_pred"
 e_pred_ldd_col = "e_LDD_pred"
@@ -127,7 +128,7 @@ print("<i>Strap in</i> for bootstrapping.")
 # -----------------------------------------------------------------------------
 # Targets information is loaded into a pandas dataframe, with column labels for
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
-tgt_info = rutils.initialise_tgt_info()
+tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties=True)
 
 # Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
 n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps, 
@@ -142,6 +143,7 @@ n_u_lld = rdiam.get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, "H")
 
 # Save these distributions
 n_pred_ldd.to_csv(results_path + "n_pred_ldd.csv", index=False) 
+e_pred_ldd.to_csv(results_path + "e_pred_ldd.csv", index=False) 
 n_logg.to_csv(results_path + "n_logg.csv", index=False) 
 n_teff.to_csv(results_path + "n_teff.csv", index=False) 
 n_feh.to_csv(results_path + "n_feh.csv", index=False) 

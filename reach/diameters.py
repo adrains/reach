@@ -820,6 +820,13 @@ def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
     # Interpolate along logg and Teff for all entries for filter
     calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
     
+    # Calculate and return
+    n_u_lld = calc_u(n_logg, n_teff, n_feh)
+    
+    return n_u_lld
+    
+    
+    """
     # Compute u_lld for every star
     ids = n_teff.columns.values
     
@@ -833,9 +840,9 @@ def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
     
     # Return the results    
     return n_u_lld
-    
+    """
 
-def sample_equivalent_lld_coeff(tgt_info, n_bootstraps):
+def sample_lld_coeff(n_logg, n_teff, n_feh):
     """
     
     For every science target, sample linear u_lambda N times, where u_lambda is
@@ -843,14 +850,42 @@ def sample_equivalent_lld_coeff(tgt_info, n_bootstraps):
     PIONIER. u_lambda in this case is the equivalent linear term for the 4
     parameter law giving the same side-lobe height, and comes with a scaling
     parameter to scale the resulting LDD.
+    
+    Uses multi-dimensional pandas dataframe per:
+        https://stackoverflow.com/questions/46884648/storing-3-dimensional-
+        data-in-pandas-dataframe
+        
+    This 3D pandas dataframe will have the structure:
+        [star, [bs_i, teff, logg, feh, u_lld_1, u_lld_2, u_lld_3, u_lld_4, 
+                u_lld_5, u_lld_6, u_scale]]
     """
+    # For now just test without Stagger params
+    if True:
+        # Get the H band linear coefficient
+        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
+        
+        # Stack x6 (+1) for each wavelength dimension
+        n_u_lld = np.tile(n_u_lld, 7).reshape(7, len(n_logg)).T
+        
+        # Add a set of scaling coefficients (just ones)
+        n_u_lld[:,6] = np.ones(len(n_logg))
+    
+    else:
+        pass
+        
+    return n_u_lld
+    
+    
     # Initialise data structure to hold the results. It should have dimensions
     # [n_star, n_bootstraps, n_wavelengths, n_wavelengths] where the final two
     # dimensions correspond to u_lambda, and s_lambda (scaling parameter).
+    
+    
     pass
     
     # For every star, sample u_lambda and s_lambda
-    for star, star_data in tgt_info[tgt_info["Science"]].itterows():
+    """
+    for param_i in :
         # If the target is out of the grid, fill the grid with standard linear
         # (i.e. non-equivalent) u_lambda, and s_lambda = 1
         if not rstgr.in_grid_bounds(teff, logg):
@@ -865,7 +900,7 @@ def sample_equivalent_lld_coeff(tgt_info, n_bootstraps):
                                    1)
                               
     return u_lambda, s_lambda
-
+    """
 
 def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred", 
                       e_pred_ldd_col="e_LDD_pred",

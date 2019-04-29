@@ -3,6 +3,7 @@
 from __future__ import division, print_function
 import numpy as np
 import pandas as pd
+import reach.diameters as rdiam
 
 def sample_stellar_params(tgt_info, n_samples):
     """Sample stellar parameters for use with the bolometric correction code
@@ -78,6 +79,60 @@ def sample_stellar_params_pd(tgt_info, n_bootstraps,
                                       n_bootstraps)                                             
     return n_logg, n_teff, n_feh 
 
+
+def sample_parameters(tgt_info, n_bootstraps):
+    """Sample stellar parameters (teff, logg, feh) and derived parameters 
+    (u_lambda, s_lambda) N times and save in a single datastructure. The result
+    is a 3D pandas dataframe, with N frames of:
+        [star, logg, teff, feh, u_elc 1-6, s_lambda, u_ftc 1-6]
+        
+    This 3D pandas dataframe will have the structure:
+        [star, [bs_i, logg, teff, feh, u_lld_1, u_lld_2, u_lld_3, u_lld_4, 
+                u_lld_5, u_lld_6, u_scale]]
+    """
+    # Get the science target IDs - these will be the rows/index column
+    ids = tgt_info[tgt_info["Science"]].index.values
+    
+    u_elc_cols = ["u_elc_%i" % ui for ui in np.arange(0,6)]
+    #u_ftc_cols = ["u_ftc_%i" % ui for ui in np.arange(0,6)]
+    cols = ["logg", "teff", "feh"] + u_elc_cols + ["s_lambda"]
+    
+    # Initialise list that will hold all frames until we combine at the end
+    frames = []
+    
+    #data = np.zeros( (len(ids), n_bootstraps , len(cols)) )
+    
+    for id_i, id in enumerate(ids):
+        # Initialise
+        data = np.zeros( (n_bootstraps , len(cols)) )
+        
+        # Sample stellar parameters
+        n_logg = np.random.normal(tgt_info.loc[id, "logg"],
+                                          tgt_info.loc[id, "e_logg"],
+                                          n_bootstraps)
+        n_teff = np.random.normal(tgt_info.loc[id, "Teff"],
+                                          tgt_info.loc[id, "e_teff"],
+                                          n_bootstraps)
+        n_feh = np.random.normal(tgt_info.loc[id, "FeH_rel"],
+                                          tgt_info.loc[id, "e_FeH_rel"],
+                                          n_bootstraps)
+                                          
+        # Sample equivalent linear coefficients + scaling parameter
+        n_u_lambda = rdiam.sample_lld_coeff(n_logg, n_teff, n_feh)
+        
+        # Assemble
+        data[:, 0] = n_logg
+        data[:, 1] = n_teff
+        data[:, 2] = n_feh
+        data[:, 3:] = n_u_lambda
+        
+        frames.append(pd.DataFrame(data, columns=cols))
+    
+    # Construct hierarchical dataframe
+    sampled_sci_params = pd.concat(frames, keys=ids)
+        
+    return sampled_sci_params
+    
 
 def save_params(tgt_info):
     """Save parameters to a text file with uncertainties
