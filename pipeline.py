@@ -85,7 +85,6 @@ import reach.photometry as rphot
 import reach.pndrs as rpndrs
 import reach.utils as rutils
 import reach.parameters as rparam
-import pickle
 import platform
 from sys import exit
 
@@ -136,18 +135,8 @@ n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps,
                                                  do_gaussian_diam_sampling)
                                                  
 # Sample stellar parameters
-n_logg, n_teff, n_feh = rparam.sample_stellar_params_pd(tgt_info, n_bootstraps)
-
-# Use sampled stellar parameters to obtain limb darkening coefficients
-n_u_lld = rdiam.get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, "H")
-
-# Save these distributions
-n_pred_ldd.to_csv(results_path + "n_pred_ldd.csv", index=False) 
-e_pred_ldd.to_csv(results_path + "e_pred_ldd.csv", index=False) 
-n_logg.to_csv(results_path + "n_logg.csv", index=False) 
-n_teff.to_csv(results_path + "n_teff.csv", index=False) 
-n_feh.to_csv(results_path + "n_feh.csv", index=False) 
-n_u_lld.to_csv(results_path + "n_u_lld.csv", index=False) 
+sampled_sci_params = rparam.sample_parameters(tgt_info, n_bootstraps)
+rutils.save_sampled_params(sampled_sci_params, results_path)
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
@@ -163,6 +152,10 @@ complete_sequences.pop((102, 'delEri', 'bright'))
 sequences.pop((102, 'gamPav', 'faint'))
 sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
+
+# Don't care about distant RGB
+sequences.pop((99, "HD187289", "faint")
+sequences.pop((99, "HD187289", "bright")
 
 # -----------------------------------------------------------------------------
 # (6) Inspect reduced data

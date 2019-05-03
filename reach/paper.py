@@ -14,12 +14,19 @@ def make_table_final_results(tgt_info):
     """
     columns = OrderedDict([("Star", ""),
                            #("HD", ""),
-                           ("u", ""),
+                           (r"u$_\lambda$", ""),
+                           (r"s$_\lambda$", ""),
                            (r"$\theta_{\rm LD}$", "(mas)"),
                            (r"R", "($R_\odot$)"), 
                            (r"f$_{\rm bol}$", r"(ergs s$^{-1}$ cm $^{-2}$)"),
                            (r"T$_{\rm eff}$", "(K)"),
                            ("L", ("($L_\odot$)"))])
+    
+    # Get the limb darkening and scaling parameters
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_u_lambda_cols = ["e_u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_s_lambda_cols = ["e_s_lambda_%i" % ui for ui in np.arange(0,6)]
                            
     header = []
     table_rows = []
@@ -43,7 +50,8 @@ def make_table_final_results(tgt_info):
         
         # Step through column by column
         table_row += "%s & " % row["Primary"]
-        table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
+        table_row += ".. & "
+        #table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
         table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
         table_row += r"%0.3E $\pm$ %0.3E &" % (row["f_bol_final"], row["e_f_bol_final"])

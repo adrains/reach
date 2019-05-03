@@ -14,7 +14,12 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
+# -----------------------------------------------------------------------------
+# Setup & Loading
+# -----------------------------------------------------------------------------
+combined_fit = True
 load_saved_results = False
+assign_default_uncertainties = True
 n_bootstraps = 1000
 results_folder = "19-03-26_i1000"
 #results_path = "/home/arains/code/reach/results/%s/" % results_folder
@@ -27,12 +32,7 @@ tgt_info = rutils.initialise_tgt_info()
 complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Load in distributions
-n_pred_ldd = pd.read_csv(results_path + "n_pred_ldd.csv") 
-e_pred_ldd = pd.read_csv(results_path + "e_pred_ldd.csv") 
-n_logg = pd.read_csv(results_path + "n_logg.csv") 
-n_teff = pd.read_csv(results_path + "n_teff.csv") 
-n_feh = pd.read_csv(results_path + "n_feh.csv") 
-n_u_lld = pd.read_csv(results_path + "n_u_lld.csv") 
+sampled_sci_params = rutils.load_sampled_params(results_folder)
 
 # Currently broken, don't consider
 complete_sequences.pop((102, 'delEri', 'bright'))
@@ -42,10 +42,12 @@ sequences.pop((102, 'gamPav', 'faint'))
 sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
 
-# Determine u_lld from its distribution
-tgt_info.loc[n_u_lld.columns.values, "u_lld"] = n_u_lld.mean().values
-tgt_info.loc[n_u_lld.columns.values, "e_u_lld"] = n_u_lld.std().values
+# Combine sampled u_lambda and s_lambda
+rparam.combine_u_s_lambda(tgt_info, sampled_sci_params)
 
+# -----------------------------------------------------------------------------
+# Fitting (or loading existing results)
+# -----------------------------------------------------------------------------
 # Collate bootstrapped results
 if load_saved_results:
     print("Loading saved results...")
@@ -58,13 +60,21 @@ if load_saved_results:
 
 else:
     # Get results
-    print("Getting results of bootstrapping...")
-    bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, results_path,
-                                         n_u_lld) 
+    print("Getting results of bootstrapping for %s bootstraps..." 
+          % n_bootstraps)
+    bs_results = rdiam.collate_bootstrapping(tgt_info, n_bootstraps, 
+                                            results_path, sampled_sci_params, 
+                                            combined_fit=combined_fit) 
 
     # Summarise results
-    results = rdiam.summarise_bootstrapping(bs_results, tgt_info)
+    results = rdiam.summarise_results(bs_results, tgt_info)
+    
+    # Save results
+    rutils.save_results(bs_results, results, results_folder)
 
+# -----------------------------------------------------------------------------
+# Parameter Determination
+# -----------------------------------------------------------------------------
 print("Determining fundamental parameters...")
 
 # Combine angular diameter measurements
@@ -82,6 +92,9 @@ rparam.calc_all_teff(tgt_info, 10000)
 # Compute luminosity
 rparam.calc_all_L_bol(tgt_info, 10000)
 
+# -----------------------------------------------------------------------------
+# Table generation and plotting
+# -----------------------------------------------------------------------------
 # Generate tables
 print("Generating tables...")
 rpaper.make_table_targets(tgt_info)

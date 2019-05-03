@@ -372,9 +372,36 @@ def deredden_photometry(ext_mag, ext_mag_err, filter_eff_lambda, a_v, r_v=3.1):
     return a_mags
     
 # -----------------------------------------------------------------------------
-# 
-# -----------------------------------------------------------------------------    
-def compute_all_photometry(tgt_info):
+# Other
+# -----------------------------------------------------------------------------
+def inspect_dr_photometry(tgt_info):
+    """Diagnostic function to inspect for issues with reddening/diameters. WIP. 
     """
-    """
-    pass
+    print("%7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s" %
+          ("ID", "B_a_mag", "V_a_mag", "J_a_mag", "H_a_mag", "K_a_mag", "Flag",
+           "Dist", "LDD (V-K)", "LDD (V-W3)", "ID"))
+    
+    num_flagged = 0
+    
+    for star, row in tgt_info.iterrows():
+        b_a_mag = row["Bmag"] - row["Bmag_dr"]
+        v_a_mag = row["Vmag"] - row["Vmag_dr"]
+        j_a_mag = row["Jmag"] - row["Jmag_dr"]
+        h_a_mag = row["Hmag"] - row["Hmag_dr"]
+        k_a_mag = row["Kmag"] - row["Kmag_dr"]
+        primary = row["Primary"]
+        vk_ldd = row["LDD_VK_dr"]
+        vw3_ldd = row["LDD_VW3_dr"]
+        flag = ""
+        dist = row["Dist"]
+        
+        if np.max(np.abs([v_a_mag, j_a_mag, h_a_mag, k_a_mag])) > 0.1:
+            flag = "***"
+            num_flagged += 1
+        
+        print(("%8s \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %7s \t"
+               "%4.2f \t %5.3f \t %5.3f \t %s") 
+                % (star, b_a_mag, v_a_mag, j_a_mag, h_a_mag, k_a_mag, flag, 
+                   dist, vk_ldd, vw3_ldd, primary))
+                       
+    print("\nFlagged Stars: %i/%i" % (num_flagged, len(tgt_info)))

@@ -68,7 +68,8 @@ def summarise_sequences():
     
 def load_target_information(filepath="data/target_info.tsv", 
                             assign_default_uncertainties=True, def_e_logg=0.2,
-                            def_e_teff=100, def_e_feh=0.1):
+                            def_e_teff=100, def_e_feh=0.1, 
+                            remove_unused_targets=False):
     """Loads in the target information tsv (tab separated) as a pandas 
     dataframne with appropriate column labels and rows labelled as each star.
     
@@ -121,6 +122,9 @@ def load_target_information(filepath="data/target_info.tsv",
                                   tgt_info["Science"])
         tgt_info["e_FeH_rel"].where(~feh_mask, def_e_feh, inplace=True)    
     
+    # Remove any targets not used
+    if remove_unused_targets:
+        tgt_info = tgt_info[tgt_info["in_paper"]]
                                
     # Return result
     return tgt_info
@@ -261,7 +265,7 @@ def initialise_tgt_info():
     """
     """
     # Import the base target info sans calculations
-    tgt_info = load_target_information()
+    tgt_info = load_target_information(assign_default_uncertainties=True)
 
     # Calculate distances and distance errors
     compute_dist(tgt_info)
@@ -373,6 +377,18 @@ def load_sequence_logs():
     
     return complete_sequences, sequences
     
+    
+def save_results(bs_results, results, folder):
+    """
+    """
+    pkl_bs_results = open("results/%s/bs_results.pkl" % folder, "wb")
+    pickle.dump(bs_results, pkl_bs_results)
+    pkl_bs_results.close()
+
+    pkl_results = open("results/%s/results.pkl" % folder, "wb")
+    pickle.dump(results, pkl_results)
+    pkl_results.close()
+
 
 def load_results(folder):
     """
@@ -386,3 +402,19 @@ def load_results(folder):
     pkl_results.close()
     
     return bs_results, results    
+    
+def save_sampled_params(sampled_params, folder):
+    """
+    """
+    pkl_params = open("results/%s/sampled_params.pkl" % folder, "wb")
+    pickle.dump(sampled_params, pkl_params)
+    pkl_params.close()
+    
+def load_sampled_params(folder):
+    """
+    """
+    pkl_params = open("results/%s/sampled_params.pkl" % folder, "r")
+    sampled_params = pickle.load(pkl_params)
+    pkl_params.close()    
+    
+    return sampled_params

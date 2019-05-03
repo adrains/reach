@@ -5,7 +5,6 @@ import os
 import glob
 import numpy as np
 import pandas as pd
-import reach.stagger as rstgr
 import matplotlib.pylab as plt
 from collections import Counter
 from astropy.io import fits
@@ -13,7 +12,6 @@ from scipy.special import jv
 from scipy.optimize import curve_fit
 from scipy.interpolate import LinearNDInterpolator
 from scipy.odr import ODR, Model, Data, RealData
-
 
 class UnknownOIFitsFileFormat(Exception):
     pass
@@ -234,17 +232,25 @@ def calc_vis2_odr(beta, sfreq):
         Calibrated squared fringe visibility
     """
     # Unpack beta, whose length depends on how many sequences of data have 
-    # been passed in [ldd, u_lld, c_scale, n_points] where there are n_seq
+    # been passed in [ldd, u_lld, s_lambda, c_scale, n_points] where there is 
+    # a single value of ldd, 6 values for each of u_lld and s_lambda, and n_seq
     # values of c_scale and n_points.
-    n_seq = (len(beta)-2)//2
+    n_seq = (len(beta) - 2*len(sfreq) - 1)//2
     
-    ldd = beta[0]                                   # Limb-darkened diameter
-    u_lld = beta[1]                                 # Limb darkening coeffs
-    c_scale = beta[2:n_seq+2]                       # Intercept/scaling params
-    n_points = np.array(beta[n_seq+2:], dtype=int)  # Num points per vis2 seq
+    ldd = beta[0]                                  # Limb-darkened diameter
+    c_scale = beta[1:n_seq+1]                      # Intercept
+    n_points = np.array(beta[n_seq+1:2*n_seq+1], dtype=int) # Points/vis2 seq
+    u_lambda = beta[-2*len(sfreq):-len(sfreq)]        # Limb darkening coeffs
+    s_lambda = beta[-len(sfreq):]                  # LDD scaling parameter
     
-    # Reformat c_scale and u_lld
+    # Reformat c_scale
     if len(n_points) > 1:
+        # There is one intercept parameter for set of data, so we create an
+        # array equal to the total number of points, but this array has n_seq
+        # different c_scale values within it mapped to those points.
+        # e.g. for a standard bright/faint sequence, we'll have an array of
+        # length 144, but with the first 72 entries being c_scale[0] and the
+        # final 72 entries being c_scale[1].
         c_array = np.hstack([c_scale[ni]*np.ones(n) 
                              for ni, n in enumerate(n_points)])
         
@@ -255,45 +261,68 @@ def calc_vis2_odr(beta, sfreq):
     # Calculate x and convert ldd to radians (this serves two purposes: making
     # the input/output more human readable, and the fitting function performs
     # better
-    x = np.pi * sfreq * (ldd / 1000 / 3600 / 180 * np.pi)
+    x = np.pi * sfreq * (ldd / 1000 / 3600 / 180 * np.pi) * s_lambda
     
-    vis = (((1 - u_lld)/2 + u_lld/3)**-1 * 
-          ((1 - u_lld)*jv(1,x)/x + u_lld*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
+    vis = (((1 - u_lambda)/2 + u_lambda/3)**-1 * 
+          ((1 - u_lambda)*jv(1,x)/x + u_lambda*(np.pi/2)**0.5 * jv(3/2,x)/x**(3/2)))
     
     # Square visibility and return       
     return c_array * vis**2
          
 
-def format_vis2_data(vis2, e_vis2, baselines, wavelengths, e_wl_frac=0.02,
-                     exclude_bad_data=True):
+def format_vis2_data(vis2, e_vis2, baselines, wavelengths, e_wl_frac,
+                     u_lambda_6, s_lambda_6):
     """Given a set of vis2, baseline, and wavelength, and e_wl data, construct
     flattened arrays of only valid (i.e. non-nan) data to pass to the fitting
     functions.
+    
+    To allow for using different limb-darkening coefficients for each 
+    wavelength channel, we can't lose track of the wavelength channels. That 
+    is, initially, all arrays will be divisble by 6 (the number of wavelength
+    channels), and if we exclude bad data without keeping track of this, we
+    won't be able to do the fit properly. The (dodgy) solution is to renove the
+    bad data from the vis2, e_vis2, and e_sfreq vectors, but put nans in the 
+    corresponding sfreq vector which will be used during the fit to remove the
+    correct corresponding wavelength channels. Not ideal, but simplest solution
+    given the current implementation.
     """
     # Create and reshape the spatial frequency data
     n_bl = len(baselines)
     n_wl = len(wavelengths)
     bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
     wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
-    b_on_lambda = (bl_grid / wl_grid).flatten()         
+    sfreq = (bl_grid / wl_grid).flatten()         
+    
+    # Flatten
+    e_sfreq = e_wl_frac * sfreq
+    vis2 = vis2.flatten()
+    e_vis2 = e_vis2.flatten()
+    
+    # The total number of points should always be divisible by 6 (the number
+    # of wavelength channels, so for u_lld and s_lambda simply tile them by 
+    # the number of baselines observed
+    n_bl = len(sfreq) // 6
+    u_lambda = np.tile(u_lambda_6, n_bl)
+    s_lambda = np.tile(s_lambda_6, n_bl)
     
     # Don't consider bad data during fitting process
-    if exclude_bad_data:
-        valid_i = ((vis2.flatten() >= 0) & (e_vis2.flatten() > 0) 
-                   & (~np.isnan(vis2.flatten())))
-    else:
-        valid_i = np.ones_like(vis2, dtype=int)
+    valid_i = ((vis2 >= 0) & (e_vis2 > 0) & ~np.isnan(vis2))
+                   #& (~np.isnan(vis2.flatten())))
     
-    # Flatten and take only valid data
-    b_on_lambda = b_on_lambda[valid_i]
-    e_b_on_lambda = e_wl_frac * b_on_lambda
-    vis2 = vis2.flatten()[valid_i]
-    e_vis2 = e_vis2.flatten()[valid_i]
+    # Only take only valid data
+    sfreq = sfreq[valid_i]
+    e_sfreq = e_sfreq[valid_i]
+    vis2 = vis2[valid_i]
+    e_vis2 = e_vis2[valid_i]
+    u_lambda = u_lambda[valid_i]
+    s_lambda = s_lambda[valid_i]
     
-    return b_on_lambda, e_b_on_lambda, vis2, e_vis2
+    assert len(sfreq) == len(u_lambda)
+    
+    return sfreq, e_sfreq, vis2, e_vis2, u_lambda, s_lambda
           
           
-def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
+def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, sampled_params, ldd_pred,
                 method="odr", e_wl_frac=0.02):
     """Fit to calibrated squared visibilities to obtain the measured limb-
     darkened stellar diameter in mas.
@@ -334,7 +363,14 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
     pcov: float
         Errors (one standard deviation) oon LDD and C
     """
-    # Two cases here:
+    # Get limb darkening coefficients and scaling parameters
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    
+    u_lambda_6 = sampled_params[u_lambda_cols].values
+    s_lambda_6 = sampled_params[s_lambda_cols].values
+    
+    # Two cases for actual data:
     # 1 - We're fitting multiple sequences, in which case vis2, e_vis2, and 
     #     baseline vectors will have 3 dimensions [n_seq, n_exp, n_bl]. In this
     #     case, we need to have a separate C intercept parameter per seq.
@@ -355,16 +391,23 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
         e_sfreq = []
         fvis2 = []
         e_fvis2 = []
+        u_lambda = []
+        s_lambda = []
         
         for seq_i in np.arange(0, n_seq):
-            sf, e_sf, v2, e_v2 = format_vis2_data(vis2[seq_i], e_vis2[seq_i], 
-                                                  baselines[seq_i], wavelengths, 
-                                                  e_wl_frac)
+            sf, e_sf, v2, e_v2, u_l, s_l = format_vis2_data(vis2[seq_i], 
+                                            e_vis2[seq_i], baselines[seq_i], 
+                                            wavelengths, e_wl_frac, u_lambda_6, 
+                                            s_lambda_6)
+                                            
             # Stack to "flatten" the data from multiple sequences                                      
             sfreq = np.hstack((sfreq, sf))
             e_sfreq = np.hstack((e_sfreq, e_sf))
             fvis2 = np.hstack((fvis2, v2))
             e_fvis2 = np.hstack((e_fvis2, e_v2))
+            u_lambda = np.hstack((u_lambda, u_l))
+            s_lambda = np.hstack((s_lambda, s_l))
+            
             
             n_points[seq_i] = len(sf)
         
@@ -374,9 +417,9 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
     else:
         n_seq = 1
     
-        sfreq, e_sfreq, fvis2, e_fvis2 = format_vis2_data(vis2, e_vis2, 
-                                                baselines, wavelengths, 
-                                                e_wl_frac)
+        sfreq, e_sfreq, fvis2, e_fvis2, u_lambda, s_lambda = \
+                format_vis2_data(vis2, e_vis2, baselines, wavelengths, 
+                                 e_wl_frac, u_lambda_6, s_lambda_6)
         n_points = (len(sfreq))
     
     # Initial C param
@@ -403,13 +446,12 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
         # Construct coefficient vector, which requires "unpacking" all params
         # into a single 1D vector. Have order: [ldd, u_lld, c_scale, n_points]
         if n_seq == 1:
-            params = [ldd_pred] + [u_lld] + [c_scale] + [n_points]
-            ifixb = [1, 0, 1, 0]
+            params = np.hstack(([ldd_pred], c_scale, [n_points], u_lambda, s_lambda))
+            ifixb = [1] + [1] + [0] + [0]*2*len(sfreq)
         
         else:
-            params = [ldd_pred] + [u_lld] + list(c_scale) + list(n_points)
-            ifixb = np.hstack(([1], [0], np.ones_like(c_scale),
-                            np.zeros_like(n_points)))
+            params = np.hstack(([ldd_pred], c_scale, n_points, u_lambda, s_lambda))
+            ifixb = [1] + [1]*n_seq + [0]*n_seq + [0]*2*len(sfreq)
         
         odr = ODR(data, model, params, ifixb=ifixb)
         odr.set_job(fit_type=2)
@@ -419,7 +461,7 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, u_lld, ldd_pred,
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
-                u_lld, method="odr"):
+                sampled_params, bs_i, method="odr"):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -461,7 +503,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
         
         popt, pstd = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                  baselines[sci], wavelengths[sci], 
-                                 u_lld[id], 
+                                 sampled_params.loc[id].iloc[bs_i], 
                                  sci_data[pred_ldd_col].values[0], 
                                  method=method)
         
@@ -469,18 +511,18 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
         # n is the number of sequences [LDD, u_lld, C_n, N_n]
         # Expectation is that this will break for the least-squares method, but
         # can fix here if that is needed again.
-        n_seq = (len(popt)-2)//2
+        if type(vis2[sci]) == list:
+            n_seq = len(vis2[sci])
+        else:
+            n_seq = 1
         
         ldd_opt = popt[0]
         e_ldd_opt = pstd[0]
         
-        #u_lld = popt[1]     # Constant, so don't need
-        #e_u_lld = pstd[1]   # Constant, so don't need
+        c_scale = popt[1:n_seq+1] 
+        e_c_scale = pstd[1:n_seq+1] 
         
-        c_scale = popt[2:n_seq+2]
-        e_c_scale = pstd[2:n_seq+2]
-        
-        #n_points = np.array(popt[n_seq+2:], dtype=int) # Constant, don't need
+        # Everything else is constant, so don't need!
         
         print("...fit successful for %i seq, LDD=%0.2f, C=%s" 
               % (n_seq, ldd_opt, c_scale))
@@ -490,6 +532,9 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
     return successful_fits
 
 
+# -----------------------------------------------------------------------------
+# Working with oiFits files
+# -----------------------------------------------------------------------------
 def extract_vis2(oi_fits_file):
     """Read the calibrated squared visibility + errors, baseline, and 
     wavelength information from a given oifits file.
@@ -772,136 +817,8 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
     
     
 # -----------------------------------------------------------------------------
-# Limb darkening coefficients
+# Sampling diameters
 # -----------------------------------------------------------------------------    
-def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
-    """Function to interpolate the linear-limb darkening coefficients given 
-    values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
-    photometric filter. The interpolated grid is from Claret and Bloemen 2011:
-     - http://adsabs.harvard.edu/abs/2011A%26A...529A..75C
-    
-    Paremeters
-    ----------
-    logg: float or float array
-        Stellar surface gravity
-        
-    teff: float or float array
-        Stellar effective temperature in Kelvin
-        
-    feh: float or float array
-        Stellar metallicity, [Fe/H] (relative to Solar)
-        
-    filt: string or string array
-        The filter bandpass to use (H for PIONIER observations)
-        
-    xi: float or float array
-        Microturbulent velocity (km/s)
-        
-    Returns
-    -------
-    u_lld: float or floar array
-        The wavelength dependent linear limb-darkening coefficient
-        
-    u_ld_err: float or float array
-        The error on u_lld
-    """
-    # Read the 
-    filepath = "data/claret_bloemen_ld_grid.tsv" 
-    ldd_grid = pd.read_csv(filepath, delim_whitespace=True, comment="#", 
-                           header=0, dtype={"logg":np.float, "Teff":np.float, 
-                                            "Z":np.float, "xi":np.float, 
-                                            "u":np.float, "Filt":np.str, 
-                                            "Met":np.str, "Mod":np.str})
-    
-    # Interpolate only over the portion of the grid with the relevant filter
-    # and assumed microturbulent velocity
-    subset = ldd_grid[(ldd_grid["Filt"]==filt) & (ldd_grid["xi"]==xi)]
-    
-    # Interpolate along logg and Teff for all entries for filter
-    calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
-    
-    # Calculate and return
-    n_u_lld = calc_u(n_logg, n_teff, n_feh)
-    
-    return n_u_lld
-    
-    
-    """
-    # Compute u_lld for every star
-    ids = n_teff.columns.values
-    
-    n_params = np.zeros([len(n_teff), len(ids)])
-    
-    n_u_lld = pd.DataFrame(n_params, columns=ids)
-    
-    # Determine value for u given logg and teff
-    for id in ids:
-        n_u_lld[id] = calc_u(n_logg[id], n_teff[id], n_feh[id])
-    
-    # Return the results    
-    return n_u_lld
-    """
-
-def sample_lld_coeff(n_logg, n_teff, n_feh):
-    """
-    
-    For every science target, sample linear u_lambda N times, where u_lambda is
-    a vector of length 6, corresponding to each of the wavelength channels of
-    PIONIER. u_lambda in this case is the equivalent linear term for the 4
-    parameter law giving the same side-lobe height, and comes with a scaling
-    parameter to scale the resulting LDD.
-    
-    Uses multi-dimensional pandas dataframe per:
-        https://stackoverflow.com/questions/46884648/storing-3-dimensional-
-        data-in-pandas-dataframe
-        
-    This 3D pandas dataframe will have the structure:
-        [star, [bs_i, teff, logg, feh, u_lld_1, u_lld_2, u_lld_3, u_lld_4, 
-                u_lld_5, u_lld_6, u_scale]]
-    """
-    # For now just test without Stagger params
-    if True:
-        # Get the H band linear coefficient
-        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
-        
-        # Stack x6 (+1) for each wavelength dimension
-        n_u_lld = np.tile(n_u_lld, 7).reshape(7, len(n_logg)).T
-        
-        # Add a set of scaling coefficients (just ones)
-        n_u_lld[:,6] = np.ones(len(n_logg))
-    
-    else:
-        pass
-        
-    return n_u_lld
-    
-    
-    # Initialise data structure to hold the results. It should have dimensions
-    # [n_star, n_bootstraps, n_wavelengths, n_wavelengths] where the final two
-    # dimensions correspond to u_lambda, and s_lambda (scaling parameter).
-    
-    
-    pass
-    
-    # For every star, sample u_lambda and s_lambda
-    """
-    for param_i in :
-        # If the target is out of the grid, fill the grid with standard linear
-        # (i.e. non-equivalent) u_lambda, and s_lambda = 1
-        if not rstgr.in_grid_bounds(teff, logg):
-            pass
-            
-        # Otherwise, fill with sampled equivalent u_lambda and s_lambda
-        else:
-            wls, u_lambda, e_u_lambda, s_lambda ,e_s_lambda, ftcs, e_ftcs = \
-                rstgr.elc_stagger(star_data["Teff"], star_data["e_teff"], 
-                                  star_data["logg"], star_data["e_logg"], 
-                                  star_data["FeH_rel"], star_data["e_FeH_rel"],
-                                   1)
-                              
-    return u_lambda, s_lambda
-    """
-
 def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred", 
                       e_pred_ldd_col="e_LDD_pred",
                       do_gaussian_diam_sampling=True):
@@ -977,7 +894,7 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
 # -----------------------------------------------------------------------------
 # Aggregating results from bootstrapping runs
 # -----------------------------------------------------------------------------    
-def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
+def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                           pred_ldd_col="LDD_pred", 
                           prune_errant_baselines=True, 
                           separate_sequences=True, combined_fit=True):
@@ -1104,7 +1021,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
-                               pred_ldd_col, n_u_lld.iloc[bs_i])  
+                               pred_ldd_col, sampled_params, bs_i)  
         
         # Fitting done, no need to have the vis2 results separate anymore                 
         # Populate
@@ -1158,7 +1075,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, n_u_lld,
     return bs_results
 
 
-def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
+def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
                            e_pred_ldd_col="e_LDD_pred"):
     """Summarise N boostrapping results by computing mean and standard 
     deviations for each distribution.
@@ -1187,8 +1104,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     """    
     # Initialise
     cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
-            "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "LDD_PRED", "e_LDD_PRED", 
-            "u_LLD", "C_SCALE"]
+            "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "C_SCALE", "U_LAMBDA", 
+            "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA"]
+            
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
     
@@ -1234,10 +1152,9 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
         results.iloc[star_i]["WAVELENGTH"] = \
             np.nanmedian(np.vstack(bs_results[star]["WAVELENGTH"]), axis=0)
             
-        results.iloc[star_i]["LDD_PRED"] = tgt_info.loc[pid, pred_ldd_col]    
-        results.iloc[star_i]["e_LDD_PRED"] = tgt_info.loc[pid, e_pred_ldd_col]   
-        results.iloc[star_i]["u_LLD"] = tgt_info.loc[pid, "u_lld"]    
-        
+        #results.iloc[star_i]["LDD_PRED"] = tgt_info.loc[pid, pred_ldd_col]    
+        #results.iloc[star_i]["e_LDD_PRED"] = tgt_info.loc[pid, e_pred_ldd_col]
+
         # Combined seq case
         if len(bs_results[star]["C_SCALE"][0]) > 1:
             results.iloc[star_i]["C_SCALE"] = \
@@ -1264,38 +1181,3 @@ def summarise_bootstrapping(bs_results, tgt_info, pred_ldd_col="LDD_pred",
                  results.iloc[star_i]["C_SCALE"]))
     
     return results
-    
-# -----------------------------------------------------------------------------
-# Other
-# -----------------------------------------------------------------------------
-def inspect_dr_photometry(tgt_info):
-    """Diagnostic function to inspect for issues with reddening/diameters. WIP. 
-    """
-    print("%7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s \t %7s" %
-          ("ID", "B_a_mag", "V_a_mag", "J_a_mag", "H_a_mag", "K_a_mag", "Flag",
-           "Dist", "LDD (V-K)", "LDD (V-W3)", "ID"))
-    
-    num_flagged = 0
-    
-    for star, row in tgt_info.iterrows():
-        b_a_mag = row["Bmag"] - row["Bmag_dr"]
-        v_a_mag = row["Vmag"] - row["Vmag_dr"]
-        j_a_mag = row["Jmag"] - row["Jmag_dr"]
-        h_a_mag = row["Hmag"] - row["Hmag_dr"]
-        k_a_mag = row["Kmag"] - row["Kmag_dr"]
-        primary = row["Primary"]
-        vk_ldd = row["LDD_VK_dr"]
-        vw3_ldd = row["LDD_VW3_dr"]
-        flag = ""
-        dist = row["Dist"]
-        
-        if np.max(np.abs([v_a_mag, j_a_mag, h_a_mag, k_a_mag])) > 0.1:
-            flag = "***"
-            num_flagged += 1
-        
-        print(("%8s \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %0.4f \t %7s \t"
-               "%4.2f \t %5.3f \t %5.3f \t %s") 
-                % (star, b_a_mag, v_a_mag, j_a_mag, h_a_mag, k_a_mag, flag, 
-                   dist, vk_ldd, vw3_ldd, primary))
-                       
-    print("\nFlagged Stars: %i/%i" % (num_flagged, len(tgt_info)))

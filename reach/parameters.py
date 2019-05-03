@@ -3,8 +3,11 @@
 from __future__ import division, print_function
 import numpy as np
 import pandas as pd
-import reach.diameters as rdiam
+import reach.limb_darkening as rld
 
+# -----------------------------------------------------------------------------
+# Sampling Parameters
+# -----------------------------------------------------------------------------   
 def sample_stellar_params(tgt_info, n_samples):
     """Sample stellar parameters for use with the bolometric correction code
     from Casagrande & VandenBerg (2014, 2018a, 2018b):
@@ -80,7 +83,7 @@ def sample_stellar_params_pd(tgt_info, n_bootstraps,
     return n_logg, n_teff, n_feh 
 
 
-def sample_parameters(tgt_info, n_bootstraps):
+def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
     """Sample stellar parameters (teff, logg, feh) and derived parameters 
     (u_lambda, s_lambda) N times and save in a single datastructure. The result
     is a 3D pandas dataframe, with N frames of:
@@ -93,9 +96,9 @@ def sample_parameters(tgt_info, n_bootstraps):
     # Get the science target IDs - these will be the rows/index column
     ids = tgt_info[tgt_info["Science"]].index.values
     
-    u_elc_cols = ["u_elc_%i" % ui for ui in np.arange(0,6)]
-    #u_ftc_cols = ["u_ftc_%i" % ui for ui in np.arange(0,6)]
-    cols = ["logg", "teff", "feh"] + u_elc_cols + ["s_lambda"]
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    cols = ["logg", "teff", "feh"] + u_lambda_cols + s_lambda_cols
     
     # Initialise list that will hold all frames until we combine at the end
     frames = []
@@ -103,6 +106,7 @@ def sample_parameters(tgt_info, n_bootstraps):
     #data = np.zeros( (len(ids), n_bootstraps , len(cols)) )
     
     for id_i, id in enumerate(ids):
+        print("\t sampling %s..." % tgt_info.loc[id]["Primary"])
         # Initialise
         data = np.zeros( (n_bootstraps , len(cols)) )
         
@@ -118,7 +122,8 @@ def sample_parameters(tgt_info, n_bootstraps):
                                           n_bootstraps)
                                           
         # Sample equivalent linear coefficients + scaling parameter
-        n_u_lambda = rdiam.sample_lld_coeff(n_logg, n_teff, n_feh)
+        n_u_lambda = rld.sample_lld_coeff(n_logg, n_teff, n_feh, 
+                                            use_claret_params)
         
         # Assemble
         data[:, 0] = n_logg
@@ -132,34 +137,11 @@ def sample_parameters(tgt_info, n_bootstraps):
     sampled_sci_params = pd.concat(frames, keys=ids)
         
     return sampled_sci_params
-    
-
-def save_params(tgt_info):
-    """Save parameters to a text file with uncertainties
-    """
-    # logg
-    logg_mask = np.logical_and(np.isnan(tgt_info["e_logg"]), 
-                               tgt_info["Science"])
-    tgt_info["e_logg"].where(~logg_mask, 0.2, inplace=True)
-    
-    # [Fe/H]
-    feh_mask = np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
-                              tgt_info["Science"])
-    tgt_info["e_FeH_rel"].where(~feh_mask, 0.1, inplace=True)
-    
-    # Teff
-    teff_mask = np.logical_and(np.isnan(tgt_info["e_teff"]), 
-                               tgt_info["Science"])
-    tgt_info["e_teff"].where(~teff_mask, 100, inplace=True)    
-    
-    # Save
-    path = "white_ld/pionier_targets_new.txt"
-    cols = ["Primary", "Teff", "e_teff", "logg", "e_logg", "FeH_rel", 
-            "e_FeH_rel"]
-    tgt_info[cols][tgt_info["Science"]].to_csv(path, sep="\t",index=False)  
         
 
-
+# -----------------------------------------------------------------------------
+# Combining distributions
+# -----------------------------------------------------------------------------   
 def combine_seq_ldd(tgt_info, results):
     """Combine independent measures of LDD from multiple different sequences to
     a single measurement of LDD +/- e_LDD
@@ -182,6 +164,40 @@ def combine_seq_ldd(tgt_info, results):
         tgt_info.loc[star, "e_ldd_final"] = e_ldd_avg
         
 
+def combine_u_s_lambda(tgt_info, sampled_sci_params):
+    """Add the mean and standard deviation of each of the 6 u_lambda and 
+    s_lambda parameters to tgt_info.
+    """
+    # Determine u_lld from its distribution
+    scis = tgt_info[tgt_info["Science"]].index.values
+
+    # Initialise columns
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_u_lambda_cols = ["e_u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_s_lambda_cols = ["e_s_lambda_%i" % ui for ui in np.arange(0,6)]
+
+    all_cols = (u_lambda_cols + e_u_lambda_cols + s_lambda_cols 
+                + e_s_lambda_cols)
+
+    for col in all_cols:
+        tgt_info[col] = np.zeros(len(tgt_info))*np.nan
+
+    # Populate tgt_info
+    for sci in scis:
+        tgt_info.loc[sci, u_lambda_cols] = \
+            sampled_sci_params.loc[sci][u_lambda_cols].values.mean(axis=0)
+        tgt_info.loc[sci, e_u_lambda_cols] = \
+            sampled_sci_params.loc[sci][u_lambda_cols].values.std(axis=0)
+        tgt_info.loc[sci, s_lambda_cols] = \
+            sampled_sci_params.loc[sci][s_lambda_cols].values.mean(axis=0)
+        tgt_info.loc[sci, e_s_lambda_cols] = \
+            sampled_sci_params.loc[sci][s_lambda_cols].values.std(axis=0) 
+
+
+# -----------------------------------------------------------------------------
+# Calculating physical parameters
+# -----------------------------------------------------------------------------
 def calc_all_f_bol(tgt_info, n_samples):
     """f_bol in ergs s^-1 cm^-2
     """
@@ -210,7 +226,6 @@ def calc_all_f_bol(tgt_info, n_samples):
     
     # Calculate bolometric fluxes for each band for every star
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
-        #print(star)
         for band_i, (band, e_band) in enumerate(zip(bands, e_bands)):
             # Sample the magnitudes
             mags = np.random.normal(row[band], row[e_band], n_samples) 
@@ -237,7 +252,7 @@ def calc_all_f_bol(tgt_info, n_samples):
         
 
 def calc_all_r_star(tgt_info):
-    """
+    """Calculate the radius of each science target in units of Solar radii.
     """
     # Constants
     pc = 3.0857*10**13 # km / pc
@@ -282,11 +297,13 @@ def calc_all_teff(tgt_info, n_samples):
     for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
                               tgt_info["ldd_final"] > 0)].iterrows():
         # Sample the diameters
-        ldds = np.random.normal(row["ldd_final"], row["e_ldd_final"], n_samples)
+        ldds = np.random.normal(row["ldd_final"], row["e_ldd_final"], 
+                                n_samples)
         ldds = ldds * np.pi/180/3600/1000
         
         # Sample fbol
-        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], n_samples)
+        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], 
+                                  n_samples)
         
         # Calculate Teff
         teffs = (4*f_bols / (sigma * ldds**2))**0.25 
@@ -301,7 +318,7 @@ def calc_all_teff(tgt_info, n_samples):
 
 
 def calc_all_L_bol(tgt_info, n_samples):
-    """
+    """Calculate the stellar luminosity with respect to Solar.
     """
     # Constants
     L_sun = 3.839 * 10**33 # erg s^-1
@@ -315,7 +332,8 @@ def calc_all_L_bol(tgt_info, n_samples):
     for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
                               tgt_info["ldd_final"] > 0)].iterrows():
         # Sample fbol
-        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], n_samples)
+        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], 
+                                  n_samples)
         
         # Sample distances
         dists = np.random.normal(row["Dist"], row["e_Dist"], n_samples) * pc
@@ -330,28 +348,8 @@ def calc_all_L_bol(tgt_info, n_samples):
         # Store final value
         tgt_info.loc[star, "L_star_final"] = L_star
         tgt_info.loc[star, "e_L_star_final"] = e_L_star
-        
-  
-def print_mean_flux_errors(tgt_info):
-    """
-    """
-    bands = ["Hp", "BT", "VT", "BP", "RP"]
-    f_bols = ["f_bol_Hpmag", "f_bol_BTmag", "f_bol_VTmag", "f_bol_BPmag", 
-             "f_bol_RPmag"]
-    e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
-               "e_f_bol_BPmag", "e_f_bol_RPmag"]       
-     
-    print("Band | % err")           
-    for f_i in np.arange(0, len(f_bols)):
-        med_e_f_bol = (tgt_info[e_f_bols[f_i]][tgt_info["Science"]]
-                       / tgt_info[f_bols[f_i]][tgt_info["Science"]]).median()
-        print("%s --- %0.2f" % (bands[f_i], med_e_f_bol*100))         
-    
-    # For the averaged Fbol
-    med_e_f_bol = (tgt_info["e_f_bol_avg"][tgt_info["Science"]]
-                       / tgt_info["f_bol_avg"][tgt_info["Science"]]).median()
-    print("\nAVG --- %0.2f" % (med_e_f_bol*100))
 
+  
 def calc_f_bol(bc, mag):
     """
     """
@@ -374,4 +372,52 @@ def calc_L_star(tgt_info):
     M_bol_sun = 4.75
     
     tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
+
+# -----------------------------------------------------------------------------
+# Utilities
+# -----------------------------------------------------------------------------   
+def save_params(tgt_info):
+    """Save parameters to a text file with uncertainties
+    """
+    # logg
+    logg_mask = np.logical_and(np.isnan(tgt_info["e_logg"]), 
+                               tgt_info["Science"])
+    tgt_info["e_logg"].where(~logg_mask, 0.2, inplace=True)
     
+    # [Fe/H]
+    feh_mask = np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
+                              tgt_info["Science"])
+    tgt_info["e_FeH_rel"].where(~feh_mask, 0.1, inplace=True)
+    
+    # Teff
+    teff_mask = np.logical_and(np.isnan(tgt_info["e_teff"]), 
+                               tgt_info["Science"])
+    tgt_info["e_teff"].where(~teff_mask, 100, inplace=True)    
+    
+    # Save
+    path = "white_ld/pionier_targets_new.txt"
+    cols = ["Primary", "Teff", "e_teff", "logg", "e_logg", "FeH_rel", 
+            "e_FeH_rel"]
+    tgt_info[cols][tgt_info["Science"]].to_csv(path, sep="\t",index=False)    
+    
+    
+def print_mean_flux_errors(tgt_info):
+    """
+    """
+    bands = ["Hp", "BT", "VT", "BP", "RP"]
+    f_bols = ["f_bol_Hpmag", "f_bol_BTmag", "f_bol_VTmag", "f_bol_BPmag", 
+             "f_bol_RPmag"]
+    e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
+               "e_f_bol_BPmag", "e_f_bol_RPmag"]       
+     
+    print("Band | % err")           
+    for f_i in np.arange(0, len(f_bols)):
+        med_e_f_bol = (tgt_info[e_f_bols[f_i]][tgt_info["Science"]]
+                       / tgt_info[f_bols[f_i]][tgt_info["Science"]]).median()
+        print("%s --- %0.2f" % (bands[f_i], med_e_f_bol*100))         
+    
+    # For the averaged Fbol
+    med_e_f_bol = (tgt_info["e_f_bol_avg"][tgt_info["Science"]]
+                       / tgt_info["f_bol_avg"][tgt_info["Science"]]).median()
+    print("\nAVG --- %0.2f" % (med_e_f_bol*100))
+  
