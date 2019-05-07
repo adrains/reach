@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import reach.photometry as rphot
 import reach.diameters as rdiam
+import reach.parameters as rparam
 from collections import OrderedDict
 
 # -----------------------------------------------------------------------------
@@ -276,8 +277,9 @@ def initialise_tgt_info():
     # Convert Tycho V to Johnson system using Bessell 2000
 
     # For simplification during testing, remove any stars that fall outside the 
-    # VT --> V conversion from Bessell 2000
-    tgt_info = tgt_info.drop(["GJ551","HD133869"])
+    # VT --> V conversion from Bessell 2000, or those science targets not
+    # in use
+    tgt_info = tgt_info.drop(["GJ551","HD133869"])#, "HD203608"])
 
     # Convert VT and BT to V and B
     # TODO: proper treatment of magnitude errors
@@ -352,12 +354,15 @@ def initialise_tgt_info():
     # TODO: Is not correcting reddening for W1-3 appropriate given the laws don't
     # extend that far?
     rdiam.predict_all_ldd(tgt_info)
+    
+    
+    # Compute Teffs from Casagrande et al. 2010 relations
+    teffs, e_teffs = rparam.compute_casagrande_2010_teff(tgt_info["BTmag"],  
+                                                         tgt_info["VTmag"], 
+                                                         tgt_info["FeH_rel"])
+    tgt_info["teff_casagrande"] = teffs
+    tgt_info["e_teff_casagrande"] = e_teffs
 
-    # Determine the linear LDD coefficents
-    #tgt_info["u_lld"] = rdiam.get_linear_limb_darkening_coeff(tgt_info["logg"],
-    #                                                          tgt_info["Teff"],
-    #                                                          tgt_info["FeH_rel"], 
-    #                                                          "H")
 
     # Don't have parameters for HD187289, assume u_lld=0.5 for now
     #tgt_info.loc["HD187289", "u_lld"] = 0.5
@@ -410,10 +415,14 @@ def save_sampled_params(sampled_params, folder):
     pickle.dump(sampled_params, pkl_params)
     pkl_params.close()
     
-def load_sampled_params(folder):
+def load_sampled_params(folder, force_claret_params=False):
     """
     """
-    pkl_params = open("results/%s/sampled_params.pkl" % folder, "r")
+    if not force_claret_params:
+        pkl_params = open("results/%s/sampled_params.pkl" % folder, "r")
+    else:
+        pkl_params = open("results/%s/sampled_params_claret.pkl" % folder, "r")
+        
     sampled_params = pickle.load(pkl_params)
     pkl_params.close()    
     

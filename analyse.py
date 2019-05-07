@@ -18,7 +18,7 @@ import pickle
 # Setup & Loading
 # -----------------------------------------------------------------------------
 combined_fit = True
-load_saved_results = False
+load_saved_results = True
 assign_default_uncertainties = True
 n_bootstraps = 1000
 results_folder = "19-03-26_i1000"
@@ -32,7 +32,7 @@ tgt_info = rutils.initialise_tgt_info()
 complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Load in distributions
-sampled_sci_params = rutils.load_sampled_params(results_folder)
+sampled_sci_params = rutils.load_sampled_params(results_folder, True)
 
 # Currently broken, don't consider
 complete_sequences.pop((102, 'delEri', 'bright'))
@@ -54,9 +54,9 @@ if load_saved_results:
     bs_results, results = rutils.load_results(results_folder)
     
     # Pop HD187289
-    results.drop(results[results["STAR"]=="HD187289"].index, inplace=True)
-    bs_results.pop("HD187289 (faint, 99)")
-    bs_results.pop("HD187289 (bright, 99)")
+    #results.drop(results[results["STAR"]=="HD187289"].index, inplace=True)
+    #bs_results.pop("HD187289 (faint, 99)")
+    #bs_results.pop("HD187289 (bright, 99)")
 
 else:
     # Get results
@@ -106,6 +106,7 @@ rpaper.make_table_final_results(tgt_info)
 
 # Generate plots
 print("Generating plots...")
+rplt.plot_casagrande_teff_comp(tgt_info)
 rplt.plot_lit_diam_comp(tgt_info)
 rplt.plot_paper_vis2_fits(results, n_rows=8, n_cols=2)
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")

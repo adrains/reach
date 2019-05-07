@@ -1,8 +1,12 @@
 """
-Functions to allow calculation of limb-darkening coefficients from the STAGGER 
-grid for Pionier observations. Written by Tim White. 
+Functions for the calculation or sampling of limb darkening coefficients. Can
+calculate u_lambda two different ways:
+ 1) Using the 1D atmosphere grid from Claret and Bloemen 2011 
+ 2) Equivalent linear coefficients using the STAGGER 3D atmosphere grid (code
+    written by Tim White)
 """
 from __future__ import division, print_function
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.special as sp
@@ -16,6 +20,115 @@ from scipy import stats
 from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
+# -----------------------------------------------------------------------------
+# Sampling
+# -----------------------------------------------------------------------------   
+def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
+    """
+    
+    For every science target, sample linear u_lambda N times, where u_lambda is
+    a vector of length 6, corresponding to each of the wavelength channels of
+    PIONIER. u_lambda in this case is the equivalent linear term for the 4
+    parameter law giving the same side-lobe height, and comes with a scaling
+    parameter to scale the resulting LDD.
+    
+    Uses multi-dimensional pandas dataframe per:
+        https://stackoverflow.com/questions/46884648/storing-3-dimensional-
+        data-in-pandas-dataframe
+        
+    This 3D pandas dataframe will have the structure:
+        [star, [bs_i, teff, logg, feh, u_lld_1, u_lld_2, u_lld_3, u_lld_4, 
+                u_lld_5, u_lld_6, u_scale]]
+    """
+    # Check if any set of logg/teff points lie outside the stagger grid. If any
+    # do, we can't use the stagger grid as we won't be able to properly sample
+    # the uncertainties.
+    in_grid = np.all([in_grid_bounds(teff, logg) 
+                      for teff, logg in zip(n_teff, n_logg)])
+    
+    # If the target is out of the grid, fill the grid with standard linear
+    # (i.e. non-equivalent) u_lambda, and s_lambda = 1
+    if not in_grid or use_claret_params:
+        # Get the H band linear coefficient
+        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
+        
+        # Stack x6 for each wavelength dimension
+        n_u_lld = np.tile(n_u_lld, 6).reshape(6, len(n_logg))
+        
+        # Add a set of scaling coefficients (just ones)
+        n_u_lld = np.concatenate((n_u_lld, np.ones((6, len(n_logg))))).T
+        
+        # Add a column of booleans indicating whether the star got results from
+        # the stagger grid?
+        pass
+    
+    # This star is in the grid, get Stagger coefficients
+    else:
+        # Sample the grid
+        elcs, scls, ftcs = elc_stagger(n_logg, n_teff, n_feh)
+        
+        # Combine
+        n_u_lld = np.concatenate((elcs, scls)).T
+        
+    return n_u_lld
+
+# -----------------------------------------------------------------------------
+# Claret grid related functions
+# -----------------------------------------------------------------------------    
+def get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh, filt="H", xi=2.0):
+    """Function to interpolate the linear-limb darkening coefficients given 
+    values of stellar logg, Teff, [Fe/H], microturbulent velocity, and a 
+    photometric filter. The interpolated grid is from Claret and Bloemen 2011:
+     - http://adsabs.harvard.edu/abs/2011A%26A...529A..75C
+    
+    Paremeters
+    ----------
+    logg: float or float array
+        Stellar surface gravity
+        
+    teff: float or float array
+        Stellar effective temperature in Kelvin
+        
+    feh: float or float array
+        Stellar metallicity, [Fe/H] (relative to Solar)
+        
+    filt: string or string array
+        The filter bandpass to use (H for PIONIER observations)
+        
+    xi: float or float array
+        Microturbulent velocity (km/s)
+        
+    Returns
+    -------
+    u_lld: float or floar array
+        The wavelength dependent linear limb-darkening coefficient
+        
+    u_ld_err: float or float array
+        The error on u_lld
+    """
+    # Read the 
+    filepath = "data/claret_bloemen_ld_grid.tsv" 
+    ldd_grid = pd.read_csv(filepath, delim_whitespace=True, comment="#", 
+                           header=0, dtype={"logg":np.float, "Teff":np.float, 
+                                            "Z":np.float, "xi":np.float, 
+                                            "u":np.float, "Filt":np.str, 
+                                            "Met":np.str, "Mod":np.str})
+    
+    # Interpolate only over the portion of the grid with the relevant filter
+    # and assumed microturbulent velocity
+    subset = ldd_grid[(ldd_grid["Filt"]==filt) & (ldd_grid["xi"]==xi)]
+    
+    # Interpolate along logg and Teff for all entries for filter
+    calc_u = LinearNDInterpolator(subset[["logg", "Teff", "Z"]], subset["u"])
+    
+    # Calculate and return
+    n_u_lld = calc_u(n_logg, n_teff, n_feh)
+    
+    return n_u_lld
+
+# -----------------------------------------------------------------------------
+# Stagger grid related functions (Written by Tim White)
+# -----------------------------------------------------------------------------   
 def read_magic(file):
     """ Read Magic et al. (2015) file containing 4-term limb-darkening 
     coefficients for each Pionier wavelength channel    
@@ -73,57 +186,30 @@ def read_magic(file):
             
     return data
 
-def elc_stagger(inteff, insigteff, inlogg, insiglogg, infeh, insigfeh, nit):
+def elc_stagger(loggs, teffs, fehs):
     """ Find the equivalent limb-darkening coefficients for a given teff and 
     logg and their uncertainties. Code by Tim White.
     
     Parameters
     ----------
-    inteff: float
-        Effective temperature in K.
-    
-    insigteff: float
-        Uncertainty in effective temperature.
-    
-    inlogg: float
-        Surface gravity, log(g), in cgs units.
-    
-    insiglogg: float
-        Uncertainty in logg
-    
-    infeh: float
-        Metallicity [Fe/H] relative to Solar.
-    
-    insigfeh: float
-        Uncertainty in [Fe/H]
-    
-    nit: float
-        Number of Monte-Carlo iterations.
+    loggs: float
+        Surface gravities, log(g), in cgs units.
+    teff: float
+        Effective temperatures in K.    
+    fehs: float
+        Metallicities [Fe/H] relative to Solar.
     
     Returns
     ----------
-    wls: float array
-        Observational wavelengths in um.
+    elcs: float array
+        Equivalent linear coefficients, one per wavelength.
         
-    melcs: float array
-        Mean equivalent linear coefficients, one per wavelength.
-        
-    sigelcs: float array
-        Uncertainty on equivalent linear coefficients.
-        
-    mscls: float array
-        Mean LDD scaling parameters to be used with the equivalent linear
+    scls: float array
+        LDD scaling parameters to be used with the equivalent linear
         coefficents, one per wavelength channel.
-    
-    sigscls: float array
-        Uncertainty on LDD scaling parameter.
         
-    mftcs: float array
-        Mean four term limb darkening coefficients, of shape 4 x N wavelengths.
-    
-    sigftcs: float array
-        Uncertainties on four term limb darkening coefficients.
-    
+    ftcs: float array
+        Four term limb darkening coefficients, of shape 4 x N wavelengths.
     """
     grid1 = read_magic('data/stagger_pionier_m00.tab')
     grid2 = read_magic('data/stagger_pionier_m10.tab')
@@ -153,9 +239,9 @@ def elc_stagger(inteff, insigteff, inlogg, insiglogg, infeh, insigfeh, nit):
     tri2 = Delaunay(points2D)
     
     #Values to be interpolated to
-    t1 = np.log10(insigteff * np.random.randn(nit) + inteff)
-    l1 = np.log10(insiglogg * np.random.randn(nit) + inlogg)
-    f1 = insigfeh * np.random.randn(nit) + infeh
+    t1 = np.log10(teffs)
+    l1 = np.log10(loggs)
+    f1 = fehs
     
     # Define wavelength channels
     channels = list(d)#.keys()
@@ -212,20 +298,21 @@ def elc_stagger(inteff, insigteff, inlogg, insiglogg, infeh, insigfeh, nit):
         wls.append(ch['wl'])
         csCT = np.asarray(clean).T
         elc, scl = get_elc(ks,csCT)
+
         ftcs.append(np.asarray(csCT))
         elcs.append(elc)
         scls.append(scl)
     
-    melcs = np.nanmean(elcs,axis=1)
-    sigelcs = np.nanstd(elcs,axis=1)
-    mscls = np.nanmean(scls,axis=1)
-    sigscls = np.nanstd(scls,axis=1)
-    mftcs = np.nanmean(ftcs,axis=2)
-    sigftcs = np.nanstd(ftcs,axis=2)
-        
-    wl = np.asarray(wls)
-
-    return wls,melcs,sigelcs,mscls,sigscls,mftcs,sigftcs
+    #melcs = np.nanmean(elcs,axis=1)
+    #sigelcs = np.nanstd(elcs,axis=1)
+    #mscls = np.nanmean(scls,axis=1)
+    #sigscls = np.nanstd(scls,axis=1)
+    #mftcs = np.nanmean(ftcs,axis=2)
+    #sigftcs = np.nanstd(ftcs,axis=2)
+    #wl = np.asarray(wls)
+    
+    return np.asarray(elcs), np.array(scls), np.array(ftcs)
+    #return wls,melcs,sigelcs,mscls,sigscls,mftcs,sigftcs
 
 
 
@@ -317,6 +404,7 @@ def in_grid_bounds(teff, logg):
                    [4912, 2.0],
                    [4023, 1.5],
                    [3941, 2.5],
+                   [4500, 3.0],
                    [4515, 5.0],
                    [5488, 5.0]]
     

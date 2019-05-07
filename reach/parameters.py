@@ -374,6 +374,43 @@ def calc_L_star(tgt_info):
     tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
 
 # -----------------------------------------------------------------------------
+# Empirical relations
+# -----------------------------------------------------------------------------   
+def compute_casagrande_2010_teff(BTmag, VTmag, fehs):
+    """
+    """
+    # [Fe/H] range: -2.7 - 0.4
+    # (Bt-Vt) range: 0.19 - 1.49
+    # N_stars = 251
+    feh_bounds = [-2.7, 0.4]
+    bt_vt_bounds = [0.19, 1.49]
+    
+    e_teff = 79
+    coeff = [0.5839, 0.4000, -0.0067, -0.0282, -0.0346, -0.0087]
+    
+    bt_vt = BTmag-VTmag
+    
+    valid_bt_vt_i = np.logical_and(bt_vt > bt_vt_bounds[0], 
+                                   bt_vt < bt_vt_bounds[1])
+    valid_feh_i = np.logical_and(fehs > feh_bounds[0], 
+                                 fehs < feh_bounds[1])
+                                 
+    valid_i = np.logical_and(valid_bt_vt_i, valid_feh_i)
+    
+    teff = 5040 / (coeff[0] + coeff[1]*bt_vt + coeff[2]*bt_vt**2 
+           + coeff[3]*bt_vt*fehs + coeff[4]*fehs + coeff[5]*bt_vt*fehs**2)
+    
+    e_teff = np.ones(len(teff)) * e_teff
+    #temp = np.polynomial.polynomial.polyval(BTmag-VTmag, coeff)
+    
+    # If outside of bounds, force to nan
+    teff[~valid_i] = np.nan
+    e_teff[~valid_i] = np.nan
+    
+    return teff, e_teff
+
+
+# -----------------------------------------------------------------------------
 # Utilities
 # -----------------------------------------------------------------------------   
 def save_params(tgt_info):

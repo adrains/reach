@@ -108,8 +108,9 @@ n_bootstraps = 1000
 pred_ldd_col = "LDD_pred"
 e_pred_ldd_col = "e_LDD_pred"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
-results_path = "/home/arains/code/reach/results/%s_i%i/" % (str_date, 
-                                                            n_bootstraps)
+results_folder = "%s_i%i" % (str_date, n_bootstraps)
+results_path = "/home/arains/code/reach/results/%s/" % results_folder
+
 if not os.path.exists(results_path):
     os.mkdir(results_path)
 
@@ -136,7 +137,7 @@ n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps,
                                                  
 # Sample stellar parameters
 sampled_sci_params = rparam.sample_parameters(tgt_info, n_bootstraps)
-rutils.save_sampled_params(sampled_sci_params, results_path)
+rutils.save_sampled_params(sampled_sci_params, results_folder)
 
 # -----------------------------------------------------------------------------
 # (5) Import observing logs
