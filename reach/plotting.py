@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as plticker
+import matplotlib.cm as cm
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
@@ -136,7 +137,7 @@ def plot_distance_hists(tgt_info):
     plt.ylabel("# Stars")
     
     
-def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred, 
+def plot_vis2_fit(sfreq, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred, 
                   e_ldd_pred, u_lld, target):
     """Function to plot squared calibrated visibilities, with curves for
     predicted diameter and fitted diameter.
@@ -154,7 +155,7 @@ def plot_vis2_fit(b_on_lambda, vis2, e_vis2, ldd_fit, e_ldd_fit, ldd_pred,
     plt.figure()
     
     # Plot the data points and best fit curve
-    plt.errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", label="Data")
+    plt.errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", label="Data")
     
     plt.plot(x, y_fit, "--", 
              label=r"Fit ($\theta_{\rm LDD}$=%f $\pm$ %f, %0.2f%%)" 
@@ -194,8 +195,8 @@ def plot_all_vis2_fits(results, tgt_info):
             bl_grid = np.tile(results.iloc[star_i]["BASELINE"], n_wl).reshape([n_wl, n_bl]).T
             wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], n_bl).reshape([n_bl, n_wl])
     
-            b_on_lambda = (bl_grid / wl_grid).flatten()
-            plot_vis2_fit(b_on_lambda, results.iloc[star_i]["VIS2"].flatten(), 
+            sfreq = (bl_grid / wl_grid).flatten()
+            plot_vis2_fit(sfreq, results.iloc[star_i]["VIS2"].flatten(), 
                           results.iloc[star_i]["e_VIS2"].flatten(),  
                           results.iloc[star_i]["LDD_FIT"], 
                           results.iloc[star_i]["e_LDD_FIT"], 
@@ -280,7 +281,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], 
                               n_bl).reshape([n_bl, n_wl])
             
-            b_on_lambda = (bl_grid / wl_grid).flatten()
+            sfreq = (bl_grid / wl_grid).flatten()
             
             vis2 = results.iloc[star_i]["VIS2"].flatten()
             e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
@@ -311,7 +312,7 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             axes[0].figure.add_axes(res_ax)
     
             # Plot the data points and best fit curve
-            axes[0].errorbar(b_on_lambda, vis2, xerr=b_on_lambda*e_wl_frac,
+            axes[0].errorbar(sfreq, vis2, xerr=sfreq*e_wl_frac,
                             yerr=e_vis2, fmt=".", 
                             label="Data", elinewidth=0.1, capsize=0.2, 
                             capthick=0.1)
@@ -339,10 +340,10 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             
             # Plot residuals below the vis2 plot
             axes[0].set_xticks([])
-            residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
+            residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
                                                 u_lld)
             
-            res_ax.errorbar(b_on_lambda, residuals, xerr=b_on_lambda*e_wl_frac,
+            res_ax.errorbar(sfreq, residuals, xerr=sfreq*e_wl_frac,
                             yerr=e_vis2, fmt=".", 
                             label="Residuals", elinewidth=0.1, capsize=0.2, 
                             capthick=0.1)
@@ -497,7 +498,7 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], 
                           n_bl).reshape([n_bl, n_wl])
         
-        b_on_lambda = (bl_grid / wl_grid).flatten()
+        sfreq = (bl_grid / wl_grid).flatten()
         
         vis2 = results.iloc[star_i]["VIS2"].flatten()
         e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
@@ -520,7 +521,7 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         ax.figure.add_axes(res_ax)
 
         # Plot the data points and best fit curve
-        ax.errorbar(b_on_lambda, vis2, xerr=b_on_lambda*e_wl_frac,
+        ax.errorbar(sfreq, vis2, xerr=sfreq*e_wl_frac,
                         yerr=e_vis2, fmt=".", 
                         label="Data", elinewidth=0.1, capsize=0.2, 
                         capthick=0.1)
@@ -539,10 +540,10 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         
         # Plot residuals below the vis2 plot
         ax.set_xticks([])
-        residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
+        residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
                                             u_lld)
         
-        res_ax.errorbar(b_on_lambda, residuals, xerr=b_on_lambda*e_wl_frac,
+        res_ax.errorbar(sfreq, residuals, xerr=sfreq*e_wl_frac,
                         yerr=e_vis2, fmt=".", 
                         label="Residuals", elinewidth=0.1, capsize=0.2, 
                         capthick=0.1)
@@ -597,9 +598,9 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
             
                 print("%i, %i, %s %s %s" % (set_i, plt_i, sci, period, sequence))
             
-                # -----------------------------------------------------------------
+                # -------------------------------------------------------------
                 # Plot vis^2 fits
-                # -----------------------------------------------------------------
+                # -------------------------------------------------------------
                 n_bl = len(results.iloc[star_i]["BASELINE"])
                 n_wl = len(results.iloc[star_i]["WAVELENGTH"])
                 bl_grid = np.tile(results.iloc[star_i]["BASELINE"], 
@@ -607,7 +608,7 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
                 wl_grid = np.tile(results.iloc[star_i]["WAVELENGTH"], 
                                   n_bl).reshape([n_bl, n_wl])
             
-                b_on_lambda = (bl_grid / wl_grid).flatten()
+                sfreq = (bl_grid / wl_grid).flatten()
             
                 vis2 = results.iloc[star_i]["VIS2"].flatten()
                 e_vis2 = results.iloc[star_i]["e_VIS2"].flatten()
@@ -629,7 +630,7 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
                 axes[plt_i].figure.add_axes(res_ax, sharex=axes[plt_i])
     
                 # Plot the data points and best fit curve
-                axes[plt_i].errorbar(b_on_lambda, vis2, yerr=e_vis2, fmt=".", 
+                axes[plt_i].errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
                                 label="Data", elinewidth=0.1, capsize=0.2, 
                                 capthick=0.1, markersize=0.5)
     
@@ -658,10 +659,10 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
                 axes[plt_i].yaxis.set_minor_locator(min_loc)
                 
                 # Plot residuals below the vis2 plot
-                residuals = vis2 - rdiam.calc_vis2_ls(b_on_lambda, ldd_fit, c_scale,
+                residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
                                                     u_lld)
             
-                res_ax.errorbar(b_on_lambda, residuals, yerr=e_vis2, fmt=".", 
+                res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
                                 label="Residuals", elinewidth=0.1, capsize=0.2, 
                                 capthick=0.1, markersize=0.5)
                 res_ax.set_xlim([0.0,10E7])
@@ -693,8 +694,317 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
             plt.gcf().set_size_inches(8, 8*(n_rows/n_rows_init))
             plt.tight_layout(pad=1.0)
             pdf.savefig()
-            plt.close()
 
+
+
+def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
+    """Plot the rescaled simultaneous fits for multiple sequences
+    """
+    results = results.drop(3)
+    results.set_index(np.arange(len(results)))
+       
+    plt.close("all")
+    with PdfPages("paper/joint_seq_vis2_plots.pdf") as pdf:
+        # Figure out how many sets of plots are needed
+        num_sets = int(np.ceil(len(results) / n_rows / n_cols))
+        n_rows_init = n_rows
+        
+        # For every set, save a page
+        for set_i in np.arange(0, num_sets):
+            # Ensure we don't have an incomplete set of subplots
+            if set_i + 1 == num_sets:
+                n_rows = int((len(results) - set_i*n_rows*n_cols) / n_cols)
+            
+            # Setup the axes
+            fig, axes = plt.subplots(n_rows, n_cols)
+            plt.subplots_adjust(wspace=0.3, hspace=0.4)
+            axes = axes.flatten()
+    
+            for star_i in np.arange(set_i*n_rows_init*n_cols, 
+                                    (set_i+1)*n_rows_init*n_cols):
+                # Subplot index < n_rows
+                plt_i = star_i % (n_rows * n_cols)
+               
+                # Might not be able to finish
+                if star_i >= len(results):
+                    break
+            
+                # Get the science target name
+                sci = results.iloc[star_i]["STAR"]
+                hd_id = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+                
+                period = results.iloc[star_i]["PERIOD"]
+                sequence = results.iloc[star_i]["SEQUENCE"]
+            
+                stitle = "%s (%s, %s)" % (sci, sequence, period)
+            
+                print("%i, %i, [%i] %s %s %s" % (set_i, plt_i, star_i, sci, 
+                                                 period, sequence))
+            
+                # Get the C params, and u_lambda values
+                u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+                s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+                
+                u_lambdas = tgt_info.loc[hd_id][u_lambda_cols].values
+                s_lambdas = tgt_info.loc[hd_id][s_lambda_cols].values
+                
+                c_scale = results.iloc[star_i]["C_SCALE"]
+                
+                n_points = [12] * len(c_scale)
+                
+                c_array = np.hstack([c_scale[ni]*np.ones(n) 
+                             for ni, n in enumerate(n_points)])
+                
+                #colours = ["mistyrose", "coral", "orangered", "red", 
+                #           "firebrick", "maroon"]
+                cmap = cm.get_cmap("magma")
+                colours = [cmap(i) for i in np.arange(0.96,0,-0.16)]
+                           
+                wl_um = [1.533, 1.581, 1.629, 1.677, 1.725, 1.773]
+                wl_lbl = [r"%s$\,\mu$m" % wl for wl in wl_um]
+                
+                # -------------------------------------------------------------
+                # Plot vis^2 fits
+                # -------------------------------------------------------------
+                n_bl = len(results.iloc[star_i]["BASELINE"])
+                n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+                
+                # Setup lower panel for residuals
+                divider = make_axes_locatable(axes[plt_i])
+                res_ax = divider.append_axes("bottom", size="35%", pad=0.1)
+                axes[plt_i].figure.add_axes(res_ax, sharex=axes[plt_i])
+                
+                residuals_all = []
+                e_vis2_all = []
+                
+                # For each wavelength dimension
+                for wl_i in np.arange(6):
+                    # Need to do 1 plot per wavelength channel
+                    bls = results.iloc[star_i]["BASELINE"]
+                    wls = results.iloc[star_i]["WAVELENGTH"]
+                    sfreq = (bls / wls[wl_i])[:len(c_array)]
+                    
+                    vis2 = results.iloc[star_i]["VIS2"][:, wl_i]
+                    e_vis2 = results.iloc[star_i]["e_VIS2"][:, wl_i]
+                    ldd_fit = results.iloc[star_i]["LDD_FIT"]
+                    e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+                    
+                    # Add a mask to not plot any bad data
+                    valid_i = (((vis2 >= 0) & (e_vis2 > 0) 
+                               & ~np.isnan(vis2)))[:len(c_array)]
+                    
+                    # Normalise vis2 and scale ldd_fit
+                    # TODO: Fix the uncertainty over the length of each seq
+                    vis2 = vis2[:len(c_array)] / c_array
+                    e_vis2 = e_vis2[:len(c_array)]
+                    ldd_fit = ldd_fit * s_lambdas[wl_i]
+                    
+                    u_lambda = u_lambdas[wl_i]
+                    
+                    # Apply mask
+                    vis2 = vis2[valid_i]
+                    e_vis2 = e_vis2[valid_i]
+                    sfreq = sfreq[valid_i]
+            
+                    x = np.arange(1*10**6, 25*10**7, 10000)
+                    y_fit = rdiam.calc_vis2_ls(x, ldd_fit, 1.0, u_lambda) 
+    
+                    # Plot the data points and best fit curve
+                    axes[plt_i].errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
+                                    label=wl_lbl[wl_i], elinewidth=0.1, capsize=0.2, 
+                                    capthick=0.1, markersize=0.5, color=colours[wl_i])
+    
+                    axes[plt_i].plot(x, y_fit, "--", linewidth=0.25, 
+                                     color=colours[wl_i])
+                
+                    # Plot residuals below the vis2 plot
+                    residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, 1.0,
+                                                    u_lambda)
+            
+                    res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
+                                elinewidth=0.1, capsize=0.2, 
+                                capthick=0.1, markersize=0.5, color=colours[wl_i])
+                                
+                    #axes[plt_i].legend(loc="best", fontsize="xx-small")
+                    
+                    # Record all points for figuring out axis ticks later
+                    residuals_all = np.hstack((residuals_all, residuals))
+                    e_vis2_all = np.hstack((e_vis2_all, e_vis2))
+                    
+                # Annotate the sequence name
+                xx = (axes[plt_i].get_xlim()[1] - axes[plt_i].get_xlim()[0]) * 0.05
+                yy = (axes[plt_i].get_ylim()[1] - axes[plt_i].get_ylim()[0]) * 0.05
+                axes[plt_i].text(xx, yy, sci, fontsize="xx-small")
+                
+                # Set up ticks
+                axes[plt_i].set_xlim([0.0,10E7])
+                axes[plt_i].set_ylim([0.0,1.1])
+                
+                axes[plt_i].set_xticklabels([])
+                
+                axes[plt_i].tick_params(axis="both", top=True, right=True)
+                res_ax.tick_params(axis="y", right=True)
+                
+                maj_loc = plticker.MultipleLocator(base=0.2)
+                min_loc = plticker.MultipleLocator(base=0.1)
+                
+                axes[plt_i].yaxis.set_major_locator(maj_loc)
+                axes[plt_i].yaxis.set_minor_locator(min_loc)
+                
+                # Work out the residual axis spacing
+                res_sep_maj = np.abs(np.max(residuals_all + e_vis2_all) 
+                               - np.min(residuals_all - e_vis2_all)) / 4
+                               
+                res_sep_maj = np.round(res_sep_maj*2, 2) / 2
+                res_sep_min = res_sep_maj / 2
+                
+                res_maj_loc = plticker.MultipleLocator(base=res_sep_maj)
+                res_min_loc = plticker.MultipleLocator(base=res_sep_min)
+                res_ax.yaxis.set_major_locator(res_maj_loc)
+                res_ax.yaxis.set_minor_locator(res_min_loc)
+                
+                res_ax.set_xlim([0.0,10E7])
+                res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
+                
+                plt.setp(axes[plt_i].get_xticklabels(), fontsize="xx-small")
+                plt.setp(axes[plt_i].get_yticklabels(), fontsize="xx-small")
+                plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
+                plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
+                res_ax.xaxis.offsetText.set_fontsize("xx-small")
+                res_ax.yaxis.offsetText.set_fontsize("xx-small")
+                
+            # -----------------------------------------------------------------
+            # Finalise
+            # -----------------------------------------------------------------
+            fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
+            fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
+            
+            plt.gcf().set_size_inches(8, 8*(n_rows/n_rows_init))
+            plt.tight_layout(pad=1.0)
+            pdf.savefig()
+            plt.close()    
+
+
+def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
+    """Plot the zoomed in fitted sidelobe
+    """
+    plt.close("all")
+    # Setup the axes
+    fig, axes = plt.subplots(1, 1)
+    plt.subplots_adjust(wspace=0.3, hspace=0.4)
+    
+    # Get the science target name
+    hd_id = tgt_info[tgt_info["Primary"]==sci].index.values[0]
+
+    # Get the C params, and u_lambda values
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    
+    u_lambdas = tgt_info.loc[hd_id][u_lambda_cols].values
+    s_lambdas = tgt_info.loc[hd_id][s_lambda_cols].values
+    
+    c_scale = results.iloc[star_i]["C_SCALE"]
+    
+    n_points = [12] * len(c_scale)
+    
+    c_array = np.hstack([c_scale[ni]*np.ones(n) 
+                 for ni, n in enumerate(n_points)])
+    
+    cmap = cm.get_cmap("magma")
+    colours = [cmap(i) for i in np.arange(0.96,0,-0.16)]
+               
+    wl_um = [1.533, 1.581, 1.629, 1.677, 1.725, 1.773]
+    wl_lbl = [r"%s$\,\mu$m" % wl for wl in wl_um]
+    
+    # -----------------------------------------------------------------
+    # Plot vis^2 fits
+    # -----------------------------------------------------------------
+    n_bl = len(results.iloc[star_i]["BASELINE"])
+    n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+    
+    # Setup lower panel for residuals
+    divider = make_axes_locatable(axes)
+    res_ax = divider.append_axes("bottom", size="35%", pad=0.1)
+    axes.figure.add_axes(res_ax, sharex=axes)
+    
+    # For each wavelength dimension
+    for wl_i in np.arange(6):
+        # Need to do 1 plot per wavelength channel
+        bls = results.iloc[star_i]["BASELINE"]
+        wls = results.iloc[star_i]["WAVELENGTH"]
+        sfreq = (bls / wls[wl_i])[:len(c_array)]
+        
+        vis2 = results.iloc[star_i]["VIS2"][:, wl_i]
+        e_vis2 = results.iloc[star_i]["e_VIS2"][:, wl_i]
+        ldd_fit = results.iloc[star_i]["LDD_FIT"]
+        e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+        
+        # Normalise vis2 and scale ldd_fit
+        # TODO: Fix the uncertainty over the length of each seq
+        vis2 = vis2[:len(c_array)] / c_array
+        e_vis2 = e_vis2[:len(c_array)]
+        ldd_fit = ldd_fit * s_lambdas[wl_i]
+
+        u_lambda = u_lambdas[wl_i]
+
+        x = np.arange(1*10**6, 25*10**7, 10000)
+        y_fit = rdiam.calc_vis2_ls(x, ldd_fit, 1.0, u_lambda) 
+
+        # Plot the data points and best fit curve
+        axes.errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
+                        label=wl_lbl[wl_i], elinewidth=0.1, capsize=0.2, 
+                        capthick=0.1, markersize=4.0, color=colours[wl_i])
+
+        axes.plot(x, y_fit, "--", linewidth=0.25, color=colours[wl_i])
+    
+        # Plot residuals below the vis2 plot
+        residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, 1.0,
+                                        u_lambda)
+
+        res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", elinewidth=0.1, 
+                    capsize=0.2, capthick=0.1, markersize=4.0, 
+                    color=colours[wl_i])
+                    
+        axes.legend(loc="best", fontsize="xx-small")
+    
+    # Set up ticks and axes
+    axes.set_xlim([5.5E7,9.5E7])
+    axes.set_ylim([0.0,0.016])
+    
+    axes.set_xticklabels([])
+    
+    axes.tick_params(axis="both", top=True, right=True)
+    res_ax.tick_params(axis="y", right=True)
+    
+    maj_loc = plticker.MultipleLocator(base=0.004)
+    min_loc = plticker.MultipleLocator(base=0.00025)
+    
+    axes.yaxis.set_major_locator(maj_loc)
+    axes.yaxis.set_minor_locator(min_loc)
+    axes.set_ylabel(r"Visibility$^2$", va='center', rotation='vertical')
+    
+    res_maj_loc = plticker.MultipleLocator(base=0.005)
+    res_min_loc = plticker.MultipleLocator(base=0.001)
+    
+    res_ax.yaxis.set_major_locator(res_maj_loc)
+    res_ax.yaxis.set_minor_locator(res_min_loc)
+    
+    res_ax.set_xlim([5.5E7,9.5E7])
+    res_ax.set_ylim([-0.01,0.01])
+    res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
+    res_ax.set_ylabel("Residuals")
+    
+    res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+    
+    plt.setp(axes.get_xticklabels(), fontsize="xx-small")
+    plt.setp(axes.get_yticklabels(), fontsize="xx-small")
+    plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
+    plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
+    res_ax.xaxis.offsetText.set_fontsize("xx-small")
+    res_ax.yaxis.offsetText.set_fontsize("xx-small")
+        
+    plt.tight_layout(pad=1.0)
+    plt.savefig("paper/lam_sgr_sidelobe.pdf")  
 
  
 
@@ -850,6 +1160,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
     # Plot residuals
     ax.set_xticklabels([])
     residuals = np.array(colour_rel_diams) / np.array(fit_diams)
+    
         
     res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
                     yerr=e_colour_rel_diams, fmt=".", elinewidth=0.5, 
@@ -1119,9 +1430,9 @@ def plot_vis2(oi_fits_file, star_id):
     bl_grid = np.tile(baselines, n_wl).reshape([n_wl, n_bl]).T
     wl_grid = np.tile(wavelengths, n_bl).reshape([n_bl, n_wl])
             
-    b_on_lambda = (bl_grid / wl_grid).flatten()
+    sfreq = (bl_grid / wl_grid).flatten()
     
-    plt.errorbar(b_on_lambda, vis2.flatten(), yerr=e_vis2.flatten(), fmt=".")
+    plt.errorbar(sfreq, vis2.flatten(), yerr=e_vis2.flatten(), fmt=".")
     
     plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
     plt.ylabel(r"Visibility$^2$")

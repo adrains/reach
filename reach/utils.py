@@ -279,7 +279,7 @@ def initialise_tgt_info():
     # For simplification during testing, remove any stars that fall outside the 
     # VT --> V conversion from Bessell 2000, or those science targets not
     # in use
-    tgt_info = tgt_info.drop(["GJ551","HD133869"])#, "HD203608"])
+    tgt_info = tgt_info.drop(["GJ551","HD133869", "HD203608"])
 
     # Convert VT and BT to V and B
     # TODO: proper treatment of magnitude errors

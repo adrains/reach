@@ -20,6 +20,7 @@ import pickle
 combined_fit = True
 load_saved_results = True
 assign_default_uncertainties = True
+force_claret_params = False
 n_bootstraps = 1000
 results_folder = "19-03-26_i1000"
 #results_path = "/home/arains/code/reach/results/%s/" % results_folder
@@ -32,7 +33,7 @@ tgt_info = rutils.initialise_tgt_info()
 complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Load in distributions
-sampled_sci_params = rutils.load_sampled_params(results_folder, True)
+sampled_sci_params = rutils.load_sampled_params(results_folder, force_claret_params)
 
 # Currently broken, don't consider
 complete_sequences.pop((102, 'delEri', 'bright'))
@@ -108,7 +109,8 @@ rpaper.make_table_final_results(tgt_info)
 print("Generating plots...")
 rplt.plot_casagrande_teff_comp(tgt_info)
 rplt.plot_lit_diam_comp(tgt_info)
-rplt.plot_paper_vis2_fits(results, n_rows=8, n_cols=2)
+rplt.plot_sidelobe_vis2_fit(tgt_info, results)  
+rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2)
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W4")
 rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 
