@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import reach.photometry as rphot
 import reach.diameters as rdiam
-import reach.parameters as rparam
 from collections import OrderedDict
 
 # -----------------------------------------------------------------------------
@@ -357,6 +356,7 @@ def initialise_tgt_info():
     
     
     # Compute Teffs from Casagrande et al. 2010 relations
+    import reach.parameters as rparam
     teffs, e_teffs = rparam.compute_casagrande_2010_teff(tgt_info["BTmag"],  
                                                          tgt_info["VTmag"], 
                                                          tgt_info["FeH_rel"])

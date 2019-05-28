@@ -51,6 +51,7 @@ def make_table_final_results(tgt_info):
         # Step through column by column
         table_row += "%s & " % row["Primary"]
         table_row += ".. & "
+        table_row += ".. & "
         #table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
         table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
@@ -144,10 +145,9 @@ def make_table_fbol(tgt_info):
     
     bands = [r"H$_p$", r"B$_T$", r"V$_T$", r"B$_P$", r"R$_P$"]
     
-    f_bols = ["f_bol_Hpmag", "f_bol_BTmag", "f_bol_VTmag", "f_bol_BPmag", 
-             "f_bol_RPmag"]
-    e_f_bols = ["e_f_bol_Hpmag", "e_f_bol_BTmag", "e_f_bol_VTmag", 
-               "e_f_bol_BPmag", "e_f_bol_RPmag"]
+    f_bols = ["f_bol_Hp", "f_bol_BT", "f_bol_VT", "f_bol_BP", "f_bol_RP"]
+    e_f_bols = ["e_f_bol_Hp", "e_f_bol_BT", "e_f_bol_VT", "e_f_bol_BP", 
+                "e_f_bol_RP"]
     
      # Populate the table for every science target
     for star_i, star in tgt_info[tgt_info["Science"]].iterrows():
@@ -161,10 +161,10 @@ def make_table_fbol(tgt_info):
         table_row += "%s & " % star["Primary"]
         table_row += "%s & " % star.name.replace("HD", "")
         
-        if not np.isnan(star["f_bol_Hpmag"]):
-            table_row += r"H$_p$: %.3E & " % star["f_bol_Hpmag"]
+        if not np.isnan(star["f_bol_Hp"]):
+            table_row += r"H$_p$: %.3E & " % star["f_bol_Hp"]
         
-            e_pc_f_bol_hp = star["e_f_bol_Hpmag"] / star["f_bol_Hpmag"]
+            e_pc_f_bol_hp = star["e_f_bol_Hp"] / star["f_bol_Hp"]
         
             table_row += r"%.2f \\" % (e_pc_f_bol_hp * 100)
         else:
@@ -191,8 +191,8 @@ def make_table_fbol(tgt_info):
     footer.append("\end{tabular}")
     
     # Write the tables
-    table_1 = header + table_rows[:60] + footer
-    table_2 = header + table_rows[60:] + footer
+    table_1 = header + table_rows[:30] + footer
+    table_2 = header + table_rows[30:] + footer
     
     # Write the table
     np.savetxt("paper/table_fbol_1.tex", table_1, fmt="%s")      

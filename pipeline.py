@@ -104,7 +104,7 @@ do_random_ifg_sampling = True
 do_gaussian_diam_sampling = True
 test_one_seq_only = False
 assign_default_uncertainties = True
-n_bootstraps = 1000
+n_bootstraps = 2000
 pred_ldd_col = "LDD_pred"
 e_pred_ldd_col = "e_LDD_pred"
 base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
@@ -128,7 +128,7 @@ print("<i>Strap in</i> for bootstrapping.")
 # -----------------------------------------------------------------------------
 # Targets information is loaded into a pandas dataframe, with column labels for
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
-tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties=True)
+tgt_info = rutils.initialise_tgt_info()
 
 # Sample diameters for bootstrapping (if n_bootstraps < 1, actual predictions)
 n_pred_ldd, e_pred_ldd = rdiam.sample_n_pred_ldd(tgt_info, n_bootstraps, 
@@ -155,8 +155,10 @@ sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
 
 # Don't care about distant RGB
-sequences.pop((99, "HD187289", "faint")
-sequences.pop((99, "HD187289", "bright")
+sequences.pop((99, "HD187289", "faint"))
+sequences.pop((99, "HD187289", "bright"))
+complete_sequences.pop((99, 'HD187289', 'faint'))
+complete_sequences.pop((99, 'HD187289', 'bright'))
 
 # -----------------------------------------------------------------------------
 # (6) Inspect reduced data

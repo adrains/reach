@@ -879,7 +879,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
             fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
             fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
             
-            plt.gcf().set_size_inches(8, 8*(n_rows/n_rows_init))
+            plt.gcf().set_size_inches(8, 11*(n_rows/n_rows_init))
             plt.tight_layout(pad=1.0)
             pdf.savefig()
             plt.close()    

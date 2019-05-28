@@ -1,10 +1,11 @@
 """
 """
 from __future__ import division, print_function
+import os
 import numpy as np
 import pandas as pd
 import reach.limb_darkening as rld
-
+import reach.utils as rutils
 # -----------------------------------------------------------------------------
 # Sampling Parameters
 # -----------------------------------------------------------------------------   
@@ -139,6 +140,96 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
     return sampled_sci_params
         
 
+def sample_bc_magnitudes(sampled_sci_params, tgt_info):
+    """Sample the magnitudes used for bolometric corrections.
+    """
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    # Initialise the new columns
+    mag_labels = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    e_mag_labels = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
+    for mag in mag_labels:
+        sampled_sci_params[mag] = 0
+        
+    # Go through star by star and populate
+    for star in star_ids:
+        print("Sampling magnitudes for %s" % star)
+        
+        for mag, e_mag in zip(mag_labels, e_mag_labels):
+            mags = np.random.normal(tgt_info.loc[star][mag], 
+                                    tgt_info.loc[star][e_mag], 
+                                    len(sampled_sci_params.loc[star]))
+
+            sampled_sci_params.loc[star, mag] = mags
+
+
+def compute_sampled_fbol(sampled_sci_params, band_mask=[1, 0, 0, 0, 0]):
+    """Derive the sampled value of fbol from the sampled magnitude and BC from
+    Casagrande BC code.
+    
+    Currently just averages those bands specified in the band mask.
+    """
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    # Initialise the new columns
+    bc_labels = ["BC_Hp", "BC_BT", "BC_VT", "BC_BP", "BC_RP"]
+    mag_labels = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    fbol_labels = ["f_bol_Hp", "f_bol_BT", "f_bol_VT", "f_bol_BP", "f_bol_RP"]
+    e_fbol_labels = ["e_f_bol_Hp", "e_f_bol_BT", "e_f_bol_VT", "e_f_bol_BP", 
+                     "e_f_bol_RP"]
+    
+    for fbol in fbol_labels:
+        sampled_sci_params[fbol] = 0
+    
+    # Plus the representative fbol and its error
+    sampled_sci_params["f_bol_final"] = 0
+    #sampled_sci_params["e_f_bol_final"] = 0
+        
+    masked_fbol = np.array(fbol_labels)[band_mask]
+    e_masked_fbol = np.array(e_fbol_labels)[band_mask]    
+        
+    # Go through star by star and populate
+    for star in star_ids:
+        print("Computing fbol for %s" % star)
+        
+        for mag, bc, fbol in zip(mag_labels, bc_labels, fbol_labels):
+            bcs = sampled_sci_params.loc[star, bc].values
+            mags = sampled_sci_params.loc[star, mag].values
+            sampled_sci_params.loc[star, fbol] = calc_f_bol(bcs, mags)
+        
+        # Compute the "final" value of fbol for each iteration
+        #weights = sampled_sci_params.loc[star][e_masked_fbol].values**(-2)
+        f_bol_avg = np.average(sampled_sci_params.loc[star][masked_fbol].values, 
+                               axis=1)
+                               #weights=weights, axis=1)
+        #e_f_bol_avg = (np.sum(weights, axis=1)**-1)**0.5
+        
+        sampled_sci_params.loc[star, "f_bol_final"] = f_bol_avg
+        #sampled_sci_params.loc[star, "e_f_bol_final"] = e_f_bol_avg
+        
+
+def sample_distance(sampled_sci_params, tgt_info):
+    """Sample the distance to the star.
+    """
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    # Initialise the new columns
+    sampled_sci_params["Dist"] = 0
+    
+    print("Sampling distances...")   
+        
+    # Go through star by star and populate
+    for star in star_ids:
+        dist = np.random.normal(tgt_info.loc[star]["Dist"], 
+                                tgt_info.loc[star]["e_Dist"], 
+                                len(sampled_sci_params.loc[star]))
+
+        sampled_sci_params.loc[star, "Dist"] = dist
+
+
 # -----------------------------------------------------------------------------
 # Combining distributions
 # -----------------------------------------------------------------------------   
@@ -198,20 +289,11 @@ def combine_u_s_lambda(tgt_info, sampled_sci_params):
 # -----------------------------------------------------------------------------
 # Calculating physical parameters
 # -----------------------------------------------------------------------------
-def calc_all_f_bol(tgt_info, n_samples):
+def calc_all_f_bol(tgt_info, sampled_sci_params, band_mask=[1, 1, 1, 0, 0]):
     """f_bol in ergs s^-1 cm^-2
     """
-    # Import in the sampled bolometric corrections
-    bcs = np.loadtxt("data/bc_science.data", skiprows=1)
-    
-    # Reshape the n_samples bolometric corrections per star
-    n_science = len(tgt_info[tgt_info["Science"]])
-    n_filt = bcs.shape[-1]
-    
-    bcs = np.reshape(bcs, (n_science, n_samples, n_filt))
-    
     # Define bands to reference, construct new headers
-    bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    bands = ["Hp", "BT", "VT", "BP", "RP"]
     e_bands = ["e_%s" % band for band in bands] 
     f_bol_bands = ["f_bol_%s" % band for band in bands] 
     e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
@@ -224,26 +306,29 @@ def calc_all_f_bol(tgt_info, n_samples):
     tgt_info["f_bol_final"] = np.zeros(len(tgt_info))
     tgt_info["e_f_bol_final"] = np.zeros(len(tgt_info))
     
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    masked_fbol = np.array(f_bol_bands)[band_mask]
+    e_masked_fbol = np.array(e_f_bol_bands)[band_mask]
+    
     # Calculate bolometric fluxes for each band for every star
-    for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
-        for band_i, (band, e_band) in enumerate(zip(bands, e_bands)):
-            # Sample the magnitudes
-            mags = np.random.normal(row[band], row[e_band], n_samples) 
+    for star in star_ids:
+        for fbol_lbl, e_fbol_lbl in zip(f_bol_bands, e_f_bol_bands):
+            fbol = np.mean(sampled_sci_params.loc[star, fbol_lbl].values)
+            e_fbol = np.std(sampled_sci_params.loc[star, fbol_lbl].values)
             
-            # Calculate the bolometric flux
-            f_bols = calc_f_bol(bcs[star_i, :, band_i], mags)
-            
-            f_bol = np.mean(f_bols)
-            e_f_bol = np.std(f_bols)
-            
-            tgt_info.loc[star, f_bol_bands[band_i]] = f_bol
-            tgt_info.loc[star, e_f_bol_bands[band_i]] = e_f_bol
+            tgt_info.loc[star, fbol_lbl] = fbol
+            tgt_info.loc[star, e_fbol_lbl] = e_fbol
             
     # Now use a weighted average to work out fbol, using the reciprocal of
-    # the variance as weights
+    # the variance as weights. Only use those bands specified in the mask
+    masked_fbol = np.array(f_bol_bands)[band_mask]
+    e_masked_fbol = np.array(f_bol_bands)[band_mask]
+    
     for star_i, (star, row) in enumerate(tgt_info[tgt_info["Science"]].iterrows()):
-        weights = row[e_f_bol_bands][row[e_f_bol_bands] > 0].values**(-2)
-        f_bol_avg = np.average(row[f_bol_bands][row[f_bol_bands] > 0].values, 
+        weights = row[e_masked_fbol][row[e_masked_fbol] > 0].values**(-2)
+        f_bol_avg = np.average(row[masked_fbol][row[masked_fbol] > 0].values, 
                                weights=weights)
         e_f_bol_avg = (np.sum(weights)**-1)**0.5
         
@@ -251,73 +336,147 @@ def calc_all_f_bol(tgt_info, n_samples):
         tgt_info.loc[star, "e_f_bol_final"] = e_f_bol_avg
         
 
-def calc_all_r_star(tgt_info):
+def calc_all_r_star(sampled_sci_params):
     """Calculate the radius of each science target in units of Solar radii.
     """
     # Constants
     pc = 3.0857*10**13 # km / pc
     r_sun = 6.957 *10**5 # km
     
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    sampled_sci_params["r_star_final"] = 0
+    
     # Compute the physical radii
-    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
-                              tgt_info["ldd_final"] > 0)].iterrows():
+    for star in star_ids:
         # Convert to km and radians
-        dist_km = row["Dist"] * pc
-        e_dist_km = row["e_Dist"] * pc
-        ldd_rad = row["ldd_final"] * np.pi/180/3600/1000
-        e_ldd_rad = row["e_ldd_final"] * np.pi/180/3600/1000
+        dist_km = sampled_sci_params.loc[star]["Dist"].values * pc
+        #e_dist_km = row["e_Dist"] * pc
+        ldds = sampled_sci_params.loc[star]["LDD_FIT"].values 
+        ldds_rad = ldds * np.pi/180/3600/1000
+        #e_ldd_rad = row["e_ldd_final"] * np.pi/180/3600/1000
         
         # Calculate the stellar radii
-        r_star = 0.5 * ldd_rad * dist_km / r_sun
-        e_r_star = r_star * ((e_ldd_rad/ldd_rad)**2
-                             + (e_dist_km/dist_km)**2)**0.5
+        r_stars = 0.5 * ldds_rad * dist_km / r_sun
+        #e_r_star = r_star * ((e_ldd_rad/ldd_rad)**2
+        #                     + (e_dist_km/dist_km)**2)**0.5
     
-        tgt_info.loc[star, "r_star_final"] = r_star
-        tgt_info.loc[star, "e_r_star_final"] = e_r_star        
+        sampled_sci_params.loc[star, "r_star_final"] = r_stars
+        #tgt_info.loc[star, "e_r_star_final"] = e_r_star        
     
     
-def calc_all_teff(tgt_info, n_samples):
+def calc_all_teff(sampled_sci_params):
     """Calculate the effective temperature for all stars
     """ 
     # Stefan-Boltzmann constant
     sigma = 5.6704 * 10**-5 #erg cm^-2 s^-1 K^-4
     
-    # Define bands to reference, construct new headers
-    bands = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
-    
-    for band in bands:
-        tgt_info["teff_%s" % band] = np.zeros(len(tgt_info))
-        tgt_info["e_teff_%s" % band] = np.zeros(len(tgt_info))
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
     
     # And the averaged fbol value
-    tgt_info["teff_final"] = np.zeros(len(tgt_info))
-    tgt_info["e_teff_final"] = np.zeros(len(tgt_info))
+    sampled_sci_params["teff_final"] = 0
     
     # Calculate the Teff for every star using an MC sampling approach         
-    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
-                              tgt_info["ldd_final"] > 0)].iterrows():
-        # Sample the diameters
-        ldds = np.random.normal(row["ldd_final"], row["e_ldd_final"], 
-                                n_samples)
-        ldds = ldds * np.pi/180/3600/1000
+    for star in star_ids:
+        # Put LDD in radians
+        ldds = sampled_sci_params.loc[star]["LDD_FIT"] * np.pi/180/3600/1000
         
         # Sample fbol
-        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], 
-                                  n_samples)
+        f_bols = sampled_sci_params.loc[star]["f_bol_final"]
         
         # Calculate Teff
         teffs = (4*f_bols / (sigma * ldds**2))**0.25 
         
-        # Calculate final teff and error
-        teff = np.mean(teffs)
-        e_teff = np.std(teffs)
+        # Store final value
+        sampled_sci_params.loc[star, "teff_final"] = teffs.values
+
+
+def calc_all_L_bol(sampled_sci_params):
+    """Calculate the stellar luminosity with respect to Solar.
+    """
+    # Constants
+    L_sun = 3.839 * 10**33 # erg s^-1
+    pc = 3.0857*10**18 # cm / pc
+    
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    # Initialise L_star column
+    sampled_sci_params["L_star_final"] = 0
+    #sampled_sci_params["e_L_star_final"] = 0
+    
+    # Calculate the Teff for every star using an MC sampling approach         
+    for star in star_ids:
+        # Sample fbol
+        f_bols = sampled_sci_params.loc[star]["f_bol_final"].values
+        
+        # Sample distances
+        dists = sampled_sci_params.loc[star]["Dist"].values * pc
+        
+        # Calculate luminosities
+        L_stars = 4 * np.pi * f_bols * dists**2
+        
+        # Calculate final L_star (in solar units) and error
+        #L_star = np.mean(L_stars) / L_sun
+        #e_L_star = np.std(L_stars) / L_sun
         
         # Store final value
-        tgt_info.loc[star, "teff_final"] = teff
-        tgt_info.loc[star, "e_teff_final"] = e_teff
+        sampled_sci_params.loc[star, "L_star_final"] = L_stars / L_sun
+        #tgt_info.loc[star, "e_L_star_final"] = e_L_star
+
+  
+def calc_f_bol(bc, mag):
+    """Calculate the bolometric flux from a bolometric correction and mag.
+    """
+    L_sun = 3.839 * 10**33 # erg s^-1
+    au = 1.495978707*10**13 # cm
+    M_bol_sun = 4.75
+    
+    exp = -0.4 * (bc - M_bol_sun + mag - 10)
+    
+    f_bol = (np.pi * L_sun / (1.296 * 10**9 * au)**2) * 10**exp
+    
+    return f_bol      
+    
+
+def calc_L_star(tgt_info):
+    """Calculate the absolute stellar luminosity using the bolometric magnitude 
+    """
+    L_sun = 3.839 * 10**33 # erg s^-1
+    au = 1.495978707*10**13 # cm
+    M_bol_sun = 4.75
+    
+    tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
 
 
-def calc_all_L_bol(tgt_info, n_samples):
+def calc_final_params(tgt_info, sampled_sci_params):
+    """Average sampled parameters and get uncertainties from std.
+    """
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    value_cols = ["f_bol_Hp", "f_bol_BT", "f_bol_VT", "f_bol_BP", "f_bol_RP",
+              "f_bol_final", "teff_final", "L_star_final", "r_star_final"]
+              
+    error_cols = ["e_%s" % value for value in value_cols] 
+    
+    # Initialise
+    for value, error in zip(value_cols, error_cols):
+        tgt_info[value] = 0
+        tgt_info[error] = 0
+    
+    for star in star_ids:
+        # Populate
+        values = np.mean(sampled_sci_params.loc[star][value_cols].values, axis=0)
+        errors = np.std(sampled_sci_params.loc[star][value_cols].values, axis=0)
+        
+        tgt_info.loc[star, value_cols] = values
+        tgt_info.loc[star, error_cols] = errors
+
+
+def calc_all_L_bol_old(tgt_info, n_samples):
     """Calculate the stellar luminosity with respect to Solar.
     """
     # Constants
@@ -348,31 +507,7 @@ def calc_all_L_bol(tgt_info, n_samples):
         # Store final value
         tgt_info.loc[star, "L_star_final"] = L_star
         tgt_info.loc[star, "e_L_star_final"] = e_L_star
-
-  
-def calc_f_bol(bc, mag):
-    """
-    """
-    L_sun = 3.839 * 10**33 # erg s^-1
-    au = 1.495978707*10**13 # cm
-    M_bol_sun = 4.75
-    
-    exp = -0.4 * (bc - M_bol_sun + mag - 10)
-    
-    f_bol = (np.pi * L_sun / (1.296 * 10**9 * au)**2) * 10**exp
-    
-    return f_bol      
-    
-
-def calc_L_star(tgt_info):
-    """
-    """
-    L_sun = 3.839 * 10**33 # erg s^-1
-    au = 1.495978707*10**13 # cm
-    M_bol_sun = 4.75
-    
-    tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
-
+        
 # -----------------------------------------------------------------------------
 # Empirical relations
 # -----------------------------------------------------------------------------   
@@ -409,6 +544,58 @@ def compute_casagrande_2010_teff(BTmag, VTmag, fehs):
     
     return teff, e_teff
 
+
+# -----------------------------------------------------------------------------
+# Working with Casagrande BC code
+# ----------------------------------------------------------------------------- 
+def sample_casagrande_bc(sampled_sci_params, bc_path):
+    """
+    
+    Check that selectbc.data looks like this to Hp, Bt, Vt, Bp, Rp:
+      1  = ialf (= [alpha/Fe] variation: select from choices listed below)
+      5  = nfil (= number of filter bandpasses to be considered; maximum = 5)
+     21 76  =  photometric system and filter (select from menu below)
+     21 77  =  photometric system and filter (select from menu below)
+     21 78  =  photometric system and filter (select from menu below)
+     27 86  =  photometric system and filter (select from menu below)
+     27 88  =  photometric system and filter (select from menu below)
+    """
+    # Get the star IDs and do this one star at a time
+    star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
+    
+    # Initialise the new columns
+    bc_labels = ["BC_Hp", "BC_BT", "BC_VT", "BC_BP", "BC_RP"]
+    for bc in bc_labels:
+        sampled_sci_params[bc] = 0
+        
+    # Go through star by star and populate
+    for star in star_ids:
+        print("Getting BC for %s" % star)
+        n_bs = len(sampled_sci_params.loc[star])
+        id_fmt = star + "_%0" + str(int(np.log10(n_bs)) + 1) + "i"
+        ids = [id_fmt % s for s in np.arange(0, n_bs)]
+        #ids = np.arange(n_bs)
+        ebvs = np.zeros(n_bs)
+    
+        cols = ["logg", "feh", "teff"]
+        
+        data = np.vstack((ids, sampled_sci_params.loc[star]["logg"], 
+                          sampled_sci_params.loc[star]["feh"],
+                          sampled_sci_params.loc[star]["teff"], ebvs)).T
+    
+        np.savetxt("%s/input.sample.all" % bc_path, data, delimiter=" ", fmt="%s")#, 
+                   #fmt=["%s", "%0.3f", "%0.3f", "%0.2f", "%0.2f"])
+    
+        os.system("cd %s; ./bcall" % bc_path)
+    
+        # Load in the result
+        results = pd.read_csv("%s/output.file.all" % bc_path, 
+                              delim_whitespace=True)
+                              
+        # Save the bolometric corrections
+        bc_num_cols = ["BC_1", "BC_2", "BC_3", "BC_4", "BC_5"]
+        sampled_sci_params.loc[star, bc_labels] = results[bc_num_cols].values
+    
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -458,3 +645,25 @@ def print_mean_flux_errors(tgt_info):
                        / tgt_info["f_bol_avg"][tgt_info["Science"]]).median()
     print("\nAVG --- %0.2f" % (med_e_f_bol*100))
   
+  
+def merge_sampled_params_and_results(sampled_sci_params, bs_results, tgt_info):
+    """For simplicity, merge sampled_sci_params and bs_results
+    """
+    # Get the IDs from bs_results
+    prim_ids = bs_results.keys()
+    
+    # And the matching HD IDs
+    hd_ids = rutils.get_unique_key(tgt_info, bs_results.keys())
+    
+    # Get the list of new columns. For now don't worry about the vectors
+    #bs_cols = ['MJD', 'TEL_PAIR', 'VIS2', 'FLAG', 'BASELINE', 'WAVELENGTH',
+    #           'LDD_FIT', 'LDD_PRED', 'C_SCALE']
+    bs_cols = ["LDD_FIT"]
+    
+    for col in bs_cols:
+        sampled_sci_params[col] = 0
+    
+    # Now go through and combine
+    for prim_id, hd_id in zip(prim_ids, hd_ids):
+        # Add to sampled_sci_params
+        sampled_sci_params.loc[hd_id, bs_cols] = bs_results[prim_id][bs_cols].values
