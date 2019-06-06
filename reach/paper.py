@@ -12,13 +12,17 @@ from collections import OrderedDict
 def make_table_final_results(tgt_info):
     """
     """
+    exp_scale = -8
+    
     columns = OrderedDict([("Star", ""),
                            #("HD", ""),
                            (r"u$_\lambda$", ""),
                            (r"s$_\lambda$", ""),
+                           (r"$\theta_{\rm UD}$", "(mas)"),
                            (r"$\theta_{\rm LD}$", "(mas)"),
                            (r"R", "($R_\odot$)"), 
-                           (r"f$_{\rm bol}$", r"(ergs s$^{-1}$ cm $^{-2}$)"),
+                           (r"f$_{\rm bol}$", 
+                            r"(10$^{%i}\,$ergs s$^{-1}$ cm $^{-2}$)" % exp_scale),
                            (r"T$_{\rm eff}$", "(K)"),
                            ("L", ("($L_\odot$)"))])
     
@@ -53,11 +57,15 @@ def make_table_final_results(tgt_info):
         table_row += ".. & "
         table_row += ".. & "
         #table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
+        table_row += r"%0.3f $\pm$ %0.3f & " % (0, 0)
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
-        table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
-        table_row += r"%0.3E $\pm$ %0.3E &" % (row["f_bol_final"], row["e_f_bol_final"])
+        table_row += r"%0.2f $\pm$ %0.2f &" % (row["r_star_final"], row["e_r_star_final"])
+        
+        # For fbol representation, split mantissa and exponent
+        table_row += r"%5.1f $\pm$ %0.1f &" % (row["f_bol_final"] / 10**exp_scale, 
+                                               row["e_f_bol_final"] / 10**exp_scale)
         table_row += r"%0.0f $\pm$ %0.0f & " % (row["teff_final"], row["e_teff_final"])
-        table_row += r"%0.3f $\pm$ %0.3f " % (row["L_star_final"], row["e_L_star_final"])
+        table_row += r"%0.2f $\pm$ %0.2f " % (row["L_star_final"], row["e_L_star_final"])
         
         table_rows.append(table_row + r"\\")
     
@@ -279,8 +287,8 @@ def make_table_targets(tgt_info):
                            ("RA$^a$", "(hh mm ss.ss)"),
                            ("DEC$^a$", "(dd mm ss.ss)"),
                            ("SpT$^b$", ""),
-                           ("VTmag$^c$", "(mag)"), 
-                           ("Hmag$^d$", "(mag)"),
+                           ("$V_{\\rm T}$^c$", "(mag)"), 
+                           ("$H^d$", "(mag)"),
                            ("T$_{\\rm eff}$", "(K)"),
                            ("logg", "(dex)"), 
                            ("[Fe/H]", "(dex)"),
@@ -333,7 +341,7 @@ def make_table_targets(tgt_info):
         table_row += "%s & " % dec
         table_row += "%s & " % star["SpT"]
         table_row += "%0.2f & " % star["VTmag"]
-        table_row += "%0.2f & " % star["Hmag"]
+        table_row += "%0.1f & " % star["Hmag"]
         table_row += r"%0.0f $\pm$ %0.0f & " % (star["Teff"], star["e_teff"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["logg"], star["e_logg"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (star["FeH_rel"], star["e_FeH_rel"])

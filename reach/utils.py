@@ -2,10 +2,12 @@
 """
 from __future__ import division, print_function
 
+import os
 import csv
 import pickle
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 import reach.photometry as rphot
 import reach.diameters as rdiam
 from collections import OrderedDict
@@ -261,11 +263,12 @@ def compute_dist(tgt_info):
                         np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
                                / tgt_info["Plx"]))
     
-def initialise_tgt_info():
+def initialise_tgt_info(assign_default_uncertainties=True):
     """
     """
     # Import the base target info sans calculations
-    tgt_info = load_target_information(assign_default_uncertainties=True)
+    tgt_info = load_target_information(
+                assign_default_uncertainties=assign_default_uncertainties)
 
     # Calculate distances and distance errors
     compute_dist(tgt_info)
@@ -368,9 +371,12 @@ def initialise_tgt_info():
     #tgt_info.loc["HD187289", "u_lld"] = 0.5
     
     return tgt_info
-    
+
+# -----------------------------------------------------------------------------
+# Saving and loading
+# -----------------------------------------------------------------------------    
 def load_sequence_logs():
-    """
+    """Load the sequence and complete_sequence data structures.
     """
     pkl_obslog = open("data/pionier_observing_log.pkl", "r")
     complete_sequences = pickle.load(pkl_obslog)
@@ -384,7 +390,7 @@ def load_sequence_logs():
     
     
 def save_results(bs_results, results, folder):
-    """
+    """Save the bootstrap and final results datastructures.
     """
     pkl_bs_results = open("results/%s/bs_results.pkl" % folder, "wb")
     pickle.dump(bs_results, pkl_bs_results)
@@ -396,7 +402,7 @@ def save_results(bs_results, results, folder):
 
 
 def load_results(folder):
-    """
+    """Load the bootstrapped and final results pickle.
     """
     pkl_bs_results = open("results/%s/bs_results.pkl" % folder, "r")
     bs_results = pickle.load(pkl_bs_results)
@@ -408,15 +414,17 @@ def load_results(folder):
     
     return bs_results, results    
     
+    
 def save_sampled_params(sampled_params, folder):
-    """
+    """Save the sampled stellar parameters.
     """
     pkl_params = open("results/%s/sampled_params.pkl" % folder, "wb")
     pickle.dump(sampled_params, pkl_params)
     pkl_params.close()
     
+    
 def load_sampled_params(folder, force_claret_params=False):
-    """
+    """Load the sampled stellar parameters.
     """
     if not force_claret_params:
         pkl_params = open("results/%s/sampled_params.pkl" % folder, "r")
@@ -427,3 +435,88 @@ def load_sampled_params(folder, force_claret_params=False):
     pkl_params.close()    
     
     return sampled_params
+    
+    
+def save_sampled_ldd(n_pred_ldd, e_pred_ldd, folder):
+    """Save the sampled values of LDD and the corresponding uncertainties.
+    """
+    pkl_pred_ldd = open("results/%s/n_pred_ldd.pkl" % folder, "wb")
+    pickle.dump(n_pred_ldd, pkl_pred_ldd)
+    pkl_pred_ldd.close()
+    
+    pkl_e_pred_ldd = open("results/%s/e_pred_ldd.pkl" % folder, "wb")
+    pickle.dump(e_pred_ldd, pkl_e_pred_ldd)
+    pkl_e_pred_ldd.close()
+    
+    
+def load_sampled_ldd(folder):
+    """Load in the sampled values of LDD and the corresponding uncertainties.
+    """
+    pkl_pred_ldd = open("results/%s/n_pred_ldd.pkl" % folder, "r")
+    n_pred_ldd = pickle.load(pkl_pred_ldd)
+    pkl_pred_ldd.close()
+
+    pkl_e_pred_ldd = open("results/%s/e_pred_ldd.pkl" % folder, "r")
+    e_pred_ldd = pickle.load(pkl_e_pred_ldd)
+    pkl_e_pred_ldd.close()  
+    
+    return n_pred_ldd, e_pred_ldd
+
+
+def sampling_already_done(folder, force_claret_params=False):
+    """Return True if both the diameters, their uncertainties, and science
+    target parameters have already been sampled, false if otherwise.
+    """
+    if (os.path.exists("results/%s/n_pred_ldd.pkl" % folder) 
+        and os.path.exists("results/%s/e_pred_ldd.pkl" % folder)
+        and ((os.path.exists("results/%s/sampled_params.pkl" % folder) 
+              and not force_claret_params)) 
+            or ((os.path.exists("results/%s/sampled_params_claret.pkl" % folder) 
+              and force_claret_params))):
+        return True
+    else:
+        return False
+          
+# -----------------------------------------------------------------------------
+# Scientific Notation formatting
+# -----------------------------------------------------------------------------
+def fexp(number):
+    """Calculate the base 10 exponent of the input for use in scientific 
+    notation representation.
+    
+    Per: https://stackoverflow.com/questions/45332056/
+    decompose-a-float-into-mantissa-and-exponent-in-base-10-without-strings
+    """
+    (sign, digits, exponent) = Decimal(number).as_tuple()
+    return len(digits) + exponent - 1
+
+def fman(number):
+    """Calculate the base 10 mantissa of the input for use in scientific 
+    notation representation.
+    
+    Per: https://stackoverflow.com/questions/45332056/
+    decompose-a-float-into-mantissa-and-exponent-in-base-10-without-strings
+    """
+    return Decimal(number).scaleb(-fexp(number)).normalize()
+    
+# -----------------------------------------------------------------------------
+# Collating results pdf
+# -----------------------------------------------------------------------------
+def collate_cal_pdfs():
+    """Merge diagnostic pdfs together for easy scanning
+    
+    Code from:
+    https://stackoverflow.com/questions/3444645/merge-pdf-files
+    """
+    from PyPDF2 import PdfFileMerger
+
+    pdfs = pdfs = glob.glob("/priv/mulga1/arains/pionier/complete_sequences/"
+                            "*_abcd/*-*-*/*CAL*vis2*")
+
+    merger = PdfFileMerger()
+
+    for pdf in pdfs:
+        merger.append(open(pdf, 'rb'))
+
+    with open('result.pdf', 'wb') as fout:
+        merger.write(fout)

@@ -9,39 +9,6 @@ import reach.utils as rutils
 # -----------------------------------------------------------------------------
 # Sampling Parameters
 # -----------------------------------------------------------------------------   
-def sample_stellar_params(tgt_info, n_samples):
-    """Sample stellar parameters for use with the bolometric correction code
-    from Casagrande & VandenBerg (2014, 2018a, 2018b):
-    
-    https://github.com/casaluca/bolometric-corrections
-    """
-    loggs = []
-    fehs = []
-    teffs = []
-    
-    # Assign default errors to params
-    tgt_info["e_logg"][np.logical_and(np.isnan(tgt_info["e_logg"]), 
-                                      tgt_info["Science"])] = 0.1
-    tgt_info["e_FeH_rel"][np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
-                                      tgt_info["Science"])] = 0.1
-    tgt_info["e_teff"][np.logical_and(np.isnan(tgt_info["e_teff"]), 
-                                      tgt_info["Science"])] = 100
-    
-    for star, row in tgt_info[tgt_info["Science"]].iterrows():
-        loggs.append(np.random.normal(row["logg"], row["e_logg"], n_samples))
-        fehs.append(np.random.normal(row["FeH_rel"], row["e_FeH_rel"], 
-                                     n_samples))
-        teffs.append(np.random.normal(row["Teff"], row["e_teff"], n_samples))
-        
-    params = np.vstack((np.array(loggs).flatten(), np.array(fehs).flatten(), 
-                        np.array(teffs).flatten())).T
-    
-    np.savetxt("data/input.sample", params, delimiter=" ", 
-               fmt=["%0.2f","%0.2f","%i"])
-    
-    return params
-    
-    
 def sample_stellar_params_pd(tgt_info, n_bootstraps, 
                              assign_default_uncertainties=True):
     """Sample stellar parameters for use when calculating the limb-darkening
@@ -95,7 +62,8 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
                 u_lld_5, u_lld_6, u_scale]]
     """
     # Get the science target IDs - these will be the rows/index column
-    ids = tgt_info[tgt_info["Science"]].index.values
+    ids = tgt_info[np.logical_and(tgt_info["Science"], 
+                                  tgt_info["in_paper"])].index.values
     
     u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
     s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
@@ -106,8 +74,10 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
     
     #data = np.zeros( (len(ids), n_bootstraps , len(cols)) )
     
+    print("Sampling Teff, logg, [Fe/H], u_lambda, and s_lambda for %i stars..." 
+          % len(ids)) 
+    
     for id_i, id in enumerate(ids):
-        print("\t sampling %s..." % tgt_info.loc[id]["Primary"])
         # Initialise
         data = np.zeros( (n_bootstraps , len(cols)) )
         
@@ -151,11 +121,11 @@ def sample_bc_magnitudes(sampled_sci_params, tgt_info):
     e_mag_labels = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
     for mag in mag_labels:
         sampled_sci_params[mag] = 0
+    
+    print("Sampling magnitudes for %i stars..." % len(star_ids)) 
         
     # Go through star by star and populate
     for star in star_ids:
-        print("Sampling magnitudes for %s" % star)
-        
         for mag, e_mag in zip(mag_labels, e_mag_labels):
             mags = np.random.normal(tgt_info.loc[star][mag], 
                                     tgt_info.loc[star][e_mag], 
@@ -190,9 +160,11 @@ def compute_sampled_fbol(sampled_sci_params, band_mask=[1, 0, 0, 0, 0]):
     masked_fbol = np.array(fbol_labels)[band_mask]
     e_masked_fbol = np.array(e_fbol_labels)[band_mask]    
         
+    print("Computing sampled fbol for %i stars..." % len(star_ids))    
+        
     # Go through star by star and populate
     for star in star_ids:
-        print("Computing fbol for %s" % star)
+        
         
         for mag, bc, fbol in zip(mag_labels, bc_labels, fbol_labels):
             bcs = sampled_sci_params.loc[star, bc].values
@@ -219,7 +191,7 @@ def sample_distance(sampled_sci_params, tgt_info):
     # Initialise the new columns
     sampled_sci_params["Dist"] = 0
     
-    print("Sampling distances...")   
+    print("Sampling distances for %i stars..." % len(star_ids))    
         
     # Go through star by star and populate
     for star in star_ids:
@@ -229,6 +201,30 @@ def sample_distance(sampled_sci_params, tgt_info):
 
         sampled_sci_params.loc[star, "Dist"] = dist
 
+
+def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False, 
+               band_mask=[1, 0, 0, 0, 0]):
+    """Sample each of teff, logg, [Fe/H], u_lambda, s_lambda, Hp, VT, BT, BP,
+    RP, BC_Hp, BC_VT, BC_BT, BC_BP, BC_RP, fbol_Hp, fbol_VT, fbol_BT, fbol_BP, 
+    fbol_RP, fbol_final, L_star, r_star, and distance using literature values
+    and their errors, or the Casagrande BC code.
+    """
+    # Sample stellar parameters and limb darkening coefficients (and initialise
+    # the 3D pandas dataframe
+    sampled_sci_params = sample_parameters(tgt_info, n_bootstraps, 
+                                           use_claret_params)
+    # Then sample distance, magnitudes and bolometric corrections, and fbol
+    sample_distance(sampled_sci_params, tgt_info)
+    
+    sample_bc_magnitudes(sampled_sci_params, tgt_info)
+    
+    sample_casagrande_bc(sampled_sci_params, bc_path)
+    
+    compute_sampled_fbol(sampled_sci_params, band_mask)
+    
+    calc_all_L_bol(sampled_sci_params)
+    
+    return sampled_sci_params
 
 # -----------------------------------------------------------------------------
 # Combining distributions
@@ -260,7 +256,8 @@ def combine_u_s_lambda(tgt_info, sampled_sci_params):
     s_lambda parameters to tgt_info.
     """
     # Determine u_lld from its distribution
-    scis = tgt_info[tgt_info["Science"]].index.values
+    scis = tgt_info[np.logical_and(tgt_info["Science"], 
+                                   tgt_info["in_paper"])].index.values
 
     # Initialise columns
     u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
@@ -469,50 +466,18 @@ def calc_final_params(tgt_info, sampled_sci_params):
     
     for star in star_ids:
         # Populate
-        values = np.mean(sampled_sci_params.loc[star][value_cols].values, axis=0)
-        errors = np.std(sampled_sci_params.loc[star][value_cols].values, axis=0)
+        values = np.nanmean(sampled_sci_params.loc[star][value_cols].values, axis=0)
+        errors = np.nanstd(sampled_sci_params.loc[star][value_cols].values, axis=0)
         
         tgt_info.loc[star, value_cols] = values
         tgt_info.loc[star, error_cols] = errors
-
-
-def calc_all_L_bol_old(tgt_info, n_samples):
-    """Calculate the stellar luminosity with respect to Solar.
-    """
-    # Constants
-    L_sun = 3.839 * 10**33 # erg s^-1
-    pc = 3.0857*10**18 # cm / pc
-    
-    # Initialise L_star column
-    tgt_info["L_star_final"] = np.zeros(len(tgt_info))
-    tgt_info["e_L_star_final"] = np.zeros(len(tgt_info))
-    
-    # Calculate the Teff for every star using an MC sampling approach         
-    for star, row in tgt_info[np.logical_and(tgt_info["Science"], 
-                              tgt_info["ldd_final"] > 0)].iterrows():
-        # Sample fbol
-        f_bols = np.random.normal(row["f_bol_final"], row["e_f_bol_final"], 
-                                  n_samples)
-        
-        # Sample distances
-        dists = np.random.normal(row["Dist"], row["e_Dist"], n_samples) * pc
-        
-        # Calculate luminosities
-        L_stars = 4 * np.pi * f_bols * dists**2
-        
-        # Calculate final L_star (in solar units) and error
-        L_star = np.mean(L_stars) / L_sun
-        e_L_star = np.std(L_stars) / L_sun
-        
-        # Store final value
-        tgt_info.loc[star, "L_star_final"] = L_star
-        tgt_info.loc[star, "e_L_star_final"] = e_L_star
         
 # -----------------------------------------------------------------------------
 # Empirical relations
 # -----------------------------------------------------------------------------   
 def compute_casagrande_2010_teff(BTmag, VTmag, fehs):
-    """
+    """Compute Teff based on the Casagrande et al. 2010 empirical colour 
+    relations using (B-V).
     """
     # [Fe/H] range: -2.7 - 0.4
     # (Bt-Vt) range: 0.19 - 1.49
@@ -549,7 +514,10 @@ def compute_casagrande_2010_teff(BTmag, VTmag, fehs):
 # Working with Casagrande BC code
 # ----------------------------------------------------------------------------- 
 def sample_casagrande_bc(sampled_sci_params, bc_path):
-    """
+    """Sample stellar parameters for use with the bolometric correction code
+    from Casagrande & VandenBerg (2014, 2018a, 2018b):
+    
+    https://github.com/casaluca/bolometric-corrections
     
     Check that selectbc.data looks like this to Hp, Bt, Vt, Bp, Rp:
       1  = ialf (= [alpha/Fe] variation: select from choices listed below)
@@ -567,6 +535,9 @@ def sample_casagrande_bc(sampled_sci_params, bc_path):
     bc_labels = ["BC_Hp", "BC_BT", "BC_VT", "BC_BP", "BC_RP"]
     for bc in bc_labels:
         sampled_sci_params[bc] = 0
+    
+    print("Sampling Casagrande bolometric corrections for %i stars..." 
+          % len(star_ids))
         
     # Go through star by star and populate
     for star in star_ids:
@@ -595,7 +566,39 @@ def sample_casagrande_bc(sampled_sci_params, bc_path):
         # Save the bolometric corrections
         bc_num_cols = ["BC_1", "BC_2", "BC_3", "BC_4", "BC_5"]
         sampled_sci_params.loc[star, bc_labels] = results[bc_num_cols].values
+
+
+def sample_stellar_params(tgt_info, n_samples):
+    """Sample stellar parameters for use with the bolometric correction code
+    from Casagrande & VandenBerg (2014, 2018a, 2018b):
     
+    https://github.com/casaluca/bolometric-corrections
+    """
+    loggs = []
+    fehs = []
+    teffs = []
+    
+    # Assign default errors to params
+    tgt_info["e_logg"][np.logical_and(np.isnan(tgt_info["e_logg"]), 
+                                      tgt_info["Science"])] = 0.1
+    tgt_info["e_FeH_rel"][np.logical_and(np.isnan(tgt_info["e_FeH_rel"]), 
+                                      tgt_info["Science"])] = 0.1
+    tgt_info["e_teff"][np.logical_and(np.isnan(tgt_info["e_teff"]), 
+                                      tgt_info["Science"])] = 100
+    
+    for star, row in tgt_info[tgt_info["Science"]].iterrows():
+        loggs.append(np.random.normal(row["logg"], row["e_logg"], n_samples))
+        fehs.append(np.random.normal(row["FeH_rel"], row["e_FeH_rel"], 
+                                     n_samples))
+        teffs.append(np.random.normal(row["Teff"], row["e_teff"], n_samples))
+        
+    params = np.vstack((np.array(loggs).flatten(), np.array(fehs).flatten(), 
+                        np.array(teffs).flatten())).T
+    
+    np.savetxt("data/input.sample", params, delimiter=" ", 
+               fmt=["%0.2f","%0.2f","%i"])
+    
+    return params    
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -661,9 +664,16 @@ def merge_sampled_params_and_results(sampled_sci_params, bs_results, tgt_info):
     bs_cols = ["LDD_FIT"]
     
     for col in bs_cols:
-        sampled_sci_params[col] = 0
+        sampled_sci_params[col] = np.nan
     
     # Now go through and combine
     for prim_id, hd_id in zip(prim_ids, hd_ids):
         # Add to sampled_sci_params
-        sampled_sci_params.loc[hd_id, bs_cols] = bs_results[prim_id][bs_cols].values
+        # Extra contingencies in case we're looking at results as we go
+        n_total = len(sampled_sci_params.loc[hd_id])
+        n_samples = len(bs_results[prim_id])
+        
+        results = np.zeros(( n_total, len(bs_cols))) * np.nan
+        results[:n_samples,:] = bs_results[prim_id][bs_cols].values
+        
+        sampled_sci_params.loc[hd_id, bs_cols] = results

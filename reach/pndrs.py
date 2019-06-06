@@ -612,14 +612,24 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
     # Clean out any old files before we get into the main loop - we can't do it
     # within the main loop itself, otherwise we'll potentially be deleting 
     # sequence from the same night that have already been sampled for this 
-    # iteration of the bootstrapping
-    old_files = glob.glob(base_path % "*" + "/*-*-*/PIONI*")
+    # iteration of the bootstrapping. To ensure any deletions don't affect our
+    # ability to run in "parallel" by calibrating different sets of nights
+    # separately, get the nights from complete_sequences[seq][0]
+    total_old_files = 0
     
-    for old_file in old_files:
-        os.remove(old_file)
+    for seq in complete_sequences.keys():
+        night = complete_sequences[seq][0]
+        night_folder = base_path % night
+        bootstrapping_folder = night_folder + "/%s/" % night
+        
+        old_files = glob.glob(bootstrapping_folder + "PIONI*")
+        
+        for old_file in old_files:
+            os.remove(old_file)
+            total_old_files += 1
         
     print("Removed %i old files \n" % len(old_files))
-    
+
     # For every sequence, perform bootstrapping at the interferogram level
     for seq in complete_sequences.keys():
         night = complete_sequences[seq][0]
@@ -639,7 +649,8 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
             
             copyfile(night_folder + old_fn, bootstrapping_folder + new_fn)
             
-        print("Moved %i interferograms for %s" % (i_ifg+1, seq))
+        print("Moved %i new interferograms for %s on %s" % (i_ifg+1, seq,
+                                                            night))
             
 
 def sample_interferograms(obs_sequence, n_ifg=5, do_random_ifg_sampling=True,

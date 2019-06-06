@@ -261,8 +261,11 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
         for star_i in np.arange(0, len(results)):
             # Get the science target name
             sci = results.iloc[star_i]["STAR"]
+            hd_id = results.iloc[star_i]["HD"]
             period = results.iloc[star_i]["PERIOD"]
             sequence = results.iloc[star_i]["SEQUENCE"]
+            
+            print(sci)
             
             if sequence == "combined":
                 stitle = sci
@@ -288,11 +291,16 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             ldd_fit = results.iloc[star_i]["LDD_FIT"]
             e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
             
-            ldd_pred = results.iloc[star_i]["LDD_PRED"]
-            e_ldd_pred = results.iloc[star_i]["e_LDD_PRED"]
-            u_lld = results.iloc[star_i]["u_LLD"]
+            ldd_pred = tgt_info.loc[hd_id]["LDD_pred"]
+            e_ldd_pred = tgt_info.loc[hd_id]["e_LDD_pred"]
             
-            c_scale = results.iloc[star_i]["C_SCALE"]
+            u_lambdas = ['u_lambda_0', 'u_lambda_1', 'u_lambda_2', 'u_lambda_3',
+                         'u_lambda_4', 'u_lambda_5']
+            
+            u_lld = np.mean(tgt_info.loc[hd_id][u_lambdas])
+            
+            #c_scale = results.iloc[star_i]["C_SCALE"]
+            c_scale = 1
             
             x = np.arange(1*10**6, 25*10**7, 10000)
             y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
@@ -700,8 +708,8 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
 def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
     """Plot the rescaled simultaneous fits for multiple sequences
     """
-    results = results.drop(3)
-    results.set_index(np.arange(len(results)))
+    #results = results.drop(3)
+    #results.set_index(np.arange(len(results)))
        
     plt.close("all")
     with PdfPages("paper/joint_seq_vis2_plots.pdf") as pdf:

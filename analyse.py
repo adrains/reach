@@ -18,12 +18,12 @@ import pickle
 # Setup & Loading
 # -----------------------------------------------------------------------------
 combined_fit = True
-load_saved_results = True
+load_saved_results = False
 assign_default_uncertainties = True
 force_claret_params = False
-n_bootstraps = 1000
-results_folder = "19-03-26_i1000"
-#results_path = "/home/arains/code/reach/results/%s/" % results_folder
+n_bootstraps = 480
+#results_folder = "19-03-26_i1000"
+results_folder = "19-05-27_i2000"
 results_path = "results/%s/" % results_folder
 e_wl_cal_percent = 1
 
@@ -36,12 +36,18 @@ complete_sequences, sequences = rutils.load_sequence_logs()
 sampled_sci_params = rutils.load_sampled_params(results_folder, force_claret_params)
 
 # Currently broken, don't consider
-complete_sequences.pop((102, 'delEri', 'bright'))
+#complete_sequences.pop((102, 'delEri', 'bright'))
 
 # Currently no proxima cen or gam pav data, so pop
 sequences.pop((102, 'gamPav', 'faint'))
 sequences.pop((102, 'gamPav', 'bright'))
 sequences.pop((102, 'ProximaCen', 'bright'))
+
+# Don't care about distant RGB
+sequences.pop((99, "HD187289", "faint"))
+sequences.pop((99, "HD187289", "bright"))
+complete_sequences.pop((99, 'HD187289', 'faint'))
+complete_sequences.pop((99, 'HD187289', 'bright'))
 
 # Combine sampled u_lambda and s_lambda
 rparam.combine_u_s_lambda(tgt_info, sampled_sci_params)
@@ -81,17 +87,17 @@ print("Determining fundamental parameters...")
 # Combine angular diameter measurements
 rparam.combine_seq_ldd(tgt_info, results)
 
+# Merge (i.e. get LDD info in sampled_sci_params)
+rparam.merge_sampled_params_and_results(sampled_sci_params, bs_results, 
+                                        tgt_info)
 # Calculate the physical radii
-rparam.calc_all_r_star(tgt_info)
-
-# Compute fluxes
-rparam.calc_all_f_bol(tgt_info, 10000)
+rparam.calc_all_r_star(sampled_sci_params)
 
 # Compute temperatures
-rparam.calc_all_teff(tgt_info, 10000)
+rparam.calc_all_teff(sampled_sci_params)
 
-# Compute luminosity
-rparam.calc_all_L_bol(tgt_info, 10000)
+# Now get final parameters from the distributions in sampled_sci_params
+rparam.calc_final_params(tgt_info, sampled_sci_params)
 
 # -----------------------------------------------------------------------------
 # Table generation and plotting
@@ -110,7 +116,7 @@ print("Generating plots...")
 rplt.plot_casagrande_teff_comp(tgt_info)
 rplt.plot_lit_diam_comp(tgt_info)
 rplt.plot_sidelobe_vis2_fit(tgt_info, results)  
-rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2)
+rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=4, n_cols=2)
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")
 rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W4")
 rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 
