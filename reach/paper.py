@@ -248,9 +248,8 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
         table_row = ("%s & "*len(columns)) % (star_id, ut_date, period,  
                                               seq_type, baselines, cals)
                 
-        table_rows[(ut_date, star_id)] = table_row[:-2] + r"\\"
-        
-        
+        table_rows[(ut_date, star_id, seq_type)] = table_row[:-2] + r"\\"
+          
     # Finish the table
     footer.append("\hline")
     footer.append("\end{tabular}")
