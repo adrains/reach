@@ -96,6 +96,7 @@ for obs_log in all_logs:
             if obfname in obs_log:
                 ob_type = "FRINGE"
                 det_mode = row.split("\t")[6]
+                det_ndit_dit = row.split("\t")[2]
         
         elif row[:16] == "PIONIER_GEN_DARK":
             obfname = row.split("\t")[1]
@@ -103,6 +104,7 @@ for obs_log in all_logs:
             if obfname in obs_log:
                 ob_type = "DARK"
                 det_mode = row.split("\t")[6]
+                det_ndit_dit = row.split("\t")[2]
         
         elif row[:17] == "PIONIER_GEN_KAPPA":
             obfname = row.split("\t")[1]
@@ -110,6 +112,7 @@ for obs_log in all_logs:
             if obfname in obs_log:
                 ob_type = "KAPPA"
                 det_mode = row.split("\t")[6]
+                det_ndit_dit = row.split("\t")[2]
         
         # Extract the station information        
         elif row[:7] == "STATION":
@@ -125,7 +128,7 @@ for obs_log in all_logs:
     
     # Select details of observation to save
     ob_details = [container, OB, target, grade, ob_time, obs_log, run, ob_fits,
-                  ob_type, station_ids, det_mode]
+                  ob_type, station_ids, det_mode, det_ndit_dit]
     
     # Now store the observation details in the dictionary
     # If night entry exists, append observation

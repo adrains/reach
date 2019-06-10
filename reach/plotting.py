@@ -10,6 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as plticker
 import matplotlib.cm as cm
+import matplotlib.transforms as transforms
 
 def plot_diameter_comparison(diam_rel_1, diam_rel_2, diam_rel_1_dr, 
                             diam_rel_2_dr, diam_rel_1_label, diam_rel_2_label):
@@ -842,7 +843,8 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                 # Annotate the sequence name
                 xx = (axes[plt_i].get_xlim()[1] - axes[plt_i].get_xlim()[0]) * 0.05
                 yy = (axes[plt_i].get_ylim()[1] - axes[plt_i].get_ylim()[0]) * 0.05
-                axes[plt_i].text(xx, yy, sci, fontsize="xx-small")
+                axes[plt_i].text(xx, yy, rutils.format_id(sci), 
+                                 fontsize="xx-small")
                 
                 # Set up ticks
                 axes[plt_i].set_xlim([0.0,10E7])
@@ -1054,10 +1056,11 @@ def plot_lit_diam_comp(tgt_info):
             e_calc_diams.append(tgt_info.loc[star["HD"]]["e_ldd_final"])
             
             # Plot the name of the star
-            ax.annotate(star["Primary"], xy=(calc_diams[-1], lit_diams[-1]), 
+            ax.annotate(rutils.format_id(star["Primary"].replace(" ", "")), 
+                        xy=(calc_diams[-1], lit_diams[-1]), 
                         xytext=(calc_diams[-1]+0.01, lit_diams[-1]+0.01), 
-                        arrowprops=dict(facecolor="black", width=0.1, 
-                                        headwidth=0.1),
+                        #arrowprops=dict(facecolor="black", width=0.1, 
+                        #                headwidth=0.1),
                         fontsize="xx-small")
                         
         # Plot the points
@@ -1068,6 +1071,7 @@ def plot_lit_diam_comp(tgt_info):
         # Plot residuals
         ax.set_xticks([])
         residuals = np.array(lit_diams) / np.array(calc_diams)
+        err_res = np.array(e_calc_diams) / np.array(calc_diams)
             
         res_ax.errorbar(calc_diams, residuals, xerr=e_calc_diams, 
                         yerr=e_lit_diams, fmt="o", elinewidth=0.5, capsize=0.8,
@@ -1090,7 +1094,7 @@ def plot_lit_diam_comp(tgt_info):
     ax.legend(loc="best")
     
     plt.tight_layout()
-    plt.savefig("plots/lit_diam_comp.pdf")    
+    plt.savefig("paper/lit_diam_comp.pdf")    
     
 
 
@@ -1145,17 +1149,17 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
         
         if len(xy_txt) > 0 and (xy < sep).any():
             xx = 0.025
-            yy = 0.4
+            yy = 0.2
         else:
             xx = 0.025
-            yy = 0.3 
+            yy = 0.15 
         
         # Plot the name of the star
-        ax.annotate(star_data["Primary"], xy=(fit_diams[-1], 
+        ax.annotate(rutils.format_id(star_data["Primary"]), xy=(fit_diams[-1], 
                     colour_rel_diams[-1]), 
                     xytext=(fit_diams[-1]+xx, colour_rel_diams[-1]-yy), 
-                    arrowprops=dict(facecolor="black", width=0.1, 
-                                    headwidth=0.1),
+                    #arrowprops=dict(facecolor="black", width=0.1, 
+                    #                headwidth=0.1),
                     fontsize="xx-small")
                     
         xy_txt.append(xy_abs)
@@ -1168,9 +1172,9 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
     # Plot residuals
     ax.set_xticklabels([])
     residuals = np.array(colour_rel_diams) / np.array(fit_diams)
-    
+    err_res = np.array(e_fit_diams) / np.array(fit_diams)
         
-    res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
+    res_ax.errorbar(fit_diams, residuals, xerr=err_res, 
                     yerr=e_colour_rel_diams, fmt=".", elinewidth=0.5, 
                     capsize=0.8, capthick=0.5, zorder=1)
     
@@ -1215,7 +1219,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
     #ax.legend(loc="best")
     
     plt.tight_layout()
-    plt.savefig("plots/colour_rel_diam_comp_%s_%s.pdf" % (colour_rel, cbar))     
+    plt.savefig("paper/colour_rel_diam_comp_%s_%s.pdf" % (colour_rel, cbar))     
             
 
 
@@ -1259,21 +1263,21 @@ def plot_casagrande_teff_comp(tgt_info):
         # hardcode it
         xy_abs = (final_teffs[-1]**2 + casagrande_teffs[-1]**2)**0.5
         xy = np.abs(np.array(xy_txt) - xy_abs)
-        sep = 0.1
+        sep = 50
         
         if len(xy_txt) > 0 and (xy < sep).any():
-            xx = 0.025
-            yy = 0.4
+            xx = 25
+            yy = 200
         else:
-            xx = 0.025
-            yy = 0.3 
+            xx = 25
+            yy = 100
         
         # Plot the name of the star
-        ax.annotate(star_data["Primary"], xy=(final_teffs[-1], 
-                    casagrande_teffs[-1]), 
+        ax.annotate(rutils.format_id(star_data["Primary"]),  
+                    xy=(final_teffs[-1],casagrande_teffs[-1]), 
                     xytext=(final_teffs[-1]+xx, casagrande_teffs[-1]-yy), 
-                    arrowprops=dict(facecolor="black", width=0.1, 
-                                    headwidth=0.1),
+                    #arrowprops=dict(facecolor="black", width=0.0, 
+                                    #headwidth=0.0),
                     fontsize="xx-small")
                     
         xy_txt.append(xy_abs)
@@ -1321,7 +1325,7 @@ def plot_casagrande_teff_comp(tgt_info):
     #ax.legend(loc="best")
     
     plt.tight_layout()
-    plt.savefig("plots/teff_comp_casagrande.pdf")  
+    plt.savefig("paper/teff_comp_casagrande.pdf")  
 
 
 def plot_lit_teff_comp(tgt_info):
@@ -1451,6 +1455,52 @@ def plot_vis2(oi_fits_file, star_id):
     plt.grid()
     #plt.gcf().set_size_inches(16, 9)
     #plt.savefig("plots/vis2_fit.pdf")
+
+
+
+def plot_fbol_comp(tgt_info):
+    """Plot a comparison of the sampled values of fbol from each filter to 
+    check whether they are consistent or not.
+    """
+    plt.close("all")
+    plt.figure()
+    
+    # Define bands to reference, construct new headers
+    bands = ["Hp", "BT", "VT", "BP", "RP"]
+    e_bands = ["e_%s" % band for band in bands] 
+    f_bol_bands = ["f_bol_%s" % band for band in bands] 
+    e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
+    
+    offset = lambda p: transforms.ScaledTranslation(p/72.,0, plt.gcf().dpi_scale_trans)
+    trans = plt.gca().transData
+    
+    tf = 7.5
+    
+    colours = ["green", "blue", "orange", "deepskyblue", "red"]
+    
+    mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
+    
+    ids = tgt_info[mask]["Primary"]
+    fbol = tgt_info[mask][f_bol_bands]
+    e_fbol = tgt_info[mask][e_f_bol_bands]
+    
+    
+    
+    for band_i, (fband, e_fband) in enumerate(zip(f_bol_bands, e_f_bol_bands)):
+        plt.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], 
+                     fmt=".", zorder=1, label="", ecolor="black",
+                     transform=trans+offset(-tf*band_i))
+        plt.scatter(ids, fbol[fband], s=2**6, c=colours[band_i], label=bands[band_i],
+                    zorder=2, transform=trans+offset(-tf*band_i), 
+                    marker="$%s$" % bands[band_i])
+                        
+    plt.xlabel("Star")
+    plt.ylabel(r"Flux (ergs s$^{-1}$ cm $^{-2}$)")
+    plt.yscale("log")
+    plt.legend(loc="best")
+    plt.gcf().set_size_inches(16, 9)
+    plt.savefig("fbol_comp.pdf")
+    
     
 
 def plot_c_hist(results, n_bins=5):

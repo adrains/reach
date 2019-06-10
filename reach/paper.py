@@ -8,7 +8,10 @@ from __future__ import division, print_function
 import numpy as np
 import reach.utils as rutils
 from collections import OrderedDict
-
+        
+# -----------------------------------------------------------------------------
+# Making tables
+# ----------------------------------------------------------------------------- 
 def make_table_final_results(tgt_info):
     """
     """
@@ -53,7 +56,7 @@ def make_table_final_results(tgt_info):
         table_row = ""
         
         # Step through column by column
-        table_row += "%s & " % row["Primary"]
+        table_row += "%s & " % rutils.format_id(row["Primary"])
         table_row += ".. & "
         table_row += ".. & "
         #table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
@@ -166,7 +169,7 @@ def make_table_fbol(tgt_info):
             continue
         
         # Step through column by column
-        table_row += "%s & " % star["Primary"]
+        table_row += "%s & " % rutils.format_id(star["Primary"])
         table_row += "%s & " % star.name.replace("HD", "")
         
         if not np.isnan(star["f_bol_Hp"]):
@@ -211,7 +214,7 @@ def make_table_fbol(tgt_info):
 def make_table_observation_log(tgt_info, complete_sequences, sequences):
     """
     """
-    columns = OrderedDict([("HD", ""),
+    columns = OrderedDict([("Star", ""),
                            ("UT Date", ""),
                            ("ESO", "Period"),
                            ("Sequence", "Type"),
@@ -235,7 +238,7 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
     for seq in complete_sequences:
         table_row = ""
         
-        star_id = seq[1]
+        star_id = rutils.format_id(seq[1])
         ut_date = complete_sequences[seq][0]
         period = seq[0]
         seq_type = seq[2]
@@ -334,7 +337,7 @@ def make_table_targets(tgt_info):
         dec = "%02i %02i %05.2f" % (dec_deg, dec_min, dec_sec)
         
         # Step through column by column
-        table_row += "%s & " % star["Primary"]
+        table_row += "%s & " % rutils.format_id(star["Primary"])
         table_row += "%s & " % star.name.replace("HD", "")
         table_row += "%s & " % ra
         table_row += "%s & " % dec
@@ -452,7 +455,7 @@ def make_table_calibrators(tgt_info, sequences):
                     for target in sequences[seq]]
                         
             if star.name in rutils.get_unique_key(tgt_info, cals):
-                scis.append(seq[1])
+                scis.append(rutils.format_id(seq[1]))
                 
         scis = list(set(scis))
         scis.sort()

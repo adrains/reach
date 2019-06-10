@@ -520,3 +520,31 @@ def collate_cal_pdfs():
 
     with open('result.pdf', 'wb') as fout:
         merger.write(fout)
+        
+# -----------------------------------------------------------------------------
+# Formatting
+# ----------------------------------------------------------------------------- 
+def format_id(text_id):
+    """Swap in an ID better for LateX formatting
+    """
+    star_greek_map = {"TauCet":r"$\tau$ Cet",
+                      "alfHyi":r"$\alpha$ Hyi",
+                      "chiEri":r"$\chi$ Eri",
+                      "95Cet":r"95 Cet A",
+                      "epsEri":r"$\epsilon$ Eri",
+                      "delEri":r"$\delta$ Eri",
+                      "omi2Eri":r"40 Eri A",
+                      "37Lib":r"37 Lib",
+                      "betTrA":r"$\beta$ TrA",
+                      "lamSgr":r"$\lambda$ Sgr",
+                      "delPav":r"$\delta$ Pav",
+                      "epsInd":r"$\epsilon$ Ind",
+                      "HD131977":r"HD131977",
+                      "etaSco":r"$\eta$ Sco",
+                      "betAql":r"$\beta$ Aql",
+                      "HR7221":r"HR7221",}
+    
+    if text_id in star_greek_map:
+        return star_greek_map[text_id]
+    else:
+        return text_id

@@ -620,7 +620,7 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
     for seq in complete_sequences.keys():
         night = complete_sequences[seq][0]
         night_folder = base_path % night
-        bootstrapping_folder = night_folder + "/%s/" % night
+        bootstrapping_folder = night_folder + "%s/" % night
         
         old_files = glob.glob(bootstrapping_folder + "PIONI*")
         
@@ -628,7 +628,7 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
             os.remove(old_file)
             total_old_files += 1
         
-    print("Removed %i old files \n" % len(old_files))
+    print("Removed %i old files \n" % len(total_old_files))
 
     # For every sequence, perform bootstrapping at the interferogram level
     for seq in complete_sequences.keys():

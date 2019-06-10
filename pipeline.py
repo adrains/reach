@@ -34,10 +34,10 @@ do_random_ifg_sampling = True       # Sample interferograms with repeats
 do_gaussian_diam_sampling = True    # Sample diameters from normal distribution
 assign_default_uncertainties = True # Assign conservative placeholder errors
 use_claret_params = False           # Force Claret & Bloemen 2011 u_lambda
-n_bootstraps = 2000                 # Number of bootstrapping iterations
+n_bootstraps = 1000                 # Number of bootstrapping iterations
 pred_ldd_col = "LDD_pred"           # tgt_info column with LDD colour relation
 e_pred_ldd_col = "e_LDD_pred"       # tgt_info column with LDD relation errors
-n_calib_runs = 4                    # N calibration runs to split nights among
+n_calib_runs = 1                    # N calibration runs to split nights among
 calib_run_i = 0                     # ith calibration run to perform, 0 indexed
 
 # Folder mask where the reduced files are stored
@@ -183,7 +183,7 @@ elif not already_calibrated:
 print("\n", "-"*79, "\n", "\tBootstrapping\n", "-"*79)
 print("Bootstrapping run %i/%i" % (calib_run_i + 1, n_calib_runs))
 print("Running on %i/%i sequences over %i/%i nights" 
-      % (len(sequences), n_init_seq, len(valid_nights), len(nights)))
+      % (len(complete_sequences), n_init_seq, len(valid_nights), len(nights)))
 
 rpndrs.run_n_bootstraps(sequences, complete_sequences, base_path, tgt_info,
                         n_pred_ldd, e_pred_ldd, n_bootstraps, results_path,

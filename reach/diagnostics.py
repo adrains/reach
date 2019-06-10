@@ -2,6 +2,7 @@
 """
 from __future__ import division, print_function
 
+import os
 import glob
 import numpy as np
 import pandas as pd
@@ -164,7 +165,7 @@ def plot_vis2_diagnostics_time_wl(vis2_per_bl):
             
 
 def calibrate_calibrators(sequences, complete_sequences, base_path, tgt_info,
-                          n_pred_ldd, e_pred_ldd):
+                          n_pred_ldd, e_pred_ldd, test_all_cals=False):
     """
     Assume that every sequence has three calibrators - we can simply do three
     loops of the calibration routine, turning the science off each time, and 
@@ -178,12 +179,7 @@ def calibrate_calibrators(sequences, complete_sequences, base_path, tgt_info,
     run_local = False
     already_calibrated = False
     do_random_ifg_sampling = False
-    do_gaussian_diam_sampling = False
-    test_one_seq_only = False
-    do_ldd_fitting = False
     n_bootstraps = 1
-    pred_ldd_col = "LDD_VW3_dr"
-    e_pred_ldd_col = "e_LDD_VW3_dr"
     base_path = "/priv/mulga1/arains/pionier/complete_sequences/%s_v3.73_abcd/"
     results_path = "/home/arains/code/reach/diagnostics/"
     
@@ -192,7 +188,14 @@ def calibrate_calibrators(sequences, complete_sequences, base_path, tgt_info,
     calibrators = np.vstack(sequences.values())[:,::2]
     
     # Reset any currently "BAD" quality targets
-    tgt_info["Quality"] = [None] * len(tgt_info)
+    if test_all_cals:
+        tgt_info["Quality"] = [None] * len(tgt_info)
+    
+    # Remove existing diagnostic files
+    existing_files = glob.glob(results_path + "*.fits")
+    
+    for fits_file in existing_files:
+        os.remove(fits_file) 
     
     # Set all science targets to "BAD" so that we ignore them when calibrating
     science = rutils.get_unique_key(tgt_info, np.vstack(sequences.values())[:,1])
@@ -217,28 +220,40 @@ def calibrate_calibrators(sequences, complete_sequences, base_path, tgt_info,
                                     n_bootstraps, run_local=run_local, 
                                     already_calibrated=already_calibrated,
                                     do_random_ifg_sampling=do_random_ifg_sampling,
-                                    results_path=results_path, 
-                                    do_ldd_fitting=do_ldd_fitting)
+                                    results_path=results_path)
                                     
         # Compile results and look at visibility curves
         #oifiles = glob.glob("results/*oidata
 
 
-def plot_calibrator_vis2(cal_folder="diagnostics/"):
+def plot_calibrator_vis2(tgt_info, cal_folder="diagnostics/"):
     """
     """
     cal_oifits = glob.glob(cal_folder + "*fits")
+    cal_oifits.sort()
+    xy = np.ceil(len(cal_oifits)**0.5).astype(int)
+    
     plt.close("all")
     with PdfPages("plots/calibrator_vis2.pdf") as pdf:
         # Initialise subplot
-        fig, axes = plt.subplots(12, 12)
+        fig, axes = plt.subplots(xy, xy)
         axes = axes.flatten()
         
         for cal_i, cal in enumerate(cal_oifits):
             cal_id = cal.split("SCI")[-1].split("oidata")[0].replace("_","")
+            date = cal.split("/")[-1].split("_")[0]
             #rplt.plot_vis2(cal, cal_id)
             
-            vis2, e_vis2, baselines, wavelengths = rdiam.extract_vis2(cal)
+            # Check if we've previously flagged this calibrator as bad
+            cal_hd = rutils.get_unique_key(tgt_info, [cal_id])[0]
+            is_bad = tgt_info.loc[cal_hd]["Quality"] == "BAD"
+            
+            if is_bad:
+                colour = "red"
+            else:
+                colour="black"
+            
+            mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = rdiam.extract_vis2(cal)
     
             n_bl = len(baselines)
             n_wl = len(wavelengths)
@@ -253,16 +268,19 @@ def plot_calibrator_vis2(cal_folder="diagnostics/"):
             
             #axes[cal_i].set_xlabel(r"Spatial Frequency (rad$^{-1})$")
             #axes[cal_i].set_ylabel(r"Visibility$^2$")
-            axes[cal_i].set_title(r"%s (%i vis$^2$ points)" % (cal_id, len(vis2.flatten())), fontsize="xx-small")
+            axes[cal_i].set_title(r"%s (%s)" % (cal_id, date), 
+                                  color=colour, fontsize="small")
             #plt.legend(loc="best")
             axes[cal_i].set_xlim([0.0,25E7])
             axes[cal_i].set_ylim([0.0,1.0])
             axes[cal_i].tick_params(axis="both", labelsize="xx-small")
+            axes[cal_i].xaxis.get_offset_text().set_fontsize("xx-small")
             axes[cal_i].grid()
             
-        #fig.tight_layout()
-        plt.gcf().set_size_inches(16, 16)
-        pdf.savefig()
+        #plt.tight_layout()
+        plt.gcf().set_size_inches(32, 32)
+        plt.subplots_adjust(hspace=0.3)
+        pdf.savefig() #bbox_inches="tight"
         #plt.close("all")
             
             
