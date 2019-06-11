@@ -238,17 +238,20 @@ def combine_seq_ldd(tgt_info, results):
     tgt_info["ldd_final"] = np.zeros(len(tgt_info))
     tgt_info["e_ldd_final"] = np.zeros(len(tgt_info))
     
-    # For every star, do a weighted average of the angular diameters, with 
-    # weights equal to the inverse variance. 
+    tgt_info["udd_final"] = np.zeros(len(tgt_info))
+    tgt_info["e_udd_final"] = np.zeros(len(tgt_info))
+    
+    # For every star, update tgt_info with its angular diameter info.
     for star_i, star in enumerate(stars):
-        weights = results[results["HD"]==star]["e_LDD_FIT"].values**(-2)
-        ldd_avg = np.average(results[results["HD"]==star]["LDD_FIT"], 
-                             weights=weights)
-        e_ldd_avg = (np.sum(weights)**-1)**0.5
+        star_data = results[results["HD"]==star].iloc[0]
         
-        # Save the final values
-        tgt_info.loc[star, "ldd_final"] = ldd_avg
-        tgt_info.loc[star, "e_ldd_final"] = e_ldd_avg
+        # Limb darkened disc diameter
+        tgt_info.loc[star, "ldd_final"] = star_data["LDD_FIT"]
+        tgt_info.loc[star, "e_ldd_final"] = star_data["e_LDD_FIT"]
+        
+        # Uniform disc diameter
+        tgt_info.loc[star, "udd_final"] = star_data["UDD_FIT"]
+        tgt_info.loc[star, "e_udd_final"] = star_data["e_UDD_FIT"]
         
 
 def combine_u_s_lambda(tgt_info, sampled_sci_params):
@@ -274,13 +277,13 @@ def combine_u_s_lambda(tgt_info, sampled_sci_params):
     # Populate tgt_info
     for sci in scis:
         tgt_info.loc[sci, u_lambda_cols] = \
-            sampled_sci_params.loc[sci][u_lambda_cols].values.mean(axis=0)
+            np.nanmean(sampled_sci_params.loc[sci][u_lambda_cols].values, axis=0)
         tgt_info.loc[sci, e_u_lambda_cols] = \
-            sampled_sci_params.loc[sci][u_lambda_cols].values.std(axis=0)
+            np.nanstd(sampled_sci_params.loc[sci][u_lambda_cols].values, axis=0)
         tgt_info.loc[sci, s_lambda_cols] = \
-            sampled_sci_params.loc[sci][s_lambda_cols].values.mean(axis=0)
+            np.nanmean(sampled_sci_params.loc[sci][s_lambda_cols].values, axis=0)
         tgt_info.loc[sci, e_s_lambda_cols] = \
-            sampled_sci_params.loc[sci][s_lambda_cols].values.std(axis=0) 
+            np.nanstd(sampled_sci_params.loc[sci][s_lambda_cols].values, axis=0)
 
 
 # -----------------------------------------------------------------------------

@@ -13,14 +13,15 @@ from collections import OrderedDict
 # Making tables
 # ----------------------------------------------------------------------------- 
 def make_table_final_results(tgt_info):
-    """
+    """Make the final results table to display the angular diameters and 
+    derived fundamental parameters.
     """
     exp_scale = -8
     
     columns = OrderedDict([("Star", ""),
                            #("HD", ""),
-                           (r"u$_\lambda$", ""),
-                           (r"s$_\lambda$", ""),
+                           #(r"u$_\lambda$", ""),
+                           #(r"s$_\lambda$", ""),
                            (r"$\theta_{\rm UD}$", "(mas)"),
                            (r"$\theta_{\rm LD}$", "(mas)"),
                            (r"R", "($R_\odot$)"), 
@@ -28,12 +29,6 @@ def make_table_final_results(tgt_info):
                             r"(10$^{%i}\,$ergs s$^{-1}$ cm $^{-2}$)" % exp_scale),
                            (r"T$_{\rm eff}$", "(K)"),
                            ("L", ("($L_\odot$)"))])
-    
-    # Get the limb darkening and scaling parameters
-    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
-    e_u_lambda_cols = ["e_u_lambda_%i" % ui for ui in np.arange(0,6)]
-    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
-    e_s_lambda_cols = ["e_s_lambda_%i" % ui for ui in np.arange(0,6)]
                            
     header = []
     table_rows = []
@@ -57,10 +52,7 @@ def make_table_final_results(tgt_info):
         
         # Step through column by column
         table_row += "%s & " % rutils.format_id(row["Primary"])
-        table_row += ".. & "
-        table_row += ".. & "
-        #table_row += r"%0.3f $\pm$ %0.3f & " % (row["u_lld"], row["e_u_lld"])
-        table_row += r"%0.3f $\pm$ %0.3f & " % (0, 0)
+        table_row += r"%0.3f $\pm$ %0.3f & " % (row["udd_final"], row["e_udd_final"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
         table_row += r"%0.2f $\pm$ %0.2f &" % (row["r_star_final"], row["e_r_star_final"])
         
@@ -83,8 +75,95 @@ def make_table_final_results(tgt_info):
     np.savetxt("paper/table_final_results.tex", table_1, fmt="%s")
 
 
-def make_table_seq_results(results):
+def make_table_limb_darkening(tgt_info):
+    """Make the table to display both kinds of limb darkening coefficients
+    (Claret and STAGGER), as well as the scaling parameters associated with
+    the latter.
     """
+    columns = OrderedDict([("", ""),
+                           (r"u$_{\lambda}$", ""),
+                           (r"u$_{\lambda_1}$", ""),
+                           (r"u$_{\lambda_2}$", ""),
+                           (r"u$_{\lambda_3}$", ""),
+                           (r"u$_{\lambda_4}$", ""),
+                           (r"u$_{\lambda_5}$", ""),
+                           (r"u$_{\lambda_6}$", ""),
+                           (r"s$_{\lambda_1}$", ""),
+                           (r"s$_{\lambda_2}$", ""),
+                           (r"s$_{\lambda_3}$", ""),
+                           (r"s$_{\lambda_4}$", ""),
+                           (r"s$_{\lambda_5}$", ""),
+                           (r"s$_{\lambda_6}$", ""),])
+    
+    # Get the limb darkening and scaling parameters
+    u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_u_lambda_cols = ["e_u_lambda_%i" % ui for ui in np.arange(0,6)]
+    s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
+    e_s_lambda_cols = ["e_s_lambda_%i" % ui for ui in np.arange(0,6)]
+                           
+    header = []
+    table_rows = []
+    footer = []
+    
+    # Construct the header of the table
+    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    header.append("\hline")
+    header.append((r"Star & CB11 &"
+                   r"\multicolumn{6}{c}{Equivalent Linear Limb Darkening Coefficient} &" 
+                   r"\multicolumn{6}{c}{$\theta_{\rm LD}$ Scaling Term} \\")) 
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    #header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append("\hline")
+    
+    # Populate the table for every science target
+    for star_i, row in tgt_info[tgt_info["Science"]].iterrows():
+        
+        # Only continue if we have data on this particular star
+        if not row["in_paper"]:
+            continue
+        
+        table_row = ""
+        
+        # Step through column by column
+        table_row += "%s & " % rutils.format_id(row["Primary"])
+        
+        # Not using STAGGER grid
+        if len(set(row[u_lambda_cols])) == 1:
+            table_row += r"%0.3f $\pm$ %0.3f & " % (row[u_lambda_cols[0]], 
+                                                    row[e_u_lambda_cols[0]])
+            # Empty values for 6 lambda and scale params
+            for u_i in np.arange(12):
+                table_row += "-&" 
+        
+        # Using STAGGER grid
+        else:
+            # Claret param
+            table_row += "-&" 
+            
+            for u_i in np.arange(6):
+                table_row += (r"%0.3f $\pm$ %0.3f & " 
+                              % (row[u_lambda_cols[u_i]], 
+                                 row[e_u_lambda_cols[u_i]]))
+            
+            for s_i in np.arange(6):
+                table_row += r"%0.3f & " % (row[s_lambda_cols[s_i]])
+        
+        table_rows.append(table_row + r"\\")
+    
+    
+    # Finish the table
+    footer.append("\hline")
+    footer.append("\end{tabular}")
+    
+    # Write the tables
+    table_1 = header + table_rows + footer
+    
+    np.savetxt("paper/table_limb_darkening.tex", table_1, fmt="%s")
+
+
+def make_table_seq_results(results):
+    """Make the table to display the C intercept parameter associated with
+    each sequence.
     """
     columns = OrderedDict([("Star", ""),
                            #("HD", ""),
@@ -134,7 +213,8 @@ def make_table_seq_results(results):
     
     
 def make_table_fbol(tgt_info):
-    """
+    """Make the table to display the derived bolometric fluxes from each band,
+    as well as their errors.
     """
     columns = OrderedDict([("Star", ""),
                            ("HD", ""),
@@ -212,7 +292,8 @@ def make_table_fbol(tgt_info):
     
 
 def make_table_observation_log(tgt_info, complete_sequences, sequences):
-    """
+    """Make the table to summarise the observations, including what star was
+    in what sequence.
     """
     columns = OrderedDict([("Star", ""),
                            ("UT Date", ""),
@@ -220,7 +301,8 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
                            ("Sequence", "Type"),
                            ("Baseline", ""), 
                            #("Spectral", "channels"),
-                           ("Calibrator", "HD")])
+                           ("Calibrator", "HD"),
+                           ("Calibrators", "Used")])
                            
     header = []
     table_rows = {}
@@ -245,14 +327,19 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
         baselines = complete_sequences[seq][2][0][9]
         cals = [target.replace("_", "").replace(".","").replace(" ", "") 
                 for target in sequences[seq][::2]]
-        cals = ("%s, %s, %s" % tuple(rutils.get_unique_key(tgt_info, cals))).replace("HD", "")
+        cals_hd = tuple(rutils.get_unique_key(tgt_info, cals))
+        cals = ("%s, %s, %s" % cals_hd).replace("HD", "")
         
+        # Figure out how many calibrators we used (i.e. weren't 'BAD')
+        cal_quality = [tgt_info.loc[cal]["Quality"] for cal in cals_hd]
+        cals_used = 3 - np.sum(np.array(cal_quality)=="BAD")
         
         table_row = ("%s & "*len(columns)) % (star_id, ut_date, period,  
-                                              seq_type, baselines, cals)
+                                              seq_type, baselines, cals, 
+                                              str(cals_used))
                 
         table_rows[(ut_date, star_id, seq_type)] = table_row[:-2] + r"\\"
-          
+        
     # Finish the table
     footer.append("\hline")
     footer.append("\end{tabular}")
@@ -269,19 +356,8 @@ def make_table_observation_log(tgt_info, complete_sequences, sequences):
     
 
 def make_table_targets(tgt_info):
-    """
-    Columns:
-    - Common ID
-    - HD ID
-    - SpT
-    - Vmag
-    - Hmag
-    - Teff
-    - Logg
-    - [Fe/H]
-    - Mass?
-    - Parallax
-    - Existing angular diameter
+    """Make the table to summarise the target information and literature
+    stellar parameters.
     """
     # Column names and associated units
     columns = OrderedDict([("Star", ""), 
@@ -372,9 +448,9 @@ def make_table_targets(tgt_info):
                 table_row += "-,"
             else:
                 table_row += "%s," % ref_i
-            
-        # Remove the final comma and append
-        table_rows.append(table_row[:-1] + r"\\")
+        
+        # Remove the final comma and append (Replace any nans with '-')
+        table_rows.append(table_row[:-1].replace("nan", "-")  + r"\\")
         
     # Finish the table
     table_rows.append("\\hline")
@@ -402,15 +478,10 @@ def make_table_targets(tgt_info):
     
     # Write the table
     np.savetxt("paper/table_targets.tex", table_rows, fmt="%s")
-    
-    
 
 
 def make_table_calibrators(tgt_info, sequences):
-    """
-    Columns
-    - Angular diameter relation used
-    - Status (e.g. bad (binary))
+    """Summarise the calibrators used (or not).
     """
     # Column names and associated units
     columns = OrderedDict([("HD", ""),
@@ -438,7 +509,6 @@ def make_table_calibrators(tgt_info, sequences):
     header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
     header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
     header.append("\hline")
-    
     
     # Populate the table for every science target
     for star_i, star in tgt_info[~tgt_info["Science"]].iterrows():
@@ -472,7 +542,13 @@ def make_table_calibrators(tgt_info, sequences):
         table_row += "%0.2f & " % star["VTmag"]
         table_row += "%0.2f & " % star["Hmag"]
         table_row += "%0.3f & " % star["eb_v"]
-        table_row += "%0.3f & " % star["LDD_pred"]
+        
+        # Remove placeholder LDD
+        if star["LDD_pred"] == 1.0:
+            table_row += "- & "
+        else:
+            table_row += "%0.3f & " % star["LDD_pred"]
+            
         table_row += ("%s & " % star["LDD_rel"]).split("_")[-1]
         
         # Determine whether the star was used as a calibrator
@@ -481,8 +557,12 @@ def make_table_calibrators(tgt_info, sequences):
         else:
             table_row += "Y & "
         
-        # Parallax is not from Gaia DR2
-        if np.isnan(star["Plx"]):
+        # Both parallaxes are nan, placeholder value
+        if np.isnan(star["Plx"]) and np.isnan(star["Plx_alt"]):
+            table_row += "- & "
+        
+        # If Gaia plx is nan, use Tycho
+        elif np.isnan(star["Plx"]):
             table_row += r"%0.2f $\pm$ %0.2f$^b$ &" % (star["Plx_alt"], star["e_Plx_alt"])
         
         # From Gaia DR2
@@ -491,7 +571,8 @@ def make_table_calibrators(tgt_info, sequences):
         
         table_row += ("%s, "*len(scis) % tuple(scis))[:-2]
         
-        table_rows.append(table_row + r"\\")
+        # Replace any nans with '-'
+        table_rows.append(table_row.replace("nan", "-") + r"\\")
         
     # Finish the table
     footer.append("\hline")

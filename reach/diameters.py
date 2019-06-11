@@ -323,7 +323,7 @@ def format_vis2_data(vis2, e_vis2, baselines, wavelengths, e_wl_frac,
           
           
 def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, sampled_params, ldd_pred,
-                method="odr", e_wl_frac=0.02):
+                method="odr", e_wl_frac=0.02, do_uniform_disc_fit=False):
     """Fit to calibrated squared visibilities to obtain the measured limb-
     darkened stellar diameter in mas.
     
@@ -367,8 +367,14 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, sampled_params, ldd_pred,
     u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
     s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
     
-    u_lambda_6 = sampled_params[u_lambda_cols].values
-    s_lambda_6 = sampled_params[s_lambda_cols].values
+    # If doing a uniform disc fit, use zeroes for the limb darkening coeffs, 
+    # and ones for the scaling parameter
+    if do_uniform_disc_fit:
+        u_lambda_6 = np.zeros(6)
+        s_lambda_6 = np.ones(6)
+    else:
+        u_lambda_6 = sampled_params[u_lambda_cols].values
+        s_lambda_6 = sampled_params[s_lambda_cols].values
     
     # Two cases for actual data:
     # 1 - We're fitting multiple sequences, in which case vis2, e_vis2, and 
@@ -461,7 +467,7 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, sampled_params, ldd_pred,
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
-                sampled_params, bs_i, method="odr"):
+                sampled_params, bs_i, method="odr", do_uniform_disc_fit=False):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -495,17 +501,22 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
         
         id = sci_data.index.values[0]
         
+        # Print depending on what diameter we're fitting, and if not science
         if not sci_data["Science"].values:
             print("%s is not science target, aborting fit" % str(sci))
             continue
         else:
-            print("\tFitting linear LDD to %s" % str(sci), end="")
+            if do_uniform_disc_fit:
+                print("\tFitting uniform-disc to %s" % str(sci), end="")
+            else:
+                print("\tFitting limb-darkened disc to %s" % str(sci), end="")
         
         popt, pstd = fit_for_ldd(vis2[sci], e_vis2[sci], 
                                  baselines[sci], wavelengths[sci], 
                                  sampled_params.loc[id].iloc[bs_i], 
                                  sci_data[pred_ldd_col].values[0], 
-                                 method=method)
+                                 method=method, 
+                                 do_uniform_disc_fit=do_uniform_disc_fit)
         
         # Extract parameters from fit. Parameters are ordered as follows, where
         # n is the number of sequences [LDD, u_lld, C_n, N_n]
@@ -971,6 +982,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
         bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["C_SCALE"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["UDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
     
     # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
     # baseline, and wavelength information from each iteration
@@ -1019,9 +1031,15 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 wavelengths.pop(seq_id, None)
             
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
-        print("\nFitting diameters for bootstrap %i" % (bs_i+1))
+        print("\nFitting limb-darkened diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col, sampled_params, bs_i)  
+       
+        # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
+        print("\nFitting uniform-disc diameters for bootstrap %i" % (bs_i+1))
+        udd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
+                               pred_ldd_col, sampled_params, bs_i,
+                               do_uniform_disc_fit=True)  
         
         # Fitting done, no need to have the vis2 results separate anymore                 
         # Populate
@@ -1035,6 +1053,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
                 bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
                 bs_results[star]["C_SCALE"][bs_i] = np.vstack(ldd_fits[star][2])
+                bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
             
             else:
                 bs_results[star]["MJD"][bs_i] = mjds[star]
@@ -1045,6 +1064,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
                 bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
                 bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
+                bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
 
     
     # A minority of bootstraps result in a different number of observed 
@@ -1105,7 +1125,7 @@ def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     # Initialise
     cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
             "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "C_SCALE", "U_LAMBDA", 
-            "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA"]
+            "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA", "UDD_FIT", "e_UDD_FIT"]
             
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
@@ -1139,6 +1159,12 @@ def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
             
         results.iloc[star_i]["e_LDD_FIT"] = \
             np.nanstd(np.hstack(bs_results[star]["LDD_FIT"]), axis=0)
+            
+        results.iloc[star_i]["UDD_FIT"] = \
+            np.nanmean(np.hstack(bs_results[star]["UDD_FIT"]), axis=0)
+            
+        results.iloc[star_i]["e_UDD_FIT"] = \
+            np.nanstd(np.hstack(bs_results[star]["UDD_FIT"]), axis=0)
 
         results.iloc[star_i]["VIS2"] = \
             np.nanmean(np.dstack(bs_results[star]["VIS2"]), axis=2)

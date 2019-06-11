@@ -895,7 +895,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
             plt.close()    
 
 
-def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
+def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     """Plot the zoomed in fitted sidelobe
     """
     plt.close("all")
@@ -905,7 +905,10 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
     
     # Get the science target name
     hd_id = tgt_info[tgt_info["Primary"]==sci].index.values[0]
-
+    
+    # And the science target results
+    sci_results = results[results["STAR"]==sci].iloc[0]
+    
     # Get the C params, and u_lambda values
     u_lambda_cols = ["u_lambda_%i" % ui for ui in np.arange(0,6)]
     s_lambda_cols = ["s_lambda_%i" % ui for ui in np.arange(0,6)]
@@ -913,7 +916,7 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
     u_lambdas = tgt_info.loc[hd_id][u_lambda_cols].values
     s_lambdas = tgt_info.loc[hd_id][s_lambda_cols].values
     
-    c_scale = results.iloc[star_i]["C_SCALE"]
+    c_scale = sci_results["C_SCALE"]
     
     n_points = [12] * len(c_scale)
     
@@ -929,8 +932,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
     # -----------------------------------------------------------------
     # Plot vis^2 fits
     # -----------------------------------------------------------------
-    n_bl = len(results.iloc[star_i]["BASELINE"])
-    n_wl = len(results.iloc[star_i]["WAVELENGTH"])
+    n_bl = len(sci_results["BASELINE"])
+    n_wl = len(sci_results["WAVELENGTH"])
     
     # Setup lower panel for residuals
     divider = make_axes_locatable(axes)
@@ -940,14 +943,14 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
     # For each wavelength dimension
     for wl_i in np.arange(6):
         # Need to do 1 plot per wavelength channel
-        bls = results.iloc[star_i]["BASELINE"]
-        wls = results.iloc[star_i]["WAVELENGTH"]
+        bls = sci_results["BASELINE"]
+        wls = sci_results["WAVELENGTH"]
         sfreq = (bls / wls[wl_i])[:len(c_array)]
         
-        vis2 = results.iloc[star_i]["VIS2"][:, wl_i]
-        e_vis2 = results.iloc[star_i]["e_VIS2"][:, wl_i]
-        ldd_fit = results.iloc[star_i]["LDD_FIT"]
-        e_ldd_fit = results.iloc[star_i]["e_LDD_FIT"]
+        vis2 = sci_results["VIS2"][:, wl_i]
+        e_vis2 = sci_results["e_VIS2"][:, wl_i]
+        ldd_fit = sci_results["LDD_FIT"]
+        e_ldd_fit = sci_results["e_LDD_FIT"]
         
         # Normalise vis2 and scale ldd_fit
         # TODO: Fix the uncertainty over the length of each seq
@@ -974,12 +977,18 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr", star_i=15):
         res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", elinewidth=0.1, 
                     capsize=0.2, capthick=0.1, markersize=4.0, 
                     color=colours[wl_i])
-                    
-        axes.legend(loc="best", fontsize="xx-small")
+    
+    # Plot the uniform disc diameter
+    udd_fit = sci_results["UDD_FIT"]
+    x = np.arange(1*10**6, 25*10**7, 10000)
+    y_fit = rdiam.calc_vis2_ls(x, udd_fit, 1.0, 0)
+    axes.plot(x, y_fit, "--", linewidth=0.25, color="black") 
+    
+    axes.legend(loc="best", fontsize="xx-small")
     
     # Set up ticks and axes
     axes.set_xlim([5.5E7,9.5E7])
-    axes.set_ylim([0.0,0.016])
+    axes.set_ylim([0.0,0.018])
     
     axes.set_xticklabels([])
     
@@ -1455,7 +1464,6 @@ def plot_vis2(oi_fits_file, star_id):
     plt.grid()
     #plt.gcf().set_size_inches(16, 9)
     #plt.savefig("plots/vis2_fit.pdf")
-
 
 
 def plot_fbol_comp(tgt_info):
