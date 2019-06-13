@@ -889,7 +889,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
             fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
             fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
             
-            plt.gcf().set_size_inches(8, 11*(n_rows/n_rows_init))
+            plt.gcf().set_size_inches(8, 5.5*(n_rows/n_rows_init))
             plt.tight_layout(pad=1.0)
             pdf.savefig()
             plt.close()    
@@ -1488,18 +1488,17 @@ def plot_fbol_comp(tgt_info):
     
     mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
-    ids = tgt_info[mask]["Primary"]
+    ids = [rutils.format_id(star) for star in tgt_info[mask]["Primary"].values]
+    
     fbol = tgt_info[mask][f_bol_bands]
     e_fbol = tgt_info[mask][e_f_bol_bands]
     
-    
-    
     for band_i, (fband, e_fband) in enumerate(zip(f_bol_bands, e_f_bol_bands)):
-        plt.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], 
-                     fmt=".", zorder=1, label="", ecolor="black",
-                     transform=trans+offset(-tf*band_i))
+        plt.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], elinewidth=0.5,
+                     fmt=".", zorder=1, label="", ecolor="black",capsize=1,
+                     capthick=0.5, transform=trans+offset(-tf*(band_i-3)))
         plt.scatter(ids, fbol[fband], s=2**6, c=colours[band_i], label=bands[band_i],
-                    zorder=2, transform=trans+offset(-tf*band_i), 
+                    zorder=2, transform=trans+offset(-tf*(band_i-3)), 
                     marker="$%s$" % bands[band_i])
                         
     plt.xlabel("Star")
@@ -1507,9 +1506,44 @@ def plot_fbol_comp(tgt_info):
     plt.yscale("log")
     plt.legend(loc="best")
     plt.gcf().set_size_inches(16, 9)
-    plt.savefig("fbol_comp.pdf")
+    plt.savefig("paper/fbol_comp.pdf")
     
+
+def plot_hr_diagram(tgt_info):
+    """Plots the Vt, (Bt-Vt) colour magnitude diagram for all science targets.
+    """
+    mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
+
+    abs_Vtmag = tgt_info[mask]["VTmag"] - 5*np.log10(tgt_info[mask]["Dist"]/10) 
+    bt_vt = tgt_info[mask]["BTmag"] - tgt_info[mask]["VTmag"]
+    
+    plt.close("all")
+    plt.scatter(bt_vt, abs_Vtmag, c=tgt_info[mask]["FeH_rel"], marker="o")
+    
+    xx = 0.02
+    
+    # Annotate the star name
+    star_ids = rutils.format_id(tgt_info[mask]["Primary"].values)
+    for star_i, star in enumerate(star_ids):
+        if tgt_info[mask]["Primary"][star_i] in ("epsInd", "chiEri"):
+            yy = 0.5
+        else:
+            yy = 0.25
+        
+        plt.annotate(star, xy=(bt_vt[star_i], abs_Vtmag[star_i]), 
+                    xytext=(bt_vt[star_i]-xx, abs_Vtmag[star_i]-yy), 
+                    fontsize="xx-small", horizontalalignment="center")
+    
+    cb = plt.colorbar()
+    cb.set_label(r"[Fe/H]")
+    
+    plt.ylim([7.5, 0])
+    plt.xlabel(r"B$_{\rm T}$-V$_{\rm T}$")
+    plt.ylabel(r"V$_{\rm T, abs}$")
+    plt.tight_layout()
+    plt.savefig("paper/hr_diagram.pdf")
+
 
 def plot_c_hist(results, n_bins=5):
     """Plot histograms of the scaling/intercept parameter C.

@@ -524,8 +524,8 @@ def collate_cal_pdfs():
 # -----------------------------------------------------------------------------
 # Formatting
 # ----------------------------------------------------------------------------- 
-def format_id(text_id):
-    """Swap in an ID better for LateX formatting
+def format_id(text_ids):
+    """Swap in an ID better for LateX formatting. Recursive.
     """
     star_greek_map = {"TauCet":r"$\tau$ Cet",
                       "alfHyi":r"$\alpha$ Hyi",
@@ -544,7 +544,16 @@ def format_id(text_id):
                       "betAql":r"$\beta$ Aql",
                       "HR7221":r"HR7221",}
     
-    if text_id in star_greek_map:
-        return star_greek_map[text_id]
+    # Single ID
+    if type(text_ids)==str:
+        if text_ids in star_greek_map:
+            return star_greek_map[text_ids]
+        else:
+            return text_ids
+     
+    # List of IDs
+    elif hasattr(text_ids, "__len__"):
+        return [format_id(tid) for tid in text_ids] 
+        
     else:
-        return text_id
+        return text_ids       
