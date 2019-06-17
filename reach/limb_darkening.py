@@ -395,7 +395,7 @@ def V_from_claret(xs, ks, cs):
     return Vs/norm
 
 
-def in_grid_bounds(teff, logg):
+def in_grid_bounds(teff, logg, e_teff=150, e_logg=0.01):
     """Tests whether a given [teff, logg] point is within the Stagger grid.
     Given we're interpolating [Fe/H], we don't take this into account.
     """
@@ -410,6 +410,10 @@ def in_grid_bounds(teff, logg):
     
     grid = Polygon(grid_bounds)
     
-    in_grid = grid.contains(Point(teff, logg)) 
+    # Check the point within the default errors
+    for x_i in np.arange(-1,2):
+        for y_i in np.arange(-1,2):
+            if not grid.contains(Point(teff + e_teff*x_i, logg + e_logg*y_i)): 
+                return False
     
-    return in_grid
+    return True

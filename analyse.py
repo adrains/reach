@@ -21,9 +21,11 @@ combined_fit = True
 load_saved_results = False
 assign_default_uncertainties = True
 force_claret_params = False
-n_bootstraps = 480
+n_bootstraps = 1000
 #results_folder = "19-03-26_i1000"
-results_folder = "19-05-27_i2000"
+#results_folder = "19-05-27_i2000"   # 1st with wavelength cal, only 480
+#results_folder = "19-06-06_i2000"  # Attempted in parallel, but incomplete
+results_folder = "19-06-10_i1000"  # Wavelength cal, serial
 results_path = "results/%s/" % results_folder
 e_wl_cal_percent = 1
 
@@ -59,11 +61,6 @@ rparam.combine_u_s_lambda(tgt_info, sampled_sci_params)
 if load_saved_results:
     print("Loading saved results...")
     bs_results, results = rutils.load_results(results_folder)
-    
-    # Pop HD187289
-    #results.drop(results[results["STAR"]=="HD187289"].index, inplace=True)
-    #bs_results.pop("HD187289 (faint, 99)")
-    #bs_results.pop("HD187289 (bright, 99)")
 
 else:
     # Get results
@@ -108,18 +105,19 @@ rpaper.make_table_targets(tgt_info)
 rpaper.make_table_calibrators(tgt_info, sequences)
 rpaper.make_table_observation_log(tgt_info, complete_sequences, sequences)
 rpaper.make_table_fbol(tgt_info)
-rpaper.make_table_seq_results(results)
+#rpaper.make_table_seq_results(results)
+rpaper.make_temp_table_seq_results(results)
 rpaper.make_table_final_results(tgt_info)
 
 # Generate plots
 print("Generating plots...")
+rplt.plot_hr_diagram(tgt_info)
 rplt.plot_casagrande_teff_comp(tgt_info)
 rplt.plot_lit_diam_comp(tgt_info)
 rplt.plot_sidelobe_vis2_fit(tgt_info, results)  
 rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=4, n_cols=2)
-rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3")
-rplt.plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W4")
-rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=True, 
+rplt.plot_colour_rel_diam_comp(tgt_info)
+rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=False, 
                                 sequences=sequences, 
                                 complete_sequences=complete_sequences, 
                                 tgt_info=tgt_info)

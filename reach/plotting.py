@@ -739,7 +739,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                     break
             
                 # Get the science target name
-                sci = results.iloc[star_i]["STAR"]
+                sci = str(results.iloc[star_i]["STAR"])
                 hd_id = tgt_info[tgt_info["Primary"]==sci].index.values[0]
                 
                 period = results.iloc[star_i]["PERIOD"]
@@ -889,7 +889,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
             fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
             fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
             
-            plt.gcf().set_size_inches(8, 5.5*(n_rows/n_rows_init))
+            plt.gcf().set_size_inches(8, 11*(n_rows/n_rows_init))
             plt.tight_layout(pad=1.0)
             pdf.savefig()
             plt.close()    
@@ -1240,9 +1240,9 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
         res_ax.yaxis.set_major_locator(loc)
     
         # Setup the rest of the plot
-        ax.set_ylabel(r"$\theta_{\rm %s}$" % colour_rel)  
-        res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
-        res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" 
+        ax.set_ylabel(r"$\theta_{\rm %s}$ (mas)" % colour_rel)  
+        res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
+        res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$ (mas)" 
                           % colour_rel)  
         
         if ax_i != 0:

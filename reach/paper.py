@@ -212,6 +212,50 @@ def make_table_seq_results(results):
     np.savetxt("paper/table_sequence_results.tex", table_1, fmt="%s")
     
     
+def make_temp_table_seq_results(results):
+    """Make the table to display the C intercept parameter associated with
+    each sequence.
+    """
+    columns = OrderedDict([("Star", ""),
+                           ("C", "")])
+                           
+    header = []
+    table_rows = []
+    footer = []
+    
+    # Construct the header of the table
+    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    header.append("\hline")
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    #header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append("\hline")
+    
+    # Populate the table for every science target
+    for star, row in results.iterrows():
+        table_row = ""
+        
+        id = row["STAR"]
+        period = row["PERIOD"]
+        sequence = row["SEQUENCE"]
+        
+        # Step through column by column
+        table_row += "%s & " % rutils.format_id(str(id))
+        cs = ["%0.3f" % cc for cc in row["C_SCALE"]]
+        table_row += "%0.3f, "*len(cs) % tuple(row["C_SCALE"])
+        
+        table_rows.append(table_row[:-2] + r"\\")
+    
+    
+    # Finish the table
+    footer.append("\hline")
+    footer.append("\end{tabular}")
+    
+    # Write the tables
+    table_1 = header + table_rows + footer
+    
+    np.savetxt("paper/table_sequence_results.tex", table_1, fmt="%s")
+    
+    
 def make_table_fbol(tgt_info):
     """Make the table to display the derived bolometric fluxes from each band,
     as well as their errors.
