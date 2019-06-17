@@ -1080,7 +1080,7 @@ def plot_lit_diam_comp(tgt_info):
         # Plot residuals
         ax.set_xticks([])
         residuals = np.array(lit_diams) / np.array(calc_diams)
-        err_res = np.array(e_calc_diams) / np.array(calc_diams)
+        err_res = np.array(e_lit_diams) / np.array(calc_diams)
             
         res_ax.errorbar(calc_diams, residuals, xerr=e_calc_diams, 
                         yerr=e_lit_diams, fmt="o", elinewidth=0.5, capsize=0.8,
@@ -1112,6 +1112,9 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
     """
     # Format the colour relation
     colour_rel_col = "LDD_" + colour_rel.replace("-", "")
+    
+    # Remove [Fe/H] if it's there
+    colour_rel = colour_rel.replace("_feh", "")
     
     plt.close("all")
     fig, ax = plt.subplots()
@@ -1181,10 +1184,10 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
     # Plot residuals
     ax.set_xticklabels([])
     residuals = np.array(colour_rel_diams) / np.array(fit_diams)
-    err_res = np.array(e_fit_diams) / np.array(fit_diams)
+    err_res = np.array(e_colour_rel_diams) / np.array(fit_diams)
         
-    res_ax.errorbar(fit_diams, residuals, xerr=err_res, 
-                    yerr=e_colour_rel_diams, fmt=".", elinewidth=0.5, 
+    res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
+                    yerr=err_res, fmt=".", elinewidth=0.5, 
                     capsize=0.8, capthick=0.5, zorder=1)
     
     # Overplot scatter points so we can have [Fe/H] as colours

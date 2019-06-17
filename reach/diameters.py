@@ -89,6 +89,24 @@ def predict_ldd_boyajian(F1_mag, F1_mag_err, F2_mag, F2_mag_err, colour=None,
     e_ldd = ldd * diam_rel_err[colour_rel]/100
     
     return ldd, e_ldd
+
+
+def predict_ldd_bv_feh_boyajian(Bmag, Vmag, feh):
+    """Predict theta_ld using a [Fe/H] dependent (B-V) colour relation from
+    Boyajian et al. 2014:
+     - http://adsabs.harvard.edu/abs/2014AJ....147...47B
+    """
+    b_v = np.repeat((Bmag - Vmag)[:, None], 4, 1)
+    
+    exponents = np.arange(4)
+    coeffs = np.array([0.52005, 0.90209, -0.67448, 0.39767, -0.08476])
+    e_coeffs = np.array([0.00121, 0.01348, 0.03676, 0.02611, 0.00161])
+    log_diam = np.sum(coeffs[:-1]*b_v**exponents,1) + coeffs[-1]*feh
+    
+    ldd = 10**(-0.2*Vmag) * 10**log_diam
+    e_ldd = ldd * 0.045
+    
+    return ldd, e_ldd
     
     
 def predict_ldd_kervella(V_mag, V_mag_err, K_mag, K_mag_err):
@@ -138,6 +156,18 @@ def predict_all_ldd(tgt_info):
                                               tgt_info["e_W4mag"], None, 
                                               "V-W4") 
     
+    # B-V
+    ldd_bv, e_ldd_bv = predict_ldd_boyajian(tgt_info["Bmag_dr"], 
+                                              tgt_info["e_BTmag"], 
+                                              tgt_info["Vmag_dr"], 
+                                              tgt_info["e_VTmag"], None, 
+                                              "B-V") 
+    
+    # B-V, [Fe/H] dependent
+    ldd_bv_feh, e_ldd_bv_feh = predict_ldd_bv_feh_boyajian(tgt_info["Bmag_dr"], 
+                                                  tgt_info["Vmag_dr"], 
+                                                  tgt_info["FeH_rel"]) 
+    
     # Save these values
     tgt_info["LDD_VK"] = ldd_vk
     tgt_info["e_LDD_VK"] = e_ldd_vk
@@ -147,6 +177,12 @@ def predict_all_ldd(tgt_info):
     
     tgt_info["LDD_VW4"] = ldd_vw4
     tgt_info["e_LDD_VW4"] = e_ldd_vw4
+    
+    tgt_info["LDD_BV"] = ldd_bv
+    tgt_info["e_LDD_BV"] = e_ldd_bv
+    
+    tgt_info["LDD_BV_feh"] = ldd_bv_feh
+    tgt_info["e_LDD_BV_feh"] = e_ldd_bv_feh
     
     ldd_pred = []
     e_ldd_pred = []

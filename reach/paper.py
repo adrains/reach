@@ -216,9 +216,12 @@ def make_table_fbol(tgt_info):
     """Make the table to display the derived bolometric fluxes from each band,
     as well as their errors.
     """
+    exp_scale = -8
+    
     columns = OrderedDict([("Star", ""),
                            ("HD", ""),
-                           (r"f$_{\rm bol}$ (MARCS)", r"(ergs s$^{-1}$ cm $^{-2}$)"),
+                           (r"f$_{\rm bol}$ (MARCS)", 
+                           r"(10$^{%i}\,$ergs s$^{-1}$ cm $^{-2}$)" % exp_scale),
                            (r"$\sigma_{f_{\rm bol}} (\zeta)$", r"(\%)")])
                            #(r"f$_{\rm bol} (avg)$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
                      
@@ -253,7 +256,7 @@ def make_table_fbol(tgt_info):
         table_row += "%s & " % star.name.replace("HD", "")
         
         if not np.isnan(star["f_bol_Hp"]):
-            table_row += r"H$_p$: %.3E & " % star["f_bol_Hp"]
+            table_row += r"H$_p$: %.3f & " % (star["f_bol_Hp"] / 10**exp_scale)
         
             e_pc_f_bol_hp = star["e_f_bol_Hp"] / star["f_bol_Hp"]
         
@@ -268,7 +271,8 @@ def make_table_fbol(tgt_info):
         
         # Now have a separate row for each of the remaining filters
         for band_i in np.arange(1, len(bands)):
-            table_row = r" & & %s: %.3E &" % (bands[band_i], star[f_bols[band_i]])
+            table_row = r" & & %s: %.3f &" % (bands[band_i], 
+                                        star[f_bols[band_i]] / 10**exp_scale)
             
             e_pc_f_bol = star[e_f_bols[band_i]] / star[f_bols[band_i]]
         
