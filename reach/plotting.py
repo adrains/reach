@@ -1107,133 +1107,160 @@ def plot_lit_diam_comp(tgt_info):
     
 
 
-def plot_colour_rel_diam_comp(tgt_info, colour_rel="V-W3", cbar="feh"):
+def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"], 
+                              cbar="feh"):
     """Plot for paper comparing measured LDD vs Boyajian colour relation diams.
+    
+    Colourbar solution from here:
+    stackoverflow.com/questions/13784201/matplotlib-2-subplots-1-colorbar
     """
-    # Format the colour relation
-    colour_rel_col = "LDD_" + colour_rel.replace("-", "")
-    
-    # Remove [Fe/H] if it's there
-    colour_rel = colour_rel.replace("_feh", "")
-    
     plt.close("all")
-    fig, ax = plt.subplots()
-            
-    # Setup lower panel for residuals
-    divider = make_axes_locatable(ax)
-    res_ax = divider.append_axes("bottom", size="30%", pad=0.1)
-    ax.figure.add_axes(res_ax)
+    fig, axes = plt.subplots(1, len(colour_rels), sharex=True,sharey=True)
     
-    # Initialise arrays
-    fit_diams = []
-    e_fit_diams = []
-    colour_rel_diams = []
-    e_colour_rel_diams = []
-    fehs = []
-    teffs = []
+    if hasattr(axes, "__len__"):
+        axes = axes.flatten()
+    else:
+        axes = np.array([axes])
     
-    # Change the annotation rotation to prevent labels overlapping
-    xy_txt = []
+    # Normalise all scatter plots by the metallicity
+    mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
+    norm = plt.Normalize(tgt_info[mask]["FeH_rel"].min(), 
+                         tgt_info[mask]["FeH_rel"].max())
     
-    # For every science target, plot using the given relation
-    for star, star_data in tgt_info[tgt_info["Science"]].iterrows():
-        # If star doesn't have a diameter using this relation, skip
-        if np.isnan(star_data[colour_rel_col]) or not star_data["in_paper"]:
-            continue
-        elif colour_rel=="V-K" and star_data["LDD_rel"] != colour_rel_col:
-            continue
+    # Plot each subplot
+    for ax_i, (ax, colour_rel) in enumerate(zip(axes, colour_rels)):
+        # Format the colour relation
+        colour_rel_col = "LDD_" + colour_rel.replace("-", "")
+    
+        # Remove [Fe/H] if it's there
+        colour_rel = colour_rel.replace("_feh", "")
+    
+        # Setup lower panel for residuals
+        divider = make_axes_locatable(ax)
+        res_ax = divider.append_axes("bottom", size="30%", pad=0.1)
+        ax.figure.add_axes(res_ax)
+    
+        # Initialise arrays
+        fit_diams = []
+        e_fit_diams = []
+        colour_rel_diams = []
+        e_colour_rel_diams = []
+        fehs = []
+        teffs = []
+    
+        # Change the annotation rotation to prevent labels overlapping
+        xy_txt = []
+    
+        # For every science target, plot using the given relation
+        for star, star_data in tgt_info[tgt_info["Science"]].iterrows():
+            # If star doesn't have a diameter using this relation, skip
+            if (np.isnan(star_data[colour_rel_col]) 
+                or not star_data["in_paper"]):
+                continue
+            elif colour_rel=="V-K" and star_data["LDD_rel"] != colour_rel_col:
+                continue
         
-        # Get the two LDDs to compare
-        fit_diams.append(star_data["ldd_final"])
-        e_fit_diams.append(star_data["e_ldd_final"])
-        colour_rel_diams.append(star_data[colour_rel_col])
-        e_colour_rel_diams.append(star_data["e_%s" % colour_rel_col])
-        fehs.append(star_data["FeH_rel"])
-        teffs.append(star_data["teff_final"])
+            # Get the two LDDs to compare
+            fit_diams.append(star_data["ldd_final"])
+            e_fit_diams.append(star_data["e_ldd_final"])
+            colour_rel_diams.append(star_data[colour_rel_col])
+            e_colour_rel_diams.append(star_data["e_%s" % colour_rel_col])
+            fehs.append(star_data["FeH_rel"])
+            teffs.append(star_data["teff_final"])
         
-        # Compare positions
-        # TODO: a better solution would be sorting the stars by LDD, then
-        # alternate the sign on xx and yy to plot above or below...or just 
-        # hardcode it
-        xy_abs = (fit_diams[-1]**2 + colour_rel_diams[-1]**2)**0.5
-        xy = np.abs(np.array(xy_txt) - xy_abs)
-        sep = 0.1
+            # Compare positions
+            # TODO: a better solution would be sorting the stars by LDD, then
+            # alternate the sign on xx and yy to plot above or below...or just 
+            # hardcode it
+            xy_abs = (fit_diams[-1]**2 + colour_rel_diams[-1]**2)**0.5
+            xy = np.abs(np.array(xy_txt) - xy_abs)
+            sep = 0.1
         
-        if len(xy_txt) > 0 and (xy < sep).any():
-            xx = 0.025
-            yy = 0.2
-        else:
-            xx = 0.025
-            yy = 0.15 
+            if len(xy_txt) > 0 and (xy < sep).any():
+                xx = 0.025
+                yy = 0.2
+            else:
+                xx = 0.025
+                yy = 0.15 
         
-        # Plot the name of the star
-        ax.annotate(rutils.format_id(star_data["Primary"]), xy=(fit_diams[-1], 
-                    colour_rel_diams[-1]), 
-                    xytext=(fit_diams[-1]+xx, colour_rel_diams[-1]-yy), 
-                    #arrowprops=dict(facecolor="black", width=0.1, 
-                    #                headwidth=0.1),
-                    fontsize="xx-small")
+            # Plot the name of the star
+            ax.annotate(rutils.format_id(star_data["Primary"]),  
+                        xy=(fit_diams[-1], colour_rel_diams[-1]), 
+                        xytext=(fit_diams[-1]+xx, colour_rel_diams[-1]-yy), 
+                        fontsize=4)
                     
-        xy_txt.append(xy_abs)
+            xy_txt.append(xy_abs)
                         
-    # Plot the points + errors
-    ax.errorbar(fit_diams, colour_rel_diams, xerr=e_fit_diams, 
-                yerr=e_colour_rel_diams, fmt=".",# label=colour_rel, 
-                elinewidth=0.5, capsize=0.8, capthick=0.5, zorder=1)
+        # Plot the points + errors
+        ax.errorbar(fit_diams, colour_rel_diams, xerr=e_fit_diams, 
+                    yerr=e_colour_rel_diams, fmt=".", ecolor="firebrick", 
+                    elinewidth=0.5, capsize=0.8, capthick=0.5, zorder=1)
         
-    # Plot residuals
-    ax.set_xticklabels([])
-    residuals = np.array(colour_rel_diams) / np.array(fit_diams)
-    err_res = np.array(e_colour_rel_diams) / np.array(fit_diams)
+        # Plot residuals
+        ax.set_xticklabels([])
+        residuals = np.array(colour_rel_diams) / np.array(fit_diams)
+        err_res = np.array(e_colour_rel_diams) / np.array(fit_diams)
         
-    res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
-                    yerr=err_res, fmt=".", elinewidth=0.5, 
-                    capsize=0.8, capthick=0.5, zorder=1)
+        res_ax.errorbar(fit_diams, residuals, xerr=e_fit_diams, 
+                        yerr=err_res, fmt=".", elinewidth=0.5,  
+                        ecolor="firebrick", capsize=0.8, capthick=0.5, 
+                        zorder=1)
     
-    # Overplot scatter points so we can have [Fe/H] as colours
-    if cbar == "feh":
+        # Overplot scatter points so we can have [Fe/H] as colours
+        if cbar == "feh":
         
-        scatter = ax.scatter(fit_diams, colour_rel_diams, c=fehs, marker="o", 
-                             zorder=2)
-        cb = fig.colorbar(scatter, ax=ax)
-        cb.set_label("[Fe/H]")
-        res_ax.scatter(fit_diams, residuals, c=fehs, marker="o", zorder=2)
+            scatter = ax.scatter(fit_diams, colour_rel_diams, c=fehs,  
+                                 marker="o",zorder=2, norm=norm)
+            res_ax.scatter(fit_diams, residuals, c=fehs, marker="o", 
+                           zorder=2, norm=norm)
+            cbar_label = "[Fe/H]"
     
-    # Overplot scatter points so we can have Teff as colours
-    elif cbar == "teff":
-        scatter = ax.scatter(fit_diams, colour_rel_diams, c=teffs, marker="o", 
-                             zorder=2, cmap="magma")
-        cb = fig.colorbar(scatter, ax=ax)
-        cb.set_label(r"T$_{\rm eff}$")
-        res_ax.scatter(fit_diams, residuals, c=teffs, marker="o", zorder=2, 
-                       cmap="magma")
-    
-    # Plot the two lines
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    ax.plot(np.arange(0, 10), np.arange(0, 10), "--", color="black")
-    res_ax.hlines(1, xmin=0, xmax=10, linestyles="dashed")
+        # Overplot scatter points so we can have Teff as colours
+        elif cbar == "teff":
+            scatter = ax.scatter(fit_diams, colour_rel_diams, c=teffs, 
+                                 marker="o", zorder=2, cmap="magma", norm=norm)
+            res_ax.scatter(fit_diams, residuals, c=teffs, marker="o", zorder=2, 
+                           cmap="magma", norm=norm)
+            cbar_label = r"T$_{\rm eff}$"
+        
+        # Plot the two lines
+        xlim = ax.get_xlim()
+        ylim = [0.9, 4.6]
+        ax.plot(np.arange(0, 10), np.arange(0, 10), "--", color="black", 
+                zorder=1)
+        res_ax.hlines(1, xmin=0, xmax=10, linestyles="dashed", zorder=1)
                       
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    res_ax.set_xlim(xlim)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        res_ax.set_xlim(xlim)
+        res_ax.set_ylim([0.85, 1.2])
     
-    # Set residual y ticks sensibly
-    loc = plticker.MultipleLocator(base=0.1)
-    res_ax.yaxis.set_major_locator(loc)
-    #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
+        # Set residual y ticks sensibly
+        loc = plticker.MultipleLocator(base=0.05)
+        res_ax.yaxis.set_major_locator(loc)
     
+        # Setup the rest of the plot
+        ax.set_ylabel(r"$\theta_{\rm %s}$" % colour_rel)  
+        res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
+        res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" 
+                          % colour_rel)  
+        
+        if ax_i != 0:
+            res_ax.set_yticklabels([])
+        
+        plt.setp(ax.get_xticklabels(), fontsize="xx-small")
+        plt.setp(ax.get_yticklabels(), fontsize="xx-small")
+        plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
+        plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
     
-    # Setup the rest of the plot
-    ax.set_ylabel(r"$\theta_{\rm %s}$" % colour_rel)  
-    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
-    res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" % colour_rel)  
-    #ax.legend(loc="best")
+    # Plot the colourbar
+    cb = fig.colorbar(scatter, ax=axes.ravel().tolist())
+    cb.set_label("[Fe/H]")
     
-    plt.tight_layout()
-    plt.savefig("paper/colour_rel_diam_comp_%s_%s.pdf" % (colour_rel, cbar))     
-            
-
+    plt.gcf().set_size_inches(12, 4)
+    plt.savefig("paper/colour_rel_diam_comp_%s.pdf" % cbar, 
+                bbox_inches="tight")     
+        
 
 def plot_casagrande_teff_comp(tgt_info):
     """Plot for paper comparing measured LDD vs Boyajian colour relation diams.
