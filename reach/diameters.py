@@ -772,16 +772,16 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
     all_flags = {}
     all_baselines = {}
     all_wavelengths = {}
+    sequence_order = {}
     
     ith_bs_oifits = glob.glob(results_path 
                               + "*SCI*oidataCalibrated_%02i.fits" % bs_i)
     ith_bs_oifits.sort()
     
-    if separate_sequences:
-        # We want to keep the bright and faint sequences separate for 
-        # diagnostic purposes, but still need to collate in the instance
-        # that a star as duplicate sequences
-        dates_obs = pd.read_csv("data/dates_observed.tsv", sep="\t")                     
+    # We want to keep the bright and faint sequences separate for 
+    # diagnostic purposes, but still need to collate in the instance
+    # that a star has duplicate sequences on the same night
+    dates_obs = pd.read_csv("data/dates_observed.tsv", sep="\t")                     
     
     print("\nFound %i oifits file/s for bootstrap %i" % (len(ith_bs_oifits), 
                                                        bs_i+1))
@@ -800,38 +800,43 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
             extract_vis2(oifits)
         
         for seq_i in np.arange(0, len(mjds)):
-            # Initialise 
-            seq_id = sci
+            # Figure out what sequence we're dealing with
+            night = oifits.split("/")[-1].split("_SCI")[0]
         
-            # If keeping separate sequences, record bright/faint and period in key
+            faint_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
+                                            dates_obs["f_night"]==night)]
+        
+            bright_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
+                                            dates_obs["b_night"]==night)]
+            
+            # If returning both a faint and bright entry, need to define 
+            # which is which - create a tuple of form (id, seq, period)                                
+            if len(bright_entry) > 0 and len(faint_entry) > 0:
+                # Bright
+                if seq_i == bright_entry["b_order"].values[0]:
+                    seq_tup = (sci, "bright", 
+                               bright_entry["period"].values[0])
+                
+                elif seq_i == faint_entry["f_order"].values[0]:
+                    seq_tup = (sci, "faint", 
+                              faint_entry["period"].values[0])
+                                
+            elif len(bright_entry) > 0 and len(faint_entry) == 0:
+                seq_tup = (sci, "bright", bright_entry["period"].values[0])
+            
+            elif len(bright_entry) == 0 and len(faint_entry) > 0:
+                seq_tup = (sci, "faint", faint_entry["period"].values[0])
+            
+            # If keeping the sequences separate, the ID we use will be the 
+            # sequence tuple (star, bright/faint, period) as the ID, otherwise
+            # just the star ID
             if separate_sequences:
-            
-                night = oifits.split("/")[-1].split("_SCI")[0]
-            
-                faint_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
-                                                dates_obs["f_night"]==night)]
-            
-                bright_entry = dates_obs[np.logical_and(dates_obs["star"]==sci, 
-                                                dates_obs["b_night"]==night)]
+                seq_id = seq_tup
                 
-                # If returning both a faint and bright entry, need to define 
-                # which is which - create a tuple of form (id, seq, period)                                
-                if len(bright_entry) > 0 and len(faint_entry) > 0:
-                    # Bright
-                    if seq_i == bright_entry["b_order"].values[0]:
-                        seq_id = (sci, "bright", 
-                                  bright_entry["period"].values[0])
-                    
-                    elif seq_i == faint_entry["f_order"].values[0]:
-                        seq_id = (sci, "faint", 
-                                  faint_entry["period"].values[0])
-                                    
-                elif len(bright_entry) > 0 and len(faint_entry) == 0:
-                    seq_id = (sci, "bright", bright_entry["period"].values[0])
+            # Just use the science target    
+            else:
+                seq_id = sci
                 
-                elif len(bright_entry) == 0 and len(faint_entry) > 0:
-                    seq_id = (sci, "faint", faint_entry["period"].values[0])
-        
         # Extract data from oifits file and stack as appropriate
         #mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
             #extract_vis2(oifits)
@@ -844,6 +849,7 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
                 all_flags[seq_id] = flags[seq_i]
                 all_baselines[seq_id] = baselines[seq_i]
                 all_wavelengths[seq_id] = wavelengths
+                sequence_order[seq_id] = [seq_tup]
             
             else:
                 all_mjds[seq_id] = np.hstack((all_mjds[seq_id], mjds[seq_i]))
@@ -858,9 +864,10 @@ def collate_vis2_from_file(results_path, bs_i=None, separate_sequences=False):
                 all_baselines[seq_id] = np.hstack((all_baselines[seq_id], 
                                                    baselines[seq_i]))
                 all_wavelengths[seq_id] = wavelengths 
+                sequence_order[seq_id].append(seq_tup)
                                                    
     return all_mjds, all_tel_pairs, all_vis2, all_e_vis2, all_flags, \
-           all_baselines, all_wavelengths
+           all_baselines, all_wavelengths, sequence_order
     
     
 # -----------------------------------------------------------------------------
@@ -977,7 +984,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
     # Determine the stars that we have results on
     #oifits_files = glob.glob(results_path + "*SCI*.fits")
     #oifits_files.sort()
-    mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+    mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths, seq_order = \
             collate_vis2_from_file(results_path, 0, separate_sequences)
     
     #stars = set([file.split("SCI")[-1].split("oidata")[0].replace("_","")
@@ -1004,7 +1011,6 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
     for star in sequence_ids:
         bs_results[star] = pd.DataFrame(index=np.arange(0, n_bootstraps), 
                                      columns=cols1)
-        
         # TEL_PAIR --> array of tuples, MJD --> array of floats, VIS2 -->
         # array of 6 length arrays, BASELINE --> array of floats, WAVELENGTH 
         # --> array of 6 length arrays, FLAG --> array of 6 length arrays,
@@ -1018,13 +1024,14 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
         bs_results[star]["WAVELENGTH"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["LDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["C_SCALE"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["SEQ_ORDER"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["UDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
     
     # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
     # baseline, and wavelength information from each iteration
     for bs_i in np.arange(0, n_bootstraps):
         # Collate the information
-        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths = \
+        mjds, pairs, vis2, e_vis2, flags, baselines, wavelengths, seq_order = \
             collate_vis2_from_file(results_path, bs_i, separate_sequences)
         
         # If doing combined fit, combine (stack in new dimension) data from the 
@@ -1046,6 +1053,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                     flags[star] = [flags[seq_id]]
                     baselines[star] = [baselines[seq_id]]
                     wavelengths[star] = wavelengths[seq_id]
+                    seq_order[star] = seq_order[seq_id]
                 
                 # Append to old dict entry, don't stack wl dimension
                 else:
@@ -1055,6 +1063,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                     e_vis2[star].append(e_vis2[seq_id])
                     flags[star].append(flags[seq_id])
                     baselines[star].append(baselines[seq_id])
+                    seq_order[star].append(seq_order[seq_id])
                     #wavelengths[star] = np.hstack((pairs[star], pairs[seq_id]))
                     
                 # Regardless of what happened, pop old keys
@@ -1065,6 +1074,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 flags.pop(seq_id, None)
                 baselines.pop(seq_id, None)
                 wavelengths.pop(seq_id, None)
+                seq_order.pop(seq_id, None)
             
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting limb-darkened diameters for bootstrap %i" % (bs_i+1))
@@ -1089,6 +1099,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
                 bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
                 bs_results[star]["C_SCALE"][bs_i] = np.vstack(ldd_fits[star][2])
+                bs_results[star]["SEQ_ORDER"][bs_i] = np.vstack(seq_order[star])
                 bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
             
             else:
@@ -1100,6 +1111,7 @@ def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
                 bs_results[star]["WAVELENGTH"][bs_i] = wavelengths[star]
                 bs_results[star]["LDD_FIT"][bs_i] = ldd_fits[star][0]
                 bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
+                bs_results[star]["SEQ_ORDER"][bs_i] = np.vstack(seq_order[star])
                 bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
 
     
@@ -1160,8 +1172,9 @@ def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
     """    
     # Initialise
     cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
-            "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "C_SCALE", "U_LAMBDA", 
-            "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA", "UDD_FIT", "e_UDD_FIT"]
+            "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "C_SCALE", "e_C_SCALE", 
+            "SEQ_ORDER", "U_LAMBDA", "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA", 
+            "UDD_FIT", "e_UDD_FIT"]
             
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
@@ -1224,7 +1237,7 @@ def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
      
             results.iloc[star_i]["e_C_SCALE"] = \
                 np.nanstd(np.hstack(bs_results[star]["C_SCALE"]), axis=1) 
-                  
+            
         # Split seq case
         else:
             results.iloc[star_i]["C_SCALE"] = \
@@ -1232,6 +1245,11 @@ def summarise_results(bs_results, tgt_info, pred_ldd_col="LDD_pred",
      
             results.iloc[star_i]["e_C_SCALE"] = \
                 np.nanstd(np.vstack(bs_results[star]["C_SCALE"]), axis=0)   
+        
+        # If we're bootstrapping, the order of the sequences shouldn't change
+        # from iteration to iteration, so just take the first value
+        results.iloc[star_i]["SEQ_ORDER"] = \
+            bs_results[star].iloc[0]["SEQ_ORDER"]
         
         # Print some simple diagnostics                
         sci_percent_fit = (results.iloc[star_i]["e_LDD_FIT"]

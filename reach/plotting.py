@@ -1,6 +1,7 @@
 """File to contain various plotting functions of reach.
 """
 from __future__ import division, print_function
+import glob
 import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
@@ -1025,6 +1026,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     plt.tight_layout(pad=1.0)
     plt.savefig("paper/lam_sgr_sidelobe.pdf")  
 
+
+
  
 
 def plot_lit_diam_comp(tgt_info):
@@ -1539,17 +1542,19 @@ def plot_fbol_comp(tgt_info):
     plt.savefig("paper/fbol_comp.pdf")
     
 
-def plot_hr_diagram(tgt_info):
+def plot_hr_diagram(tgt_info, plot_isochrones_basti=False, 
+                    plot_isochrones_padova=False, feh=0.058):
     """Plots the Vt, (Bt-Vt) colour magnitude diagram for all science targets.
     """
+    plt.close("all")
     mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
 
-    abs_Vtmag = tgt_info[mask]["VTmag"] - 5*np.log10(tgt_info[mask]["Dist"]/10) 
-    bt_vt = tgt_info[mask]["BTmag"] - tgt_info[mask]["VTmag"]
+    abs_Vmag = tgt_info[mask]["Vmag"] - 5*np.log10(tgt_info[mask]["Dist"]/10) 
+    b_v = tgt_info[mask]["Bmag"] - tgt_info[mask]["Vmag"]
     
     plt.close("all")
-    plt.scatter(bt_vt, abs_Vtmag, c=tgt_info[mask]["FeH_rel"], marker="o")
+    plt.scatter(b_v, abs_Vmag, c=tgt_info[mask]["FeH_rel"], marker="o")
     
     xx = 0.02
     
@@ -1557,20 +1562,73 @@ def plot_hr_diagram(tgt_info):
     star_ids = rutils.format_id(tgt_info[mask]["Primary"].values)
     for star_i, star in enumerate(star_ids):
         if tgt_info[mask]["Primary"][star_i] in ("epsInd", "chiEri"):
-            yy = 0.5
+            yy = 0.3
         else:
-            yy = 0.25
+            yy = 0.15
         
-        plt.annotate(star, xy=(bt_vt[star_i], abs_Vtmag[star_i]), 
-                    xytext=(bt_vt[star_i]-xx, abs_Vtmag[star_i]-yy), 
+        plt.annotate(star, xy=(b_v[star_i], abs_Vmag[star_i]), 
+                    xytext=(b_v[star_i]-xx, abs_Vmag[star_i]-yy), 
                     fontsize="xx-small", horizontalalignment="center")
+    
+    # Plot Padova isochrones. Note that these are for constant *age*
+    if plot_isochrones_padova:
+        isochrones_file = "data/padova_isochrone_age.dat"
+        names = ["Zini","Age","Mini","Mass","logL","logTe","logg","label",
+                 "McoreTP","C_O","period0","period1","pmode","Mloss","tau1m",
+                 "X","Y","Xc","Xn","Xo","Cexcess","Z","mbolmag","Gmag",
+                 "G_BPbrmag", "G_BPftmag","G_RPmag","B_Tmag", "V_Tmag","Jmag",
+                 "Hmag","Ksmag"]        
+        
+        isochrones = pd.read_csv(isochrones_file, delim_whitespace=True, 
+                                 names=names, comment="#", dtype="float")
+                                 
+        ages = list(set(isochrones["Age"]))
+        ages.sort()
+        
+        # Calculate colour
+        isochrones["BtVt"] = isochrones["B_Tmag"] - isochrones["V_Tmag"]
+        #isochrones["B-V"] = isochrones["B_Tmag"] - isochrones["V_Tmag"]
+        
+        for age in ages[20:]:
+            plt.plot(isochrones.loc[isochrones["Age"]==age]["BtVt"][:-3], 
+                     isochrones.loc[isochrones["Age"]==age]["V_Tmag"][:-3], "--", 
+                     label="%0.3f Gyr" % (age/10**9), alpha=0.5, zorder=2)
+    
+    # Plot Basti evolutionary tracks for constant mass
+    if plot_isochrones_basti:
+        names = ['logage', 'M/Mo', 'logL/Lo', 'logTe', 'Mv', 'U-B', 'B-V',
+                 'V-I', 'V-R', 'V-J', 'V-K', 'V-L', 'H-K']
+                 
+        iso_files = glob.glob("data/basti/*%s*" % str(feh))
+        iso_files.sort()
+        masses = [float(file.split("/")[-1].split("m")[0]) for file in iso_files]
+        
+        mass_data = []
+        
+        for mass_i, iso_file in enumerate(iso_files):
+            track = pd.read_csv(iso_file, delim_whitespace=True, 
+                                names=names, comment="#", dtype="float")
+                                
+            plt.plot(track["B-V"], track["Mv"], "--", color="black",
+                     label=r"M$_\odot$=%0.2f" % masses[mass_i], alpha=0.5, 
+                     zorder=2, linewidth=0.25)
+            
+            xx = 0.01
+            yy = 0.1
+            
+            plt.text(track["B-V"][0]+xx, track["Mv"][0]+yy,
+                     r"$%0.2f\,$M$_\odot$" % masses[mass_i], ha="left",
+                     fontsize="xx-small", color="grey")
+        
+    #plt.legend(loc="best")
     
     cb = plt.colorbar()
     cb.set_label(r"[Fe/H]")
     
+    plt.xlim([0, 1.5])
     plt.ylim([7.5, 0])
-    plt.xlabel(r"B$_{\rm T}$-V$_{\rm T}$")
-    plt.ylabel(r"V$_{\rm T, abs}$")
+    plt.xlabel(r"B-V")#(r"B$_{\rm T}$-V$_{\rm T}$")
+    plt.ylabel(r"V$_{\rm abs}$")#(r"V$_{\rm T, abs}$")
     plt.tight_layout()
     plt.savefig("paper/hr_diagram.pdf")
 

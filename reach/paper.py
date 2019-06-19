@@ -169,54 +169,6 @@ def make_table_seq_results(results):
                            #("HD", ""),
                            ("Period", ""),
                            ("Sequence", ""),
-                           (r"$\theta_{\rm LD}$", "(mas)"),
-                           ("C", "")])
-                           
-    header = []
-    table_rows = []
-    footer = []
-    
-    # Construct the header of the table
-    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
-    header.append("\hline")
-    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
-    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
-    header.append("\hline")
-    
-    # Populate the table for every science target
-    for star, row in results.iterrows():
-        table_row = ""
-        
-        id = row["STAR"]
-        period = row["PERIOD"]
-        sequence = row["SEQUENCE"]
-        
-        # Step through column by column
-        table_row += "%s & " % id
-        #table_row += "%s & " % row["HD"].replace("HD", "")
-        table_row += "%s & " % period
-        table_row += "%s & " % sequence
-        table_row += r"%0.3f $\pm$ %0.3f & " % (row["LDD_FIT"], row["e_LDD_FIT"])
-        table_row += "%0.3f " % row["C_SCALE"]
-        
-        table_rows.append(table_row + r"\\")
-    
-    
-    # Finish the table
-    footer.append("\hline")
-    footer.append("\end{tabular}")
-    
-    # Write the tables
-    table_1 = header + table_rows + footer
-    
-    np.savetxt("paper/table_sequence_results.tex", table_1, fmt="%s")
-    
-    
-def make_temp_table_seq_results(results):
-    """Make the table to display the C intercept parameter associated with
-    each sequence.
-    """
-    columns = OrderedDict([("Star", ""),
                            ("C", "")])
                            
     header = []
@@ -232,18 +184,22 @@ def make_temp_table_seq_results(results):
     
     # Populate the table for every science target
     for star, row in results.iterrows():
-        table_row = ""
+        # Give each row its own sequence
+        for seq_i in np.arange(len(row["SEQ_ORDER"])):
+            id = row["STAR"]
+            period = row["SEQ_ORDER"][seq_i][2]
+            sequence = row["SEQ_ORDER"][seq_i][1]
+            
+            table_row = ""
+            
+            # Step through column by column
+            table_row += "%s & " % rutils.format_id(str(id))
+            table_row += "%s & " % period
+            table_row += "%s & " % sequence
+            table_row += "%0.3f $\pm$ %0.3f" % (row["C_SCALE"][seq_i],
+                                              row["e_C_SCALE"][seq_i])
         
-        id = row["STAR"]
-        period = row["PERIOD"]
-        sequence = row["SEQUENCE"]
-        
-        # Step through column by column
-        table_row += "%s & " % rutils.format_id(str(id))
-        cs = ["%0.3f" % cc for cc in row["C_SCALE"]]
-        table_row += "%0.3f, "*len(cs) % tuple(row["C_SCALE"])
-        
-        table_rows.append(table_row[:-2] + r"\\")
+            table_rows.append(table_row + r"\\")
     
     
     # Finish the table
@@ -487,14 +443,17 @@ def make_table_targets(tgt_info):
         refs = [star["teff_bib_ref"], star["logg_bib_ref"], 
                 star["feh_bib_ref"], star["vsini_bib_ref"]]
          
-        for ref in refs:        
-            if ref not in references and ref != "":
-                references.append(ref)
-                ref_i += 1
-            
+        for ref in refs:   
             if ref == "":
-                table_row += "-,"
-            else:
+                table_row += "-,"   
+                  
+            elif ref not in references:
+                references.append(ref)
+                ref_i = np.argwhere(np.array(references)==ref)[0][0] + 1
+                table_row += "%s," % ref_i
+            
+            elif ref in references:
+                ref_i = np.argwhere(np.array(references)==ref)[0][0] + 1
                 table_row += "%s," % ref_i
         
         # Remove the final comma and append (Replace any nans with '-')

@@ -18,7 +18,7 @@ import pickle
 # Setup & Loading
 # -----------------------------------------------------------------------------
 combined_fit = True
-load_saved_results = False
+load_saved_results = True
 assign_default_uncertainties = True
 force_claret_params = False
 n_bootstraps = 1000
@@ -36,9 +36,6 @@ complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Load in distributions
 sampled_sci_params = rutils.load_sampled_params(results_folder, force_claret_params)
-
-# Currently broken, don't consider
-#complete_sequences.pop((102, 'delEri', 'bright'))
 
 # Currently no proxima cen or gam pav data, so pop
 sequences.pop((102, 'gamPav', 'faint'))
@@ -105,9 +102,9 @@ rpaper.make_table_targets(tgt_info)
 rpaper.make_table_calibrators(tgt_info, sequences)
 rpaper.make_table_observation_log(tgt_info, complete_sequences, sequences)
 rpaper.make_table_fbol(tgt_info)
-#rpaper.make_table_seq_results(results)
-rpaper.make_temp_table_seq_results(results)
+rpaper.make_table_seq_results(results)
 rpaper.make_table_final_results(tgt_info)
+rpaper.make_table_limb_darkening(tgt_info)
 
 # Generate plots
 print("Generating plots...")
