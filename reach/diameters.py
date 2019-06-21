@@ -503,7 +503,8 @@ def fit_for_ldd(vis2, e_vis2, baselines, wavelengths, sampled_params, ldd_pred,
 
 
 def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
-                sampled_params, bs_i, method="odr", do_uniform_disc_fit=False):
+                sampled_params, bs_i, method="odr", e_wl_frac=0.02,
+                do_uniform_disc_fit=False):
     """Fits limb-darkened diameters to all science targets using all available
     vis^2, e_vis^2, and projected baseline data.
     
@@ -948,10 +949,10 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
 # -----------------------------------------------------------------------------
 # Aggregating results from bootstrapping runs
 # -----------------------------------------------------------------------------    
-def collate_bootstrapping(tgt_info, n_bootstraps, results_path, sampled_params,
-                          pred_ldd_col="LDD_pred", 
-                          prune_errant_baselines=True, 
-                          separate_sequences=True, combined_fit=True):
+def fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, results_path, 
+                               sampled_params, pred_ldd_col="LDD_pred", 
+                               e_wl_frac=0.02, prune_errant_baselines=True, 
+                                separate_sequences=True, combined_fit=True):
     """Collates all bootstrapped oifits files within results_path into
     sumarising pandas dataframes. 
     

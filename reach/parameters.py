@@ -51,7 +51,8 @@ def sample_stellar_params_pd(tgt_info, n_bootstraps,
     return n_logg, n_teff, n_feh 
 
 
-def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
+def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False, 
+                      use_literature_teffs=True):
     """Sample stellar parameters (teff, logg, feh) and derived parameters 
     (u_lambda, s_lambda) N times and save in a single datastructure. The result
     is a 3D pandas dataframe, with N frames of:
@@ -77,21 +78,35 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False):
     print("Sampling Teff, logg, [Fe/H], u_lambda, and s_lambda for %i stars..." 
           % len(ids)) 
     
+    if use_literature_teffs:
+        print("Using **literature** values for Teff")
+    else:
+        print("Using **interferometric** values for Teff")
+    
     for id_i, id in enumerate(ids):
         # Initialise
         data = np.zeros( (n_bootstraps , len(cols)) )
         
         # Sample stellar parameters
         n_logg = np.random.normal(tgt_info.loc[id, "logg"],
-                                          tgt_info.loc[id, "e_logg"],
-                                          n_bootstraps)
-        n_teff = np.random.normal(tgt_info.loc[id, "Teff"],
-                                          tgt_info.loc[id, "e_teff"],
-                                          n_bootstraps)
+                                  tgt_info.loc[id, "e_logg"], n_bootstraps)
+        
+        # First time we sample, want to use the literature values of Teff
+        if use_literature_teffs:
+            n_teff = np.random.normal(tgt_info.loc[id, "Teff"],
+                                      tgt_info.loc[id, "e_teff"], n_bootstraps)
+        
+        # After we have fit for LDD and derived an interferometric Teff using
+        # fbol we can iterate the fitting procedure by using these new 
+        # (hopefully) more realistic values
+        else:
+            n_teff = np.random.normal(tgt_info.loc[id, "teff_final"],
+                                      tgt_info.loc[id, "e_teff_final"], 
+                                      n_bootstraps)
+        
         n_feh = np.random.normal(tgt_info.loc[id, "FeH_rel"],
-                                          tgt_info.loc[id, "e_FeH_rel"],
-                                          n_bootstraps)
-                                          
+                                 tgt_info.loc[id, "e_FeH_rel"], n_bootstraps)
+                                  
         # Sample equivalent linear coefficients + scaling parameter
         n_u_lambda = rld.sample_lld_coeff(n_logg, n_teff, n_feh, 
                                             use_claret_params)
@@ -203,7 +218,7 @@ def sample_distance(sampled_sci_params, tgt_info):
 
 
 def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False, 
-               band_mask=[1, 0, 0, 0, 0]):
+               band_mask=[1, 0, 0, 0, 0], use_literature_teffs=True):
     """Sample each of teff, logg, [Fe/H], u_lambda, s_lambda, Hp, VT, BT, BP,
     RP, BC_Hp, BC_VT, BC_BT, BC_BP, BC_RP, fbol_Hp, fbol_VT, fbol_BT, fbol_BP, 
     fbol_RP, fbol_final, L_star, r_star, and distance using literature values
@@ -212,7 +227,8 @@ def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False,
     # Sample stellar parameters and limb darkening coefficients (and initialise
     # the 3D pandas dataframe
     sampled_sci_params = sample_parameters(tgt_info, n_bootstraps, 
-                                           use_claret_params)
+                                    use_claret_params, use_literature_teffs)
+                                    
     # Then sample distance, magnitudes and bolometric corrections, and fbol
     sample_distance(sampled_sci_params, tgt_info)
     
@@ -229,7 +245,7 @@ def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False,
 # -----------------------------------------------------------------------------
 # Combining distributions
 # -----------------------------------------------------------------------------   
-def combine_seq_ldd(tgt_info, results):
+def update_target_info_with_ldd_fits(tgt_info, results):
     """Combine independent measures of LDD from multiple different sequences to
     a single measurement of LDD +/- e_LDD
     """
@@ -474,7 +490,30 @@ def calc_final_params(tgt_info, sampled_sci_params):
         
         tgt_info.loc[star, value_cols] = values
         tgt_info.loc[star, error_cols] = errors
-        
+
+
+def calc_sample_and_final_params(tgt_info, sampled_sci_params, bs_results,
+                                 results):
+    """
+    """
+    # Combine sampled u_lambda and s_lambda
+    combine_u_s_lambda(tgt_info, sampled_sci_params)
+
+    # Add final diameter fits to tgt_info
+    update_target_info_with_ldd_fits(tgt_info, results)
+
+    # Merge (i.e. get LDD fits per iteration info in sampled_sci_params)
+    merge_sampled_params_and_results(sampled_sci_params, bs_results, 
+                                            tgt_info)
+    # Calculate the physical radii for each iteration
+    calc_all_r_star(sampled_sci_params)
+
+    # Compute temperatures for each iteration
+    calc_all_teff(sampled_sci_params)
+
+    # Now get final parameters from the distributions in sampled_sci_params
+    calc_final_params(tgt_info, sampled_sci_params)
+
 # -----------------------------------------------------------------------------
 # Empirical relations
 # -----------------------------------------------------------------------------   

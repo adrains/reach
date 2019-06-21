@@ -415,22 +415,37 @@ def load_results(folder):
     return bs_results, results    
     
     
-def save_sampled_params(sampled_params, folder):
+def save_sampled_params(sampled_params, folder, final_teff_sample=False):
     """Save the sampled stellar parameters.
     """
-    pkl_params = open("results/%s/sampled_params.pkl" % folder, "wb")
+    # Using literature teffs
+    if not final_teff_sample:
+        pkl_params = open("results/%s/sampled_params.pkl" % folder, "wb")
+    
+    # Using interferometric teffs
+    else:
+        pkl_params = open("results/%s/sampled_params_final.pkl" % folder, "wb")
+        
     pickle.dump(sampled_params, pkl_params)
     pkl_params.close()
     
     
-def load_sampled_params(folder, force_claret_params=False):
+def load_sampled_params(folder, force_claret_params=False, 
+                        final_teff_sample=False):
     """Load the sampled stellar parameters.
     """
-    if not force_claret_params:
+    # Force use of claret params
+    if not force_claret_params and not final_teff_sample:
         pkl_params = open("results/%s/sampled_params.pkl" % folder, "r")
-    else:
+    
+    # Standard load in using literature values
+    elif force_claret_params and not final_teff_sample:
         pkl_params = open("results/%s/sampled_params_claret.pkl" % folder, "r")
-        
+    
+    # Loading in sample using interferometric teffs
+    elif final_teff_sample:
+        pkl_params = open("results/%s/sampled_params_final.pkl" % folder, "r")
+    
     sampled_params = pickle.load(pkl_params)
     pkl_params.close()    
     

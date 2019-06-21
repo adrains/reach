@@ -983,7 +983,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     udd_fit = sci_results["UDD_FIT"]
     x = np.arange(1*10**6, 25*10**7, 10000)
     y_fit = rdiam.calc_vis2_ls(x, udd_fit, 1.0, 0)
-    axes.plot(x, y_fit, "--", linewidth=0.25, color="black") 
+    axes.plot(x, y_fit, "--", linewidth=0.25, color="black", 
+              label=r"$\theta_{\rm UD}$") 
     
     axes.legend(loc="best", fontsize="xx-small")
     
