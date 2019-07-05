@@ -18,20 +18,22 @@ import pickle
 # Setup & Loading
 # -----------------------------------------------------------------------------
 combined_fit = True                     # Fit for LDD for multiple seq at once
-load_saved_results = False               # Load or do fitting fresh
+load_saved_results = False              # Load or do fitting fresh
 assign_default_uncertainties = True     # Give default errors to stars without
 force_claret_params = False             # Force use of Claret+11 limb d. params
-n_bootstraps = 1000
-e_wl_frac = 0.02                        # Fractional error on wl scale
-#results_folder = "19-03-26_i1000"
-#results_folder = "19-05-27_i2000"   # 1st with wavelength cal, only 480
-#results_folder = "19-06-06_i2000"  # Attempted in parallel, but incomplete
-results_folder = "19-06-10_i1000"  # Wavelength cal, serial
-results_path = "results/%s/" % results_folder
-e_wl_cal_percent = 1
+n_bootstraps = 3000
+e_wl_frac = 0.0035                      # Fractional error on wl scale
 
-bc_path =  "/Users/adamrains/code/bolometric-corrections"
-band_mask = [1, 0, 0, 0, 0]
+results_folder = "19-06-27_i2000"       # Parallel!
+results_folder = "19-07-04_i100"        # Test to check bad calibrator removal
+results_folder = "19-07-05_i3000"       # Long run with all bad cals removed
+results_path = "results/%s/" % results_folder
+
+# Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code
+# and filters to use when calculating fbol_final from [Hp, Bt, Vt, Bp, Rp]
+#bc_path =  "/Users/adamrains/code/bolometric-corrections"
+bc_path =  "/home/arains/code/bolometric-corrections"
+band_mask = [1, 1, 1, 0, 0]
 
 # Load in files
 print("Loading in files...")
@@ -114,6 +116,10 @@ else:
     print("Determining **final** fundamental parameters...")
     rparam.calc_sample_and_final_params(tgt_info, sampled_sci_params, 
                                         bs_results, results)
+
+# Summarise C param fits
+rutils.summarise_cs(results)
+rutils.get_mean_delta_h(tgt_info, complete_sequences, sequences)
                                         
 # -----------------------------------------------------------------------------
 # Table generation and plotting

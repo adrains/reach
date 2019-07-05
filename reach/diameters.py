@@ -552,7 +552,7 @@ def fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, pred_ldd_col,
                                  baselines[sci], wavelengths[sci], 
                                  sampled_params.loc[id].iloc[bs_i], 
                                  sci_data[pred_ldd_col].values[0], 
-                                 method=method, 
+                                 method=method, e_wl_frac=e_wl_frac,
                                  do_uniform_disc_fit=do_uniform_disc_fit)
         
         # Extract parameters from fit. Parameters are ordered as follows, where
@@ -946,6 +946,8 @@ def sample_n_pred_ldd(tgt_info, n_bootstraps, pred_ldd_col="LDD_pred",
                                               n_bootstraps)                                           
     return n_pred_ldd, e_pred_ldd
     
+    
+    
 # -----------------------------------------------------------------------------
 # Aggregating results from bootstrapping runs
 # -----------------------------------------------------------------------------    
@@ -1080,13 +1082,14 @@ def fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, results_path,
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting limb-darkened diameters for bootstrap %i" % (bs_i+1))
         ldd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
-                               pred_ldd_col, sampled_params, bs_i)  
+                               pred_ldd_col, sampled_params, bs_i,
+                               e_wl_frac=e_wl_frac)  
        
         # Fit LDD, ldd_fits = [ldd_opt, e_ldd_opt, c_scale, e_c_scale]
         print("\nFitting uniform-disc diameters for bootstrap %i" % (bs_i+1))
         udd_fits = fit_all_ldd(vis2, e_vis2, baselines, wavelengths, tgt_info, 
                                pred_ldd_col, sampled_params, bs_i,
-                               do_uniform_disc_fit=True)  
+                               e_wl_frac=e_wl_frac, do_uniform_disc_fit=True)  
         
         # Fitting done, no need to have the vis2 results separate anymore                 
         # Populate

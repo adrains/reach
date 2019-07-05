@@ -1543,6 +1543,109 @@ def plot_fbol_comp(tgt_info):
     plt.savefig("paper/fbol_comp.pdf")
     
 
+def plot_jsdc_ldd_comp(tgt_info):
+    """
+    """
+    tgt_info[["Primary","LDD_pred","e_LDD_pred","JSDC_LDD","e_JSDC_LDD"]]
+    
+    plt.close("all")
+    fig, ax = plt.subplots()
+            
+    # Setup lower panel for residuals
+    divider = make_axes_locatable(ax)
+    res_ax = divider.append_axes("bottom", size="30%", pad=0.1)
+    ax.figure.add_axes(res_ax)
+    
+    # Initialise arrays
+    pred_ldd = []
+    e_pred_ldd = []
+    lsdc_ldd = []
+    e_lsdc_ldd = []
+    
+    # Change the annotation rotation to prevent labels overlapping
+    xy_txt = []
+    
+    # For every science target, plot using the given relation
+    for star, star_data in tgt_info[tgt_info["Quality"] != "BAD"].iterrows():
+        
+        if star_data["Primary"] in ["gamPav", "HD187289"]:
+            continue
+        
+        # Get the two LDDs to compare
+        pred_ldd.append(star_data["LDD_pred"])
+        e_pred_ldd.append(star_data["e_LDD_pred"])
+        lsdc_ldd.append(star_data["JSDC_LDD"])
+        e_lsdc_ldd.append(star_data["e_JSDC_LDD"])
+        
+        # Compare positions
+        # TODO: a better solution would be sorting the stars by LDD, then
+        # alternate the sign on xx and yy to plot above or below...or just 
+        # hardcode it
+        xy_abs = (pred_ldd[-1]**2 + lsdc_ldd[-1]**2)**0.5
+        xy = np.abs(np.array(xy_txt) - xy_abs)
+        sep = 0.1
+        
+        if len(xy_txt) > 0 and (xy < sep).any():
+            xx = 0.025
+            yy = 0.4
+        else:
+            xx = 0.025
+            yy = 0.3 
+        
+        # Plot the name of the star
+        ax.annotate(star_data["Primary"], xy=(pred_ldd[-1], 
+                    lsdc_ldd[-1]), 
+                    xytext=(pred_ldd[-1]+xx, lsdc_ldd[-1]-yy), 
+                    #arrowprops=dict(facecolor="black", width=0.1, 
+                    #                headwidth=0.1),
+                    fontsize="xx-small")
+                    
+        xy_txt.append(xy_abs)
+                        
+    # Plot the points + errors
+    ax.errorbar(pred_ldd, lsdc_ldd, xerr=e_pred_ldd, 
+                yerr=e_lsdc_ldd, fmt=".",# label=colour_rel, 
+                elinewidth=0.5, capsize=0.8, capthick=0.5, zorder=1)
+        
+    # Plot residuals
+    ax.set_xticklabels([])
+    residuals = np.array(lsdc_ldd) / np.array(pred_ldd)
+    err_res = np.array(e_lsdc_ldd) / np.array(pred_ldd)
+    
+    #residuals = np.array(lsdc_ldd) - np.array(pred_ldd)
+        
+    res_ax.errorbar(pred_ldd, residuals, xerr=e_pred_ldd, 
+                    yerr=err_res, fmt=".", elinewidth=0.5, 
+                    capsize=0.8, capthick=0.5, zorder=1)
+    
+    scatter = ax.scatter(pred_ldd, lsdc_ldd, marker="o", 
+                         zorder=2)
+    
+    # Plot the two lines
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot(np.arange(0, 10000), np.arange(0, 10000), "--", color="black")
+    res_ax.hlines(1, xmin=0, xmax=10000, linestyles="dashed")
+                      
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    res_ax.set_xlim(xlim)
+    
+    # Set residual y ticks sensibly
+    #loc = plticker.MultipleLocator(base=0.1)
+    #res_ax.yaxis.set_major_locator(loc)
+    #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
+    
+    # Setup the rest of the plot
+    ax.set_ylabel(r"$\theta_{\rm JSDC}$ (mas)")  
+    res_ax.set_xlabel(r"$\theta_{\rm pred}$ (mas)")  
+    res_ax.set_ylabel(r"$\theta_{\rm pred} / \theta_{\rm JSDC}$ (mas)")  
+    #ax.legend(loc="best")
+    
+    plt.tight_layout()
+    plt.savefig("plots/ldd_comp_jsdc.pdf") 
+    
+
 def plot_hr_diagram(tgt_info, plot_isochrones_basti=False, 
                     plot_isochrones_padova=False, feh=0.058):
     """Plots the Vt, (Bt-Vt) colour magnitude diagram for all science targets.

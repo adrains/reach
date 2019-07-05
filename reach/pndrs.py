@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import reach.diameters as rdiam
 import reach.plotting as rplt
+import reach.utils as rutils
 from shutil import copyfile, rmtree
 from astropy.io import fits
 from astropy.time import Time
@@ -421,7 +422,10 @@ def calculate_target_durations(complete_sequences):
                 durations.append([tgt, Time(time - delta).mjd, 0])
             
         # All done
-        sequence_durations[night] = durations
+        if night in sequence_durations.keys():
+            sequence_durations[night] += durations
+        else:
+            sequence_durations[night] = durations
         
     return sequence_durations
 
@@ -455,18 +459,7 @@ def select_only_bad_target_durations(sequence_durations, tgt_info):
         for star in sequence_durations[night]:
             # Get the star info, making sure to check primary, bayer, and HD
             # IDs given the non-unique IDs used
-            prim_id = tgt_info[tgt_info["Primary"]==star[0]].index
-        
-            if len(prim_id)==0:
-                prim_id = tgt_info[tgt_info["Bayer_ID"]==star[0]].index
-            
-            if len(prim_id)==0:
-                prim_id = tgt_info[tgt_info["HD_ID"]==star[0]].index
-        
-            try:
-                assert len(prim_id) > 0
-            except:
-                print("...failed on %s, %s" % (night, star))
+            prim_id = rutils.get_unique_key(tgt_info, star[0])
             
             # Check if it is a bad calibrator, and if so add to return dict
             if tgt_info.loc[prim_id[0]]["Quality"] == "BAD":
@@ -528,7 +521,8 @@ def calibrate_all_observations(reduced_data_folders, bootstrap_i,
         print("\nCalibrating %s, night %i/%i..." 
               % (night, night_i+1, len(reduced_data_folders)), end="")
         sys.stdout.flush()
-        os.system("(cd %s; pndrsCalibrate >> cal_log.txt)" % ob_folder)
+        os.system("(cd %s; pndrsCalibrate >> cal_log_%0.4i.txt)" 
+                  % (ob_folder, bootstrap_i))
         
         # Record and the end time and print duration
         times.append(datetime.datetime.now()) 
@@ -579,7 +573,7 @@ def move_sci_oifits(obs_path, results_path, bootstrap_i):
         copyfile(oifits, results_path + fname)
         files_copied += 1
     
-    #print("%i files copied" % files_copied)
+    print("%i files copied" % files_copied)
     
 
 def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
@@ -617,18 +611,23 @@ def initialise_interferograms(complete_sequences, base_path, n_ifg=5,
     # separately, get the nights from complete_sequences[seq][0]
     total_old_files = 0
     
-    for seq in complete_sequences.keys():
-        night = complete_sequences[seq][0]
+    nights = [complete_sequences[seq][0] for seq in complete_sequences.keys()]
+    nights = list(set(nights))
+    nights.sort()
+    
+    for night in nights:
         night_folder = base_path % night
         bootstrapping_folder = night_folder + "%s/" % night
         
         old_files = glob.glob(bootstrapping_folder + "PIONI*")
         
+        print("Deleting %i files from: %s" % (len(old_files), 
+                                              bootstrapping_folder))
         for old_file in old_files:
             os.remove(old_file)
             total_old_files += 1
         
-    print("Removed %i old files \n" % len(total_old_files))
+    print("\nRemoved %i old files \n" % total_old_files)
 
     # For every sequence, perform bootstrapping at the interferogram level
     for seq in complete_sequences.keys():

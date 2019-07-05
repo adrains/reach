@@ -34,10 +34,10 @@ do_random_ifg_sampling = True       # Sample interferograms with repeats
 do_gaussian_diam_sampling = True    # Sample diameters from normal distribution
 assign_default_uncertainties = True # Assign conservative placeholder errors
 use_claret_params = False           # Force Claret & Bloemen 2011 u_lambda
-n_bootstraps = 1000                 # Number of bootstrapping iterations
+n_bootstraps = 3000                 # Number of bootstrapping iterations
 pred_ldd_col = "LDD_pred"           # tgt_info column with LDD colour relation
 e_pred_ldd_col = "e_LDD_pred"       # tgt_info column with LDD relation errors
-n_calib_runs = 1                    # N calibration runs to split nights among
+n_calib_runs = 6                    # N calibration runs to split nights among
 calib_run_i = 0                     # ith calibration run to perform, 0 indexed
 
 # Folder mask where the reduced files are stored
@@ -54,7 +54,7 @@ if not os.path.exists(results_path):
 # Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code
 # and filters to use when calculating fbol_final from [Hp, Bt, Vt, Bp, Rp]
 bc_path =  "/home/arains/code/bolometric-corrections"
-band_mask = [1, 0, 0, 0, 0]
+band_mask = [1, 1, 1, 0, 0]
 
 # Set these if investigating the quality of calibrators
 calibrate_calibrators = False
@@ -130,6 +130,21 @@ if calibrate_calibrators:
     print("Finished calibrating calibrators")
     sys_exit(0)
 
+
+# -----------------------------------------------------------------------------
+# Write nightly pndrs scripts as YYYY-MM-DD_pndrsScript.i
+# -----------------------------------------------------------------------------
+# Do the following:
+#  i)  Exclude bad calibrators
+#  ii) Split nights between sequences
+# **ONLY** for the first calib run (i.e. only do this once, but for all seqs)
+if calib_run_i == 0:
+    if not run_local and not already_calibrated:
+        rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info)
+    elif not already_calibrated:
+        rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info, 
+                                         run_local=run_local)
+
 # -----------------------------------------------------------------------------
 # Split into multiple bootstrapping runs if required
 # -----------------------------------------------------------------------------
@@ -164,18 +179,6 @@ if n_calib_runs != 1:
     complete_sequences = {seq:complete_sequences[seq] for seq in valid_seqs}
     
     sequences = {seq:sequences[seq] for seq in complete_sequences}
-
-# -----------------------------------------------------------------------------
-# Write nightly pndrs scripts as YYYY-MM-DD_pndrsScript.i
-# -----------------------------------------------------------------------------
-# Do the following:
-#  i)  Exclude bad calibrators
-#  ii) Split nights between sequences
-if not run_local and not already_calibrated:
-    rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info)
-elif not already_calibrated:
-    rpndrs.save_nightly_pndrs_script(complete_sequences, tgt_info, 
-                                     run_local=run_local)
 
 # -----------------------------------------------------------------------------
 # Run bootstrapping

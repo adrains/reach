@@ -4,6 +4,7 @@ from __future__ import division, print_function
 
 import os
 import csv
+import glob
 import pickle
 import numpy as np
 import pandas as pd
@@ -218,6 +219,9 @@ def get_unique_key(tgt_info, id_list):
     """
     unique_ids = []
     
+    if isinstance(id_list, str):
+        id_list = [id_list]
+    
     # Grab the primary IDs
     # Note that several stars are observed multiple times under different
     # primary IDs, so we need to check HD and Bayer IDs as well
@@ -263,6 +267,7 @@ def compute_dist(tgt_info):
                         np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
                                / tgt_info["Plx"]))
     
+    
 def initialise_tgt_info(assign_default_uncertainties=True):
     """
     """
@@ -273,9 +278,9 @@ def initialise_tgt_info(assign_default_uncertainties=True):
     # Calculate distances and distance errors
     compute_dist(tgt_info)
 
-    # -----------------------------------------------------------------------------
-    # (2) Convert Tycho magnitudes to Johnson-Cousins magnitudes
-    # -----------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Convert Tycho magnitudes to Johnson-Cousins magnitudes
+    # -------------------------------------------------------------------------
     # Convert Tycho V to Johnson system using Bessell 2000
 
     # For simplification during testing, remove any stars that fall outside the 
@@ -293,70 +298,55 @@ def initialise_tgt_info(assign_default_uncertainties=True):
     tgt_info["Vmag"] = Vmag   
     tgt_info["e_Vmag"] = tgt_info["e_VTmag"]
 
-    # -----------------------------------------------------------------------------
-    # (3) Correct photometry for interstellar extinction
-    # -----------------------------------------------------------------------------
-    # These are the filter effective wavelengths *not* considering the effect of 
-    # spectral type (Angstroms)
-    filter_eff_lambda = {"B":4450, "V":5510, "J":12200, "H":16300, "K":21900, 
-                         "W1":34000, "W2":46000, "W3":120000, "W4":220000}
-                     
-    filter_eff_lambda = np.array([4450., 5510., 12200., 16300., 21900., 34000., 
-                                  46000., 120000., 220000.])
+    # -------------------------------------------------------------------------
+    # Correct photometry for interstellar extinction
+    # -------------------------------------------------------------------------
+    # These are the filter effective wavelengths *not* considering the effect  
+    # of spectral type (Angstroms) for [B, V, W3, W4]
+    filter_eff_lambda = np.array([4450., 5510., 120000., 220000.])
 
     # Import/create the SpT vs B-V grid
     grid = rphot.create_spt_uv_grid()
                      
     # Calculate selective extinction (i.e. (B-V) colour excess)
     tgt_info["eb_v"] = rphot.calculate_selective_extinction(tgt_info["Bmag"], 
-                                                            tgt_info["Vmag"], 
-                                                            tgt_info["SpT_simple"],
-                                                            grid)
+                                                        tgt_info["Vmag"], 
+                                                        tgt_info["SpT_simple"],
+                                                        grid)
 
     # Calculate V band extinction
     tgt_info["A_V"] = rphot.calculate_v_band_extinction(tgt_info["eb_v"])
 
-    # Calculate the filter effective wavelength *considering* spectral type
-    #eff_lambda = rch.calculate_effective_wavelength(tgt_info["SpT"], filter_list)
-
     # Determine extinction
-    a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "Jmag", "Hmag", 
-                                                "Kmag", "W1mag","W2mag", "W3mag", 
+    a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "W3mag", 
                                                 "W4mag"]], 
-                                      tgt_info[["e_Bmag", "e_Vmag", "e_Jmag",  
-                                                "e_Hmag", "e_Kmag", "e_W1mag",  
-                                                "e_W2mag", "e_W3mag", "e_W4mag"]], 
+                                      tgt_info[["e_Bmag", "e_Vmag", "e_W3mag",
+                                                "e_W4mag"]], 
                                       filter_eff_lambda, tgt_info["A_V"])
 
-    # Create a mask which has values of 1 for stars outside the local bubble, and
+    # Create a mask which has values of 1 for stars outside the local bubble,
     # values of 0 for stars within it. This is multiplied by the calculated 
-    # extinction in each band, treating it as zero for stars within the bubble and
+    # extinction in each band, treating it as zero for stars within the bubble,
     # as calculated for those stars outside it.
     lb_mask = (tgt_info["Dist"] > 150).astype(int)
                                  
     # Correct for extinction only for those stars outside the Local Bubble
     tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0] * lb_mask
     tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1] * lb_mask
-    tgt_info["Jmag_dr"] = tgt_info["Jmag"] - a_mags[:,2] * lb_mask
-    tgt_info["Hmag_dr"] = tgt_info["Hmag"] - a_mags[:,3] * lb_mask
-    tgt_info["Kmag_dr"] = tgt_info["Kmag"] - a_mags[:,4] * lb_mask
-    tgt_info["W1mag_dr"] = tgt_info["W1mag"] - a_mags[:,5] * lb_mask
-    tgt_info["W2mag_dr"] = tgt_info["W2mag"] - a_mags[:,6] * lb_mask
-    tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,7] * lb_mask
-    tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,8] * lb_mask
+    tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,2] * lb_mask
+    tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,3] * lb_mask
 
     # Calculate predicted V-K colour
-    tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], tgt_info["RPmag"])
+    tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], 
+                                                tgt_info["RPmag"])
 
-    # -----------------------------------------------------------------------------
-    # (4) Estimate angular diameters
-    # -----------------------------------------------------------------------------
-    # Estimate angular diameters using colour relations. We want to do this using 
-    # as many colour combos as is feasible, as this can be a useful diagnostic
-    # TODO: Is not correcting reddening for W1-3 appropriate given the laws don't
-    # extend that far?
+    # -------------------------------------------------------------------------
+    # Estimate angular diameters
+    # -------------------------------------------------------------------------
+    # Estimate angular diameters using colour relations. 
+    # TODO: Is not correcting reddening for W1-3 appropriate given the laws 
+    # don't extend that far?
     rdiam.predict_all_ldd(tgt_info)
-    
     
     # Compute Teffs from Casagrande et al. 2010 relations
     import reach.parameters as rparam
@@ -365,10 +355,6 @@ def initialise_tgt_info(assign_default_uncertainties=True):
                                                          tgt_info["FeH_rel"])
     tgt_info["teff_casagrande"] = teffs
     tgt_info["e_teff_casagrande"] = e_teffs
-
-
-    # Don't have parameters for HD187289, assume u_lld=0.5 for now
-    #tgt_info.loc["HD187289", "u_lld"] = 0.5
     
     return tgt_info
 
@@ -518,24 +504,98 @@ def fman(number):
 # Collating results pdf
 # -----------------------------------------------------------------------------
 def collate_cal_pdfs():
-    """Merge diagnostic pdfs together for easy scanning
+    """Merge diagnostic pdfs together for easy checking.
     
     Code from:
     https://stackoverflow.com/questions/3444645/merge-pdf-files
     """
     from PyPDF2 import PdfFileMerger
 
-    pdfs = pdfs = glob.glob("/priv/mulga1/arains/pionier/complete_sequences/"
-                            "*_abcd/*-*-*/*CAL*vis2*")
-
+    pdfs = glob.glob("/priv/mulga1/arains/pionier/complete_sequences/"
+                     "*_abcd/*-*-*/*CAL*vis2*")
+    
+    # Sort by star name (otherwise will just be sorted by date)
+    pdfs = np.array(pdfs)
+    targets = np.array([pdf.split("CAL_")[-1] for pdf in pdfs])
+    pdfs = pdfs[np.argsort(targets)]
+    
     merger = PdfFileMerger()
 
     for pdf in pdfs:
         merger.append(open(pdf, 'rb'))
 
-    with open('result.pdf', 'wb') as fout:
+    with open('cal_vis2_summary.pdf', 'wb') as fout:
         merger.write(fout)
+       
+       
+def get_mean_delta_h(tgt_info, complete_sequences, sequences):
+    """
+    """
+    used_cals = {}
+    
+    for seq in complete_sequences.keys():
+        # Get the science target id
+        sci = get_unique_key(tgt_info, [seq[1]])[0]
+        sci_h = tgt_info.loc[sci]["Hmag"]
         
+        # Bright/faint?
+        seq_kind = seq[2]
+        
+        # Get the calibrator IDs
+        cals = get_unique_key(tgt_info, sequences[seq][0::2])
+        
+        # Take only the used calibrators
+        cals = tgt_info.loc[cals][tgt_info.loc[cals]["Quality"]!="BAD"].index
+        
+        if (sci, seq_kind) in used_cals.keys():
+            used_cals[(sci, seq_kind)] += list(cals)
+        else:
+            used_cals[(sci, seq_kind)] = list(cals)    
+        
+    bright_delta_h = []
+    faint_delta_h = []
+    
+    bright_ldd_frac = []
+    faint_ldd_frac = []
+    
+    for seq in used_cals.keys():
+        # Get science info
+        sci = seq[0]
+        sci_h = tgt_info.loc[sci]["Hmag"]
+        sci_ldd = tgt_info.loc[sci]["LDD_pred"]
+        
+        cals = list(set(used_cals[seq]))
+        
+        cal_delta_h = list(tgt_info.loc[cals]["Hmag"].values - sci_h)
+        cal_frac_ldd = list(tgt_info.loc[cals]["LDD_pred"].values / sci_ldd)
+        
+        if "bright" in seq:
+            bright_delta_h += cal_delta_h
+            bright_ldd_frac += cal_frac_ldd
+        
+        elif "faint" in seq:
+            faint_delta_h += cal_delta_h
+            faint_ldd_frac += cal_frac_ldd
+    
+    print("Bright delta H = %0.2f" % np.nanmean(bright_delta_h))
+    print("Faint delta H = %0.2f\n" % np.nanmean(faint_delta_h))
+    
+    print("Bright LDD frac = %0.2f" % np.nanmean(bright_ldd_frac))
+    print("Faint LDD frac = %0.2f" % np.nanmean(faint_ldd_frac))
+
+
+def summarise_cs(results):
+    """
+    """
+    cs = np.hstack(results["C_SCALE"].values)
+    seq_order = np.vstack(results["SEQ_ORDER"].values)    
+    
+    bmask = [i for i, seq in enumerate(seq_order) if "bright" in seq]   
+    fmask = [i for i, seq in enumerate(seq_order) if "faint" in seq]   
+    
+    print("AVG: %0.2f \pm %0.2f" % (cs.mean(), cs.std()))
+    print("Bright: %0.2f \pm %0.2f" % (cs[bmask].mean(), cs[bmask].std()))  
+    print("Faint: %0.2f \pm %0.2f" % (cs[fmask].mean(), cs[fmask].std())) 
 # -----------------------------------------------------------------------------
 # Formatting
 # ----------------------------------------------------------------------------- 

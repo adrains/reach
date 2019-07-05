@@ -492,9 +492,10 @@ def make_table_calibrators(tgt_info, sequences):
     """
     # Column names and associated units
     columns = OrderedDict([("HD", ""),
-                           ("SpT$^a$", ""),
-                           ("VTmag$^b$", "(mag)"), 
-                           ("Hmag$^c$", "(mag)"),
+                           ("SpT$^a$", "(Actual)$^a$"),
+                           ("SpT$^b$", "(Adopted)$^b$"),
+                           ("VTmag$^c$", "(mag)"), 
+                           ("Hmag$^d$", "(mag)"),
                            ("E(B-V)", "(mag)"),
                            ("$\\theta_{\\rm pred}$", "(mas)"),
                            ("$\\theta_{\\rm LD}$ Rel", ""),
@@ -503,18 +504,26 @@ def make_table_calibrators(tgt_info, sequences):
                            ("Target/s", "")])
     
     labels = ["index", "SpT", "VTmag", "Hmag", "Quality", "Target/s"]
-               
     
+    exclusion_codes = OrderedDict([("Binarity", "f"), 
+                                   ("IR excess","g"), 
+                                   ("Inconsistent photometry","h")])           
     header = []
     table_rows = []
     footer = []
     notes = []
     
     # Construct the header of the table
+    #header.append("\\begin{landscape}")
     header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
     header.append("\hline")
-    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
-    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append((r"HD & \multicolumn{2}{c}{SpT} & " +
+                  ("%s & "*(len(columns)-3))[:-2] + r"\\") 
+                  % tuple(columns.keys()[3:]))
+    
+    #header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    header.append((("%s & "*len(columns))[:-2] + r"\\") 
+                     % tuple(columns.values()))
     header.append("\hline")
     
     # Populate the table for every science target
@@ -530,7 +539,7 @@ def make_table_calibrators(tgt_info, sequences):
         for seq in sequences:
             cals = [target.replace("_", "").replace(".","").replace(" ", "") 
                     for target in sequences[seq]]
-                        
+                    
             if star.name in rutils.get_unique_key(tgt_info, cals):
                 scis.append(rutils.format_id(seq[1]))
                 
@@ -541,26 +550,28 @@ def make_table_calibrators(tgt_info, sequences):
         table_row += "%s & " % star.name.replace("HD", "")
         
         # Make SpT have a smaller font if it's long
-        if len(str(star["SpT"])) > 5:
-            table_row += "{\\tiny %s } & " % star["SpT"]
-        else:
-            table_row += "%s & " % star["SpT"]
+        #if len(str(star["SpT"])) > 5:
+        #    table_row += "{\\tiny %s } & " % star["SpT"]
+        #else:
+        table_row += "%s & " % star["SpT"]
+        table_row += "%s & " % star["SpT_simple"]
             
         table_row += "%0.2f & " % star["VTmag"]
         table_row += "%0.2f & " % star["Hmag"]
         table_row += "%0.3f & " % star["eb_v"]
         
         # Remove placeholder LDD
-        if star["LDD_pred"] == 1.0:
+        if star["LDD_pred"] == 1.0 or np.isnan(star["LDD_pred"]):
             table_row += "- & "
         else:
-            table_row += "%0.3f & " % star["LDD_pred"]
+            table_row += r"%0.3f $\pm$ %0.2f & " % (star["LDD_pred"], star["e_LDD_pred"])
             
         table_row += ("%s & " % star["LDD_rel"]).split("_")[-1]
         
         # Determine whether the star was used as a calibrator
         if star["Quality"] == "BAD":
-            table_row += "N & "
+            reason_code = exclusion_codes[star["exclusion_reason"]]
+            table_row += r"N$^%s$ & " % reason_code
         else:
             table_row += "Y & "
         
@@ -570,11 +581,11 @@ def make_table_calibrators(tgt_info, sequences):
         
         # If Gaia plx is nan, use Tycho
         elif np.isnan(star["Plx"]):
-            table_row += r"%0.2f $\pm$ %0.2f$^b$ &" % (star["Plx_alt"], star["e_Plx_alt"])
+            table_row += r"%0.2f $\pm$ %0.2f$^c$ &" % (star["Plx_alt"], star["e_Plx_alt"])
         
         # From Gaia DR2
         else:
-            table_row += r"%0.2f $\pm$ %0.2f$^d$ &" % (star["Plx"], star["e_Plx"])    
+            table_row += r"%0.2f $\pm$ %0.2f$^e$ &" % (star["Plx"], star["e_Plx"])    
         
         table_row += ("%s, "*len(scis) % tuple(scis))[:-2]
         
@@ -584,23 +595,30 @@ def make_table_calibrators(tgt_info, sequences):
     # Finish the table
     footer.append("\hline")
     footer.append("\end{tabular}")
+    #footer.append("\\end{landscape}")
     
     # Add notes section
     notes.append("\\begin{minipage}{\linewidth}")
     notes.append("\\vspace{0.1cm}")
     
     notes.append("\\textbf{Notes:} $^a$SIMBAD, "
-                  "$^b$Tycho \citet{hog_tycho-2_2000}, "
-                  "$^c$2MASS \citet{skrutskie_two_2006}, "
-                  "$^d$Gaia \citet{brown_gaia_2018} \\\\")
+                 "$^b$Adopted for intrinsic colour grid interpolation,"
+                 "$^c$Tycho \citet{hog_tycho-2_2000}, "
+                 "$^d$2MASS \citet{skrutskie_two_2006}, "
+                 "$^e$Gaia \citet{brown_gaia_2018}")
+                  
+    for er in exclusion_codes.keys():
+        notes[-1] += r", $^%s$%s" % (exclusion_codes[er], er)
+    
+    notes[-1] += "\\\\"
     
     notes.append("\\end{minipage}")
-    notes.append("\\end{table*}")
-    notes.append("\\end{landscape}")
+    #notes.append("\\end{table*}")
+    #notes.append("\\end{landscape}")
     
     # Write the tables
-    table_1 = header + table_rows[:60] + footer
-    table_2 = header + table_rows[60:] + footer + notes
+    table_1 = header + table_rows[:45] + footer
+    table_2 = header + table_rows[45:] + footer + notes
     
     np.savetxt("paper/table_calibrators_1.tex", table_1, fmt="%s")
     np.savetxt("paper/table_calibrators_2.tex", table_2, fmt="%s")
