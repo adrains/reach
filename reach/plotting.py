@@ -821,8 +821,8 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
     
                     # Plot the data points and best fit curve
                     axes[plt_i].errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
-                                    label=wl_lbl[wl_i], elinewidth=0.1, capsize=0.2, 
-                                    capthick=0.1, markersize=0.5, color=colours[wl_i])
+                                    label=wl_lbl[wl_i], elinewidth=0.25, capsize=0.4, 
+                                    capthick=0.2, markersize=1, color=colours[wl_i])
     
                     axes[plt_i].plot(x, y_fit, "--", linewidth=0.25, 
                                      color=colours[wl_i])
@@ -832,8 +832,8 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                                                     u_lambda)
             
                     res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
-                                elinewidth=0.1, capsize=0.2, 
-                                capthick=0.1, markersize=0.5, color=colours[wl_i])
+                                elinewidth=0.25, capsize=0.4, 
+                                capthick=0.2, markersize=1, color=colours[wl_i])
                                 
                     #axes[plt_i].legend(loc="best", fontsize="xx-small")
                     
@@ -845,7 +845,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                 xx = (axes[plt_i].get_xlim()[1] - axes[plt_i].get_xlim()[0]) * 0.05
                 yy = (axes[plt_i].get_ylim()[1] - axes[plt_i].get_ylim()[0]) * 0.05
                 axes[plt_i].text(xx, yy, rutils.format_id(sci), 
-                                 fontsize="xx-small")
+                                 fontsize="small")
                 
                 # Set up ticks
                 axes[plt_i].set_xlim([0.0,10E7])
@@ -890,8 +890,13 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
             fig.text(0.5, 0.005, r"Spatial Frequency (rad$^{-1})$", ha='center')
             fig.text(0.005, 0.5, r"Visibility$^2$", va='center', rotation='vertical')
             
-            plt.gcf().set_size_inches(8, 11*(n_rows/n_rows_init))
+            if n_rows == n_cols:
+                plt.gcf().set_size_inches(10, 6*(n_rows/n_rows_init))
+            else:
+                plt.gcf().set_size_inches(8, 11*(n_rows/n_rows_init))
+                
             plt.tight_layout(pad=1.0)
+            plt.savefig("paper/joint_seq_vis2_plots_pg%i.png" % set_i, dpi=500)
             pdf.savefig()
             plt.close()    
 
@@ -1011,7 +1016,7 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     res_ax.yaxis.set_minor_locator(res_min_loc)
     
     res_ax.set_xlim([5.5E7,9.5E7])
-    res_ax.set_ylim([-0.01,0.01])
+    res_ax.set_ylim([-0.008,0.008])
     res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
     res_ax.set_ylabel("Residuals")
     
@@ -1025,10 +1030,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     res_ax.yaxis.offsetText.set_fontsize("xx-small")
         
     plt.tight_layout(pad=1.0)
-    plt.savefig("paper/lam_sgr_sidelobe.pdf")  
-
-
-
+    plt.savefig("paper/lam_sgr_sidelobe.pdf") 
+    plt.savefig("paper/lam_sgr_sidelobe.png", dpi=1024)   
  
 
 def plot_lit_diam_comp(tgt_info):
@@ -1101,13 +1104,14 @@ def plot_lit_diam_comp(tgt_info):
     res_ax.set_xlim(xlim)
     
     # Setup the rest of the plot
-    ax.set_ylabel(r"$\theta_{\rm Lit}$")  
-    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$")   
+    ax.set_ylabel(r"$\theta_{\rm Lit}$ (mas)")  
+    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
     res_ax.set_ylabel(r"$\theta_{\rm Lit} / \theta_{\rm PIONIER}$")  
     ax.legend(loc="best")
     
     plt.tight_layout()
     plt.savefig("paper/lit_diam_comp.pdf")    
+    plt.savefig("paper/lit_diam_comp.png", dpi=500) 
     
 
 
@@ -1246,7 +1250,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
         # Setup the rest of the plot
         ax.set_ylabel(r"$\theta_{\rm %s}$ (mas)" % colour_rel)  
         res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
-        res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$ (mas)" 
+        res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" 
                           % colour_rel)  
         
         if ax_i != 0:
@@ -1264,6 +1268,8 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
     plt.gcf().set_size_inches(12, 4)
     plt.savefig("paper/colour_rel_diam_comp_%s.pdf" % cbar, 
                 bbox_inches="tight")     
+    plt.savefig("paper/colour_rel_diam_comp_%s.png" % cbar, 
+                bbox_inches="tight", dpi=500)   
         
 
 def plot_casagrande_teff_comp(tgt_info):
@@ -1327,7 +1333,7 @@ def plot_casagrande_teff_comp(tgt_info):
                         
     # Plot the points + errors
     ax.errorbar(final_teffs, casagrande_teffs, xerr=e_final_teffs, 
-                yerr=e_casagrande_teffs, fmt=".",# label=colour_rel, 
+                yerr=e_casagrande_teffs, fmt=".", ecolor="firebrick",
                 elinewidth=0.5, capsize=0.8, capthick=0.5, zorder=1)
         
     # Plot residuals
@@ -1336,7 +1342,7 @@ def plot_casagrande_teff_comp(tgt_info):
         
     res_ax.errorbar(final_teffs, residuals, xerr=e_final_teffs, 
                     yerr=e_casagrande_teffs, fmt=".", elinewidth=0.5, 
-                    capsize=0.8, capthick=0.5, zorder=1)
+                    ecolor="firebrick", capsize=0.8, capthick=0.5, zorder=1)
     
     scatter = ax.scatter(final_teffs, casagrande_teffs, c=fehs, marker="o", 
                          zorder=2)
@@ -1349,8 +1355,9 @@ def plot_casagrande_teff_comp(tgt_info):
     # Plot the two lines
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
-    ax.plot(np.arange(0, 10000), np.arange(0, 10000), "--", color="black")
-    res_ax.hlines(1, xmin=0, xmax=10000, linestyles="dashed")
+    ax.plot(np.arange(0, 10000), np.arange(0, 10000), "--", color="black", 
+            zorder=1)
+    res_ax.hlines(1, xmin=0, xmax=10000, linestyles="dashed", zorder=1)
                       
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
@@ -1362,13 +1369,14 @@ def plot_casagrande_teff_comp(tgt_info):
     #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
     
     # Setup the rest of the plot
-    ax.set_ylabel(r"T$_{\rm eff, Casagrande+2010}$")  
-    res_ax.set_xlabel(r"T$_{\rm eff, PIONIER}$")  
-    res_ax.set_ylabel(r"T$_{\rm eff, residuals}$")  
+    ax.set_ylabel(r"T$_{\rm eff, Casagrande+2010}$ (K)")  
+    res_ax.set_xlabel(r"T$_{\rm eff, PIONIER}$ (K)")  
+    res_ax.set_ylabel(r"T$_{\rm eff, residuals}$ (K)")  
     #ax.legend(loc="best")
     
     plt.tight_layout()
     plt.savefig("paper/teff_comp_casagrande.pdf")  
+    plt.savefig("paper/teff_comp_casagrande.png", dpi=500)  
 
 
 def plot_lit_teff_comp(tgt_info):
@@ -1509,16 +1517,17 @@ def plot_fbol_comp(tgt_info):
     
     # Define bands to reference, construct new headers
     bands = ["Hp", "BT", "VT", "BP", "RP"]
-    e_bands = ["e_%s" % band for band in bands] 
-    f_bol_bands = ["f_bol_%s" % band for band in bands] 
-    e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
+    f_bol_bands = ["f_bol_%s" % band for band in bands] + ["f_bol_final"]
+    e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] + ["e_f_bol_final"]
+    
+    bands += ["Avg"]
     
     offset = lambda p: transforms.ScaledTranslation(p/72.,0, plt.gcf().dpi_scale_trans)
     trans = plt.gca().transData
     
     tf = 7.5
     
-    colours = ["green", "blue", "orange", "deepskyblue", "red"]
+    colours = ["green", "blue", "orange", "deepskyblue", "red", "black"]
     
     mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
@@ -1531,9 +1540,9 @@ def plot_fbol_comp(tgt_info):
         plt.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], elinewidth=0.5,
                      fmt=".", zorder=1, label="", ecolor="black",capsize=1,
                      capthick=0.5, transform=trans+offset(-tf*(band_i-3)))
-        plt.scatter(ids, fbol[fband], s=2**6, c=colours[band_i], label=bands[band_i],
-                    zorder=2, transform=trans+offset(-tf*(band_i-3)), 
-                    marker="$%s$" % bands[band_i])
+        plt.scatter(ids, fbol[fband], s=2**4, c=colours[band_i], label=bands[band_i],
+                    zorder=2, transform=trans+offset(-tf*(band_i-3)))#, 
+                    #marker="$%s$" % bands[band_i])
                         
     plt.xlabel("Star")
     plt.ylabel(r"Flux (ergs s$^{-1}$ cm $^{-2}$)")
@@ -1658,21 +1667,23 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
     b_v = tgt_info[mask]["Bmag"] - tgt_info[mask]["Vmag"]
     
     plt.close("all")
-    plt.scatter(b_v, abs_Vmag, c=tgt_info[mask]["FeH_rel"], marker="o")
+    plt.scatter(b_v, abs_Vmag, s=100, c=tgt_info[mask]["FeH_rel"], marker="o")
     
-    xx = 0.02
+    
     
     # Annotate the star name
     star_ids = rutils.format_id(tgt_info[mask]["Primary"].values)
     for star_i, star in enumerate(star_ids):
         if tgt_info[mask]["Primary"][star_i] in ("epsInd", "chiEri"):
-            yy = 0.3
+            yy = -0.0
+            xx = 0.075
         else:
-            yy = 0.15
+            yy = 0.2
+            xx = 0.0
         
         plt.annotate(star, xy=(b_v[star_i], abs_Vmag[star_i]), 
                     xytext=(b_v[star_i]-xx, abs_Vmag[star_i]-yy), 
-                    fontsize="xx-small", horizontalalignment="center")
+                    fontsize="x-small", horizontalalignment="center")
     
     # Plot Padova isochrones. Note that these are for constant *age*
     if plot_isochrones_padova:
@@ -1715,7 +1726,7 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
                                 
             plt.plot(track["B-V"], track["Mv"], "--", color="black",
                      label=r"M$_\odot$=%0.2f" % masses[mass_i], alpha=0.5, 
-                     zorder=2, linewidth=0.25)
+                     zorder=2, linewidth=0.5)
             
             xx = 0.01
             yy = 0.1
@@ -1771,7 +1782,7 @@ def presentation_vis2_plot():
                                    chara_max_bl/chara_min_lambda])
                                 
     # PIONIER
-    vlti_min_bl = 58
+    vlti_min_bl = 11
     vlti_max_bl = 132
     vlti_min_lambda = 1533 * 10**-9
     vlti_max_lambda = 1773 * 10**-9
@@ -1779,7 +1790,7 @@ def presentation_vis2_plot():
                                      vlti_max_bl/vlti_min_lambda])
     
     # Diameters to plot
-    ldds = [0.5, 1.0, 2.0, 4.0]
+    ldds = [4.0, 2.0, 1.0, 0.5]
     u_lld = 0.3
     c_scale = 1
     xmax = 55*10**7
@@ -1793,31 +1804,45 @@ def presentation_vis2_plot():
     
     plt.close("all")
     
-    for ldd in ldds:
+    plt.xlim([0.0, xmax])
+    plt.ylim([0.0, 1.0])
+    plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
+    plt.ylabel(r"Visibility$^2$")
+    plt.tight_layout()
+    
+    # First plot just the curves
+    for ldd_i, ldd in enumerate(ldds):
         vis2 = rdiam.calc_vis2_ls(freqs, ldd, c_scale, u_lld)
         
         plt.plot(freqs, vis2, label=r"$\theta_{\rm LD}$ = %0.1f mas" % ldd)
+        plt.legend(loc="best")
+
     
+        plt.savefig("plots/presentation_vis2_vs_ldd_%i.png" % ldd_i)
+    
+    # Next just the PIONIER points
+    plt.text(0.5*xmax, 0.95, "PIONIER: 11-132m, H band", color="darkred", 
+             ha='center')
+             
+    for ldd in ldds:
         # PIONIER
         ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
         vlti_vis2 = rdiam.calc_vis2_ls(vlti_freqs, ldd, c_scale, u_lld)
         plt.plot(vlti_freqs, vlti_vis2, ".", color="darkred") 
     
+    plt.savefig("plots/presentation_vis2_vs_ldd_p.png")
+    
+    # Finally the PAVO points
+    plt.text(0.5*xmax, 0.9, "PAVO: 34-330m, R band", color="blue", 
+             ha='center')
+             
+    for ldd in ldds:
         # CHARA
         ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
         chara_vis2 = rdiam.calc_vis2_ls(chara_freqs, ldd, c_scale, u_lld)
         plt.plot(chara_freqs, chara_vis2, "+", color="blue")
-        
-    plt.text(0.5*xmax, 0.95, "PAVO: 34-330m, R band", color="blue", ha='center')
-    plt.text(0.5*xmax, 0.9, "PIONIER: 58-132m, H band", color="darkred", ha='center')
-    
-    plt.xlim([0.0, xmax])
-    plt.ylim([0.0, 1.0])
-    plt.xlabel(r"Spatial Frequency (rad$^{-1})$")
-    plt.ylabel(r"Visibility$^2$")
-    plt.legend(loc="best")
     
     plt.tight_layout()
     plt.savefig("plots/presentation_vis2_vs_ldd.pdf")
-    plt.savefig("plots/presentation_vis2_vs_ldd.png")
+    plt.savefig("plots/presentation_vis2_vs_ldd_c.png")
     
