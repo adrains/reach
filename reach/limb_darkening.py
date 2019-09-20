@@ -43,9 +43,37 @@ def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
     # Check if any set of logg/teff points lie outside the stagger grid. If any
     # do, we can't use the stagger grid as we won't be able to properly sample
     # the uncertainties.
-    in_grid = np.all([in_grid_bounds(teff, logg) 
-                      for teff, logg in zip(n_teff, n_logg)])
+    #in_grid = np.all([in_grid_bounds(teff, logg) 
+    #                  for teff, logg in zip(n_teff, n_logg)])
     
+    
+    # First try to get the Stagger coefficients, but if this doesn't work, just
+    # get the Claret params
+    try:
+        # Sample the grid
+        elcs, scls, ftcs = elc_stagger(n_logg, n_teff, n_feh)
+        
+        # Combine
+        n_u_lld = np.concatenate((elcs, scls)).T
+        
+        # Succeeded
+        out_of_stagger_bounds = False
+    
+    except:
+        out_of_stagger_bounds = True
+        
+    # If we were out of grid bounds entirely, or some of the time, use Claret
+    if out_of_stagger_bounds or elcs.shape[1] != len(n_logg):
+        # Get the H band linear coefficient
+        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
+        
+        # Stack x6 for each wavelength dimension
+        n_u_lld = np.tile(n_u_lld, 6).reshape(6, len(n_logg))
+        
+        # Add a set of scaling coefficients (just ones)
+        n_u_lld = np.concatenate((n_u_lld, np.ones((6, len(n_logg))))).T
+    
+    """
     # If the target is out of the grid, fill the grid with standard linear
     # (i.e. non-equivalent) u_lambda, and s_lambda = 1
     if not in_grid or use_claret_params:
@@ -69,7 +97,7 @@ def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
         
         # Combine
         n_u_lld = np.concatenate((elcs, scls)).T
-        
+    """    
     return n_u_lld
 
 # -----------------------------------------------------------------------------

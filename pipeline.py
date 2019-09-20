@@ -33,7 +33,7 @@ lb_pc = 150                         # The size of the local bubble in pc
 do_random_ifg_sampling = True       # Sample interferograms with repeats
 do_gaussian_diam_sampling = True    # Sample diameters from normal distribution
 assign_default_uncertainties = True # Assign conservative placeholder errors
-use_claret_params = False           # Force Claret & Bloemen 2011 u_lambda
+force_claret_params = False         # Force Claret & Bloemen 2011 u_lambda
 n_bootstraps = 3000                 # Number of bootstrapping iterations
 pred_ldd_col = "LDD_pred"           # tgt_info column with LDD colour relation
 e_pred_ldd_col = "e_LDD_pred"       # tgt_info column with LDD relation errors
@@ -54,7 +54,7 @@ if not os.path.exists(results_path):
 # Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code
 # and filters to use when calculating fbol_final from [Hp, Bt, Vt, Bp, Rp]
 bc_path =  "/home/arains/code/bolometric-corrections"
-band_mask = [1, 1, 1, 0, 0]
+band_mask = [1, 0, 1, 0, 0]
 
 # Set these if investigating the quality of calibrators
 calibrate_calibrators = False
@@ -80,7 +80,7 @@ tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties)
 print("\n", "-"*79, "\n", "\tSampling\n", "-"*79)  
 
 # If already created, load sampled diameters
-if rutils.sampling_already_done(results_folder, use_claret_params):
+if rutils.sampling_already_done(results_folder, force_claret_params):
     print("Sampling already done, loading...")
     n_pred_ldd, e_pred_ldd = rutils.load_sampled_ldd(results_folder)
 
@@ -97,7 +97,7 @@ else:
                                                  
     # Sample stellar parameters
     sampled_sci_params = rparam.sample_all(tgt_info, n_bootstraps, bc_path,
-                                           use_claret_params, band_mask)
+                                           force_claret_params, band_mask)
     rutils.save_sampled_params(sampled_sci_params, results_folder)
 
 # -----------------------------------------------------------------------------
