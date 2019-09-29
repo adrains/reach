@@ -237,11 +237,11 @@ def make_table_fbol(tgt_info):
     header.append("\hline")    
     
     
-    bands = [r"H$_p$", r"B$_T$", r"V$_T$", r"B$_P$", r"R$_P$"]
+    bands = [r"H$_p$", r"B$_T$", r"V$_T$"]#, r"B$_P$", r"R$_P$"]
     
-    f_bols = ["f_bol_Hp", "f_bol_BT", "f_bol_VT", "f_bol_BP", "f_bol_RP"]
-    e_f_bols = ["e_f_bol_Hp", "e_f_bol_BT", "e_f_bol_VT", "e_f_bol_BP", 
-                "e_f_bol_RP"]
+    f_bols = ["f_bol_Hp", "f_bol_BT", "f_bol_VT"]#, "f_bol_BP", "f_bol_RP"]
+    e_f_bols = ["e_f_bol_Hp", "e_f_bol_BT", "e_f_bol_VT"]#, "e_f_bol_BP", 
+                #"e_f_bol_RP"]
     
      # Populate the table for every science target
     for star_i, star in tgt_info[tgt_info["Science"]].iterrows():
@@ -286,12 +286,12 @@ def make_table_fbol(tgt_info):
     footer.append("\end{tabular}")
     
     # Write the tables
-    table_1 = header + table_rows[:30] + footer
-    table_2 = header + table_rows[30:] + footer
+    table_1 = header + table_rows + footer
+    #table_2 = header + table_rows[30:] + footer
     
     # Write the table
     np.savetxt("paper/table_fbol_1.tex", table_1, fmt="%s")      
-    np.savetxt("paper/table_fbol_2.tex", table_2, fmt="%s")     
+    #np.savetxt("paper/table_fbol_2.tex", table_2, fmt="%s")     
     
     
 

@@ -248,27 +248,46 @@ def get_unique_key(tgt_info, id_list):
     return unique_ids
     
     
-def compute_dist(tgt_info):
+def compute_dist(tgt_info, use_plx_systematic=True):
     """Calculate distances and distance errors for both stars with Gaia and HIP
-    parallaxes
-    """
-    # Compute distance
-    tgt_info["Dist"] = 1000 / tgt_info["Plx"]
+    parallaxes. 
+    
+    Incorporates the systematic offset in Gaia DR2 by subtracting the offset
+    from the parallax, then adding its uncertainty in quadrature. This makes 
+    the parallax *bigger*.
 
+    https://ui.adsabs.harvard.edu/abs/2018ApJ...862...61S/abstract
+    """
+    # Stassun & Torres systematic offsets
+    if use_plx_systematic:
+        plx_off = -0.082    # mas
+        e_plx_off = 0.033   # mas
+
+        # Incorporate the systematic
+        plx = tgt_info["Plx"] - plx_off
+        e_plx = np.sqrt(tgt_info["e_Plx"]**2 + e_plx_off**2)
+    
+    # Not using offsets
+    else:
+        plx = tgt_info["Plx"]
+        e_plx = tgt_info["e_Plx"]
+
+    # Compute distance
+    tgt_info["Dist"] = 1000 / plx
     tgt_info["Dist"].where(~np.isnan(tgt_info["Dist"]), 
                        1000/tgt_info["Plx_alt"][np.isnan(tgt_info["Dist"])],
                        inplace=True)
     
     # Compute distance error
-    # e_dist = |D*-1*e_plx / plx|                   
-    tgt_info["e_Dist"] = np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
-                                / tgt_info["Plx"])
+    # e_dist = |D*-1*e_plx / plx|
+    tgt_info["e_Dist"] = np.abs(tgt_info["Dist"] * e_plx / plx)
     tgt_info["e_Dist"].where(~np.isnan(tgt_info["e_Dist"]),
                         np.abs(tgt_info["Dist"] * tgt_info["e_Plx"] 
                                / tgt_info["Plx"]))
     
     
-def initialise_tgt_info(assign_default_uncertainties=True):
+def initialise_tgt_info(assign_default_uncertainties=True, lb_pc=70,
+                        use_plx_systematic=True):
     """
     """
     # Import the base target info sans calculations
@@ -276,7 +295,7 @@ def initialise_tgt_info(assign_default_uncertainties=True):
                 assign_default_uncertainties=assign_default_uncertainties)
 
     # Calculate distances and distance errors
-    compute_dist(tgt_info)
+    compute_dist(tgt_info, use_plx_systematic)
 
     # -------------------------------------------------------------------------
     # Convert Tycho magnitudes to Johnson-Cousins magnitudes
@@ -302,43 +321,54 @@ def initialise_tgt_info(assign_default_uncertainties=True):
     # Correct photometry for interstellar extinction
     # -------------------------------------------------------------------------
     # These are the filter effective wavelengths *not* considering the effect  
-    # of spectral type (Angstroms) for [B, V, W3, W4]
-    filter_eff_lambda = np.array([4450., 5510., 120000., 220000.])
+    # of spectral type (Angstroms):
+    # B = 4450, V = 5510, Hp = 5280, Bt = 4200, Vt = 5320, Bp = 5320, Rp = 7970
+    # (https://ui.adsabs.harvard.edu/abs/2010A%26A...523A..48J/abstract)
+    filter_eff_lambda = np.array([4450., 5510., 5280., 4200., 5320., 5320., 
+                                  7970.])
 
     # Import/create the SpT vs B-V grid
     grid = rphot.create_spt_uv_grid()
-                     
-    # Calculate selective extinction (i.e. (B-V) colour excess)
-    tgt_info["eb_v"] = rphot.calculate_selective_extinction(tgt_info["Bmag"], 
-                                                        tgt_info["Vmag"], 
-                                                        tgt_info["SpT_simple"],
-                                                        grid)
-
-    # Calculate V band extinction
-    tgt_info["A_V"] = rphot.calculate_v_band_extinction(tgt_info["eb_v"])
-
-    # Determine extinction
-    a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "W3mag", 
-                                                "W4mag"]], 
-                                      tgt_info[["e_Bmag", "e_Vmag", "e_W3mag",
-                                                "e_W4mag"]], 
-                                      filter_eff_lambda, tgt_info["A_V"])
 
     # Create a mask which has values of 1 for stars outside the local bubble,
     # values of 0 for stars within it. This is multiplied by the calculated 
     # extinction in each band, treating it as zero for stars within the bubble,
     # as calculated for those stars outside it.
-    lb_mask = (tgt_info["Dist"] > 150).astype(int)
-                                 
+    lb_mask = (tgt_info["Dist"] > lb_pc).astype(int)
+
+    # Calculate selective extinction (i.e. (B-V) colour excess) only for stars
+    # outside the local bubble
+    eb_v = rphot.calculate_selective_extinction(tgt_info["Bmag"], 
+                                                tgt_info["Vmag"], 
+                                                tgt_info["SpT_simple"], grid)
+    eb_v *= lb_mask
+    eb_v[eb_v==0] = 0.      # Remove -0 values
+    tgt_info["eb_v"] = eb_v
+
+    # Calculate V band extinction
+    tgt_info["A_V"] = rphot.calculate_v_band_extinction(tgt_info["eb_v"])
+
+    # Determine extinction
+    a_mags = rphot.deredden_photometry(tgt_info[["Bmag", "Vmag", "Hpmag", 
+                                                 "BTmag", "VTmag", "BPmag", 
+                                                 "RPmag"]], 
+                                      tgt_info[["e_Bmag", "e_Vmag", "e_Hpmag", 
+                                                 "e_BTmag", "e_VTmag", 
+                                                 "e_BPmag", "e_RPmag"]], 
+                                      filter_eff_lambda, tgt_info["A_V"])
+
     # Correct for extinction only for those stars outside the Local Bubble
-    tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0] * lb_mask
-    tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1] * lb_mask
-    tgt_info["W3mag_dr"] = tgt_info["W3mag"] - a_mags[:,2] * lb_mask
-    tgt_info["W4mag_dr"] = tgt_info["W4mag"] - a_mags[:,3] * lb_mask
+    tgt_info["Bmag_dr"] = tgt_info["Bmag"] - a_mags[:,0]# * lb_mask
+    tgt_info["Vmag_dr"] = tgt_info["Vmag"] - a_mags[:,1]# * lb_mask
+    tgt_info["Hpmag_dr"] = tgt_info["Hpmag"] - a_mags[:,2]# * lb_mask
+    tgt_info["BTmag_dr"] = tgt_info["BTmag"] - a_mags[:,3]# * lb_mask
+    tgt_info["VTmag_dr"] = tgt_info["VTmag"] - a_mags[:,4]# * lb_mask
+    tgt_info["BPmag_dr"] = tgt_info["BPmag"] - a_mags[:,5]# * lb_mask
+    tgt_info["RPmag_dr"] = tgt_info["RPmag"] - a_mags[:,6]# * lb_mask
 
     # Calculate predicted V-K colour
-    tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag"], 
-                                                tgt_info["RPmag"])
+    tgt_info["V-K_calc"] = rphot.calc_vk_colour(tgt_info["VTmag_dr"], 
+                                                tgt_info["RPmag_dr"])
 
     # -------------------------------------------------------------------------
     # Estimate angular diameters
@@ -350,8 +380,8 @@ def initialise_tgt_info(assign_default_uncertainties=True):
     
     # Compute Teffs from Casagrande et al. 2010 relations
     import reach.parameters as rparam
-    teffs, e_teffs = rparam.compute_casagrande_2010_teff(tgt_info["BTmag"],  
-                                                         tgt_info["VTmag"], 
+    teffs, e_teffs = rparam.compute_casagrande_2010_teff(tgt_info["BTmag_dr"],  
+                                                         tgt_info["VTmag_dr"], 
                                                          tgt_info["FeH_rel"])
     tgt_info["teff_casagrande"] = teffs
     tgt_info["e_teff_casagrande"] = e_teffs

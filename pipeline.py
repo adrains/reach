@@ -29,7 +29,8 @@ from sys import exit as sys_exit
 # Define Bootstrapping Parameters
 # -----------------------------------------------------------------------------
 # Run specific parameters
-lb_pc = 150                         # The size of the local bubble in pc
+lb_pc = 70                          # The size of the local bubble in pc
+use_plx_systematic = True           # Use Stassun & Torres 18 plx offset
 do_random_ifg_sampling = True       # Sample interferograms with repeats
 do_gaussian_diam_sampling = True    # Sample diameters from normal distribution
 assign_default_uncertainties = True # Assign conservative placeholder errors
@@ -54,7 +55,7 @@ if not os.path.exists(results_path):
 # Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code
 # and filters to use when calculating fbol_final from [Hp, Bt, Vt, Bp, Rp]
 bc_path =  "/home/arains/code/bolometric-corrections"
-band_mask = [1, 0, 1, 0, 0]
+band_mask = [1, 1, 1, 0, 0]
 
 # Set these if investigating the quality of calibrators
 calibrate_calibrators = False
@@ -75,7 +76,8 @@ print(" - do_gaussian_diam_sampling\t=\t%s" % do_gaussian_diam_sampling)
 # -----------------------------------------------------------------------------
 # Targets information is loaded into a pandas dataframe, with column labels for
 # each of the stored parameters (e.g. VTmag) and row indices of HD ID
-tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties)
+tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties, lb_pc,
+                                      use_plx_systematic)
 
 print("\n", "-"*79, "\n", "\tSampling\n", "-"*79)  
 

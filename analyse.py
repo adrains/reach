@@ -17,27 +17,38 @@ import pickle
 # -----------------------------------------------------------------------------
 # Setup & Loading
 # -----------------------------------------------------------------------------
-combined_fit = True                     # Fit for LDD for multiple seq at once
-load_saved_results = False              # Load or do fitting fresh
-assign_default_uncertainties = True     # Give default errors to stars without
-force_claret_params = False             # Force use of Claret+11 limb d. params
+lb_pc = 70                          # The size of the local bubble in pc
+use_plx_systematic = True           # Use Stassun & Torres 18 plx offset
+combined_fit = True                 # Fit for LDD for multiple seq at once
+load_saved_results = True           # Load or do fitting fresh
+assign_default_uncertainties = True # Give default errors to stars without
+force_claret_params = False         # Force use of Claret+11 limb d. params
 n_bootstraps = 3000
-e_wl_frac = 0.0035                      # Fractional error on wl scale
+fitting_method = "ls"               # Fitting method to use: ls or odr
+e_wl_frac = 0.0035                  # Fractional error on wl scale
 
-results_folder = "19-06-27_i2000"       # Parallel!
-results_folder = "19-07-04_i100"        # Test to check bad calibrator removal
+# If using least squares fitting, the wavelength uncertainty is added in 
+# quadrature to the LDD uncertainty at the end. If using orthogonal distance
+# regression, it is incorporated into the fit itself
+if fitting_method == "ls":
+    add_e_wl_to_ldd_in_quad = True
+else:
+    add_e_wl_to_ldd_in_quad = False
+
+#results_folder = "19-06-27_i2000"       # Parallel!
 results_folder = "19-07-05_i3000"       # Long run with all bad cals removed
 results_path = "results/%s/" % results_folder
 
 # Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code
 # and filters to use when calculating fbol_final from [Hp, Bt, Vt, Bp, Rp]
-#bc_path =  "/Users/adamrains/code/bolometric-corrections"
-bc_path =  "/home/arains/code/bolometric-corrections"
+bc_path =  "/Users/adamrains/code/bolometric-corrections"
+#bc_path =  "/home/arains/code/bolometric-corrections"
 band_mask = [1, 1, 1, 0, 0]
 
 # Load in files
 print("Loading in files...")
-tgt_info = rutils.initialise_tgt_info()
+tgt_info = rutils.initialise_tgt_info(assign_default_uncertainties, lb_pc, 
+                                      use_plx_systematic)
 complete_sequences, sequences = rutils.load_sequence_logs()
 
 # Currently no proxima cen or gam pav data, so pop
@@ -63,6 +74,8 @@ if load_saved_results:
     
     bs_results, results = rutils.load_results(results_folder)
 
+    rparam.calc_sample_and_final_params(tgt_info, sampled_sci_params, 
+                                        bs_results, results)
 # -----------------------------------------------------------------------------
 # Calculating Results For First Time
 # -----------------------------------------------------------------------------
@@ -79,12 +92,16 @@ else:
     print("Getting results of bootstrapping for %s bootstraps..." 
           % n_bootstraps)
     bs_results = rdiam.fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, 
-                                            results_path, sampled_sci_params, 
+                                            results_path, sampled_sci_params,
+                                            method=fitting_method, 
                                             e_wl_frac=e_wl_frac,
                                             combined_fit=combined_fit) 
 
     # Summarise results
-    results = rdiam.summarise_results(bs_results, tgt_info)
+    results = rdiam.summarise_results(bs_results, tgt_info,
+                                      e_wl_frac=e_wl_frac,
+                                      add_e_wl_to_ldd_in_quad=\
+                                          add_e_wl_to_ldd_in_quad)
     
     # Calculate **initial** fundamental parameters using literature values
     print("Determining **initial** fundamental parameters...")
@@ -103,11 +120,15 @@ else:
                                final_teff_sample=True)
     
     bs_results = rdiam.fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, 
-                                            results_path, sampled_sci_params, 
+                                            results_path, sampled_sci_params,
+                                            method=fitting_method,  
                                             e_wl_frac=e_wl_frac,
                                             combined_fit=combined_fit) 
     # Summarise results
-    results = rdiam.summarise_results(bs_results, tgt_info)
+    results = rdiam.summarise_results(bs_results, tgt_info, 
+                                      e_wl_frac=e_wl_frac,
+                                      add_e_wl_to_ldd_in_quad=\
+                                          add_e_wl_to_ldd_in_quad)
     
     # Save results
     rutils.save_results(bs_results, results, results_folder)
@@ -137,6 +158,7 @@ rpaper.make_table_limb_darkening(tgt_info)
 
 # Generate plots
 print("Generating plots...")
+rplt.plot_fbol_comp(tgt_info)
 rplt.plot_hr_diagram(tgt_info, plot_isochrones_basti=True)
 rplt.plot_casagrande_teff_comp(tgt_info)
 rplt.plot_lit_diam_comp(tgt_info)

@@ -302,16 +302,25 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             u_lld = np.mean(tgt_info.loc[hd_id][u_lambdas])
             
             #c_scale = results.iloc[star_i]["C_SCALE"]
-            c_scale = 1
-            
             x = np.arange(1*10**6, 25*10**7, 10000)
-            y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
-            y_fit_low = rdiam.calc_vis2_ls(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
-            y_fit_high = rdiam.calc_vis2_ls(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
+
+            c_scale = 1
+            n_points = (len(x),)
+            s_lambda = 1
+            
+            y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, n_points, u_lld,
+                                       s_lambda)
+            y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, 
+                                           n_points, u_lld, s_lambda)
+            y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, 
+                                            n_points, u_lld, s_lambda)    
     
-            y_pred = rdiam.calc_vis2_ls(x, ldd_pred, 1, u_lld)
-            y_pred_low = rdiam.calc_vis2_ls(x, ldd_pred - e_ldd_pred, 1, u_lld)
-            y_pred_high = rdiam.calc_vis2_ls(x, ldd_pred + e_ldd_pred, 1, u_lld)
+            y_pred = rdiam.calc_vis2(x, ldd_pred, 1, n_points, u_lld,
+                                        s_lambda)
+            y_pred_low = rdiam.calc_vis2(x, ldd_pred - e_ldd_pred, 1, 
+                                            n_points, u_lld, s_lambda)
+            y_pred_high = rdiam.calc_vis2(x, ldd_pred + e_ldd_pred, 1, 
+                                             n_points, u_lld, s_lambda)
     
             fig, axes = plt.subplots(1, 2)
             axes = axes.flatten()
@@ -350,8 +359,12 @@ def plot_bootstrapping_summary(results, bs_results, n_bins=20,
             
             # Plot residuals below the vis2 plot
             axes[0].set_xticks([])
-            residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
-                                                u_lld)
+
+            n_points = (len(sfreq),)
+            s_lambda = 1
+
+            residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, c_scale,
+                                               n_points, u_lld, s_lambda)
             
             res_ax.errorbar(sfreq, residuals, xerr=sfreq*e_wl_frac,
                             yerr=e_vis2, fmt=".", 
@@ -520,7 +533,11 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         c_scale = results.iloc[star_i]["C_SCALE"]
         
         x = np.arange(1*10**6, 25*10**7, 10000)
-        y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
+
+        n_points = (len(x),)
+        s_lambda = 1
+
+        y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, n_points, u_lld, s_lambda)
 
         plt.close("all")
         fig, ax = plt.subplots()
@@ -550,8 +567,10 @@ def plot_single_vis2(results, e_wl_frac=0.03):
         
         # Plot residuals below the vis2 plot
         ax.set_xticks([])
-        residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
-                                            u_lld)
+        n_points = (len(sfreq),)
+
+        residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, c_scale, n_points,
+                                           u_lld, s_lambda)
         
         res_ax.errorbar(sfreq, residuals, xerr=sfreq*e_wl_frac,
                         yerr=e_vis2, fmt=".", 
@@ -629,10 +648,16 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
             
                 c_scale = results.iloc[star_i]["C_SCALE"]
             
+                n_points = (len(x),)
+                s_lambda = 1
+
                 x = np.arange(1*10**6, 25*10**7, 10000)
-                y_fit = rdiam.calc_vis2_ls(x, ldd_fit, c_scale, u_lld)
-                y_fit_low = rdiam.calc_vis2_ls(x, ldd_fit - e_ldd_fit, c_scale, u_lld)
-                y_fit_high = rdiam.calc_vis2_ls(x, ldd_fit + e_ldd_fit, c_scale, u_lld)    
+                y_fit = rdiam.calc_vis2(x, ldd_fit, c_scale, n_points, 
+                                        u_lld, s_lambda)
+                y_fit_low = rdiam.calc_vis2(x, ldd_fit - e_ldd_fit, c_scale, 
+                                            n_points, u_lld, s_lambda)
+                y_fit_high = rdiam.calc_vis2(x, ldd_fit + e_ldd_fit, c_scale, 
+                                             n_points, u_lld, s_lambda)    
             
                 # Setup lower panel for residuals
                 divider = make_axes_locatable(axes[plt_i])
@@ -668,9 +693,11 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
                 axes[plt_i].yaxis.set_major_locator(maj_loc)
                 axes[plt_i].yaxis.set_minor_locator(min_loc)
                 
+                n_points = (len(sfreq),)
+
                 # Plot residuals below the vis2 plot
-                residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, c_scale,
-                                                    u_lld)
+                residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, c_scale,
+                                                   n_points, u_lld, s_lambda)
             
                 res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
                                 label="Residuals", elinewidth=0.1, capsize=0.2, 
@@ -815,25 +842,34 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                     vis2 = vis2[valid_i]
                     e_vis2 = e_vis2[valid_i]
                     sfreq = sfreq[valid_i]
-            
+
                     x = np.arange(1*10**6, 25*10**7, 10000)
-                    y_fit = rdiam.calc_vis2_ls(x, ldd_fit, 1.0, u_lambda) 
+
+                    n_points = (len(x),)
+                    s_lambda = 1
+
+                    y_fit = rdiam.calc_vis2(x, ldd_fit, 1.0, n_points,
+                                            u_lambda, s_lambda) 
     
                     # Plot the data points and best fit curve
                     axes[plt_i].errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
                                     label=wl_lbl[wl_i], elinewidth=0.25, capsize=0.4, 
-                                    capthick=0.2, markersize=1, color=colours[wl_i])
+                                    capthick=0.2, markersize=1, color=colours[wl_i],
+                                    markeredgecolor="grey", markeredgewidth=0.01)
     
                     axes[plt_i].plot(x, y_fit, "--", linewidth=0.25, 
                                      color=colours[wl_i])
                 
                     # Plot residuals below the vis2 plot
-                    residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, 1.0,
-                                                    u_lambda)
+                    n_points = (len(sfreq),)
+                    residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, 1.0,
+                                                       n_points, u_lambda,
+                                                       s_lambda)
             
                     res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
                                 elinewidth=0.25, capsize=0.4, 
-                                capthick=0.2, markersize=1, color=colours[wl_i])
+                                capthick=0.2, markersize=1, color=colours[wl_i],
+                                markeredgecolor="grey", markeredgewidth=0.01)
                                 
                     #axes[plt_i].legend(loc="best", fontsize="xx-small")
                     
@@ -964,30 +1000,39 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
         e_vis2 = e_vis2[:len(c_array)]
         ldd_fit = ldd_fit * s_lambdas[wl_i]
 
-        u_lambda = u_lambdas[wl_i]
-
         x = np.arange(1*10**6, 25*10**7, 10000)
-        y_fit = rdiam.calc_vis2_ls(x, ldd_fit, 1.0, u_lambda) 
+
+        u_lambda = u_lambdas[wl_i]
+        n_points = (len(x),)
+        s_lambda = 1
+
+        y_fit = rdiam.calc_vis2(x, ldd_fit, 1.0, n_points, u_lambda, s_lambda) 
 
         # Plot the data points and best fit curve
         axes.errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
                         label=wl_lbl[wl_i], elinewidth=0.1, capsize=0.2, 
-                        capthick=0.1, markersize=4.0, color=colours[wl_i])
+                        capthick=0.1, markersize=4.0, color=colours[wl_i],
+                        markeredgecolor="grey", markeredgewidth=0.05)
 
         axes.plot(x, y_fit, "--", linewidth=0.25, color=colours[wl_i])
-    
+
+        n_points = (len(sfreq),)
+        s_lambda = 1
+
         # Plot residuals below the vis2 plot
-        residuals = vis2 - rdiam.calc_vis2_ls(sfreq, ldd_fit, 1.0,
-                                        u_lambda)
+        residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, 1.0, n_points,
+                                           u_lambda, s_lambda)
 
         res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", elinewidth=0.1, 
                     capsize=0.2, capthick=0.1, markersize=4.0, 
-                    color=colours[wl_i])
+                    color=colours[wl_i], markeredgecolor="grey",
+                    markeredgewidth=0.05)
     
     # Plot the uniform disc diameter
     udd_fit = sci_results["UDD_FIT"]
     x = np.arange(1*10**6, 25*10**7, 10000)
-    y_fit = rdiam.calc_vis2_ls(x, udd_fit, 1.0, 0)
+    n_points = (len(x),)
+    y_fit = rdiam.calc_vis2(x, udd_fit, 1.0, n_points, 0, s_lambda)
     axes.plot(x, y_fit, "--", linewidth=0.25, color="black", 
               label=r"$\theta_{\rm UD}$") 
     
@@ -1130,11 +1175,6 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
     else:
         axes = np.array([axes])
     
-    # Normalise all scatter plots by the metallicity
-    mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
-    norm = plt.Normalize(tgt_info[mask]["FeH_rel"].min(), 
-                         tgt_info[mask]["FeH_rel"].max())
-    
     # Plot each subplot
     for ax_i, (ax, colour_rel) in enumerate(zip(axes, colour_rels)):
         # Format the colour relation
@@ -1213,10 +1253,14 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
                         yerr=err_res, fmt=".", elinewidth=0.5,  
                         ecolor="firebrick", capsize=0.8, capthick=0.5, 
                         zorder=1)
-    
+
+        # Normalise colour scale on all scatter plots using this mask
+        mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
+
         # Overplot scatter points so we can have [Fe/H] as colours
         if cbar == "feh":
-        
+            norm = plt.Normalize(tgt_info[mask]["FeH_rel"].min(), 
+                                 tgt_info[mask]["FeH_rel"].max())
             scatter = ax.scatter(fit_diams, colour_rel_diams, c=fehs,  
                                  marker="o",zorder=2, norm=norm)
             res_ax.scatter(fit_diams, residuals, c=fehs, marker="o", 
@@ -1225,6 +1269,8 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
     
         # Overplot scatter points so we can have Teff as colours
         elif cbar == "teff":
+            norm = plt.Normalize(tgt_info[mask]["teff_final"].min(), 
+                                 tgt_info[mask]["teff_final"].max())
             scatter = ax.scatter(fit_diams, colour_rel_diams, c=teffs, 
                                  marker="o", zorder=2, cmap="magma", norm=norm)
             res_ax.scatter(fit_diams, residuals, c=teffs, marker="o", zorder=2, 
@@ -1263,7 +1309,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
     
     # Plot the colourbar
     cb = fig.colorbar(scatter, ax=axes.ravel().tolist())
-    cb.set_label("[Fe/H]")
+    cb.set_label(cbar_label)
     
     plt.gcf().set_size_inches(12, 4)
     plt.savefig("paper/colour_rel_diam_comp_%s.pdf" % cbar, 
@@ -1513,10 +1559,12 @@ def plot_fbol_comp(tgt_info):
     check whether they are consistent or not.
     """
     plt.close("all")
-    plt.figure()
+    fig, axis = plt.subplots()
     
     # Define bands to reference, construct new headers
-    bands = ["Hp", "BT", "VT", "BP", "RP"]
+    bands = ["Hp", "BT", "VT"]#, "BP", "RP"]
+    band_lbl = [r"$f_{\rm bol (H_p)}$", r"$f_{\rm bol (B_T)}$", 
+                r"$f_{\rm bol (V_T)}$", r"$f_{\rm bol (final)}$"]
     f_bol_bands = ["f_bol_%s" % band for band in bands] + ["f_bol_final"]
     e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] + ["e_f_bol_final"]
     
@@ -1525,9 +1573,9 @@ def plot_fbol_comp(tgt_info):
     offset = lambda p: transforms.ScaledTranslation(p/72.,0, plt.gcf().dpi_scale_trans)
     trans = plt.gca().transData
     
-    tf = 7.5
+    tf = 4
     
-    colours = ["green", "blue", "orange", "deepskyblue", "red", "black"]
+    colours = ["green", "blue", "red", "black"]#"orange", "deepskyblue", "red", "black"]
     
     mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
@@ -1535,20 +1583,27 @@ def plot_fbol_comp(tgt_info):
     
     fbol = tgt_info[mask][f_bol_bands]
     e_fbol = tgt_info[mask][e_f_bol_bands]
-    
+
     for band_i, (fband, e_fband) in enumerate(zip(f_bol_bands, e_f_bol_bands)):
-        plt.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], elinewidth=0.5,
+        axis.errorbar(ids, fbol[fband], yerr=e_fbol[e_fband], elinewidth=0.3,
                      fmt=".", zorder=1, label="", ecolor="black",capsize=1,
-                     capthick=0.5, transform=trans+offset(-tf*(band_i-3)))
-        plt.scatter(ids, fbol[fband], s=2**4, c=colours[band_i], label=bands[band_i],
-                    zorder=2, transform=trans+offset(-tf*(band_i-3)))#, 
+                     capthick=0.3, transform=trans+offset(-tf*(band_i)+8),
+                     markersize=0.1)
+        axis.scatter(ids, fbol[fband], s=1**4, c=colours[band_i], label=band_lbl[band_i],
+                    zorder=2, transform=trans+offset(-tf*(band_i)+8))#, 
                     #marker="$%s$" % bands[band_i])
-                        
-    plt.xlabel("Star")
-    plt.ylabel(r"Flux (ergs s$^{-1}$ cm $^{-2}$)")
-    plt.yscale("log")
-    plt.legend(loc="best")
-    plt.gcf().set_size_inches(16, 9)
+
+    axis.yaxis.get_major_formatter().set_powerlimits((0,1))                   
+    axis.set_xlabel("Star")
+    axis.set_ylabel(r"Flux (ergs s$^{-1}$ cm $^{-2}$)")
+    plt.setp(axis.get_yticklabels(), fontsize="small")
+    plt.setp(axis.get_xticklabels(), fontsize="xx-small", rotation="vertical")
+    #plt.yscale("log")
+    legend = plt.legend(loc="best")
+    for handle in legend.legendHandles:
+        handle.set_sizes([20])
+
+    #plt.gcf().set_size_inches(16, 9)
     plt.savefig("paper/fbol_comp.pdf")
     
 
@@ -1663,8 +1718,8 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
     mask = np.logical_and(tgt_info["Science"], tgt_info["in_paper"])
     
 
-    abs_Vmag = tgt_info[mask]["Vmag"] - 5*np.log10(tgt_info[mask]["Dist"]/10) 
-    b_v = tgt_info[mask]["Bmag"] - tgt_info[mask]["Vmag"]
+    abs_Vmag = tgt_info[mask]["Vmag_dr"] - 5*np.log10(tgt_info[mask]["Dist"]/10) 
+    b_v = tgt_info[mask]["Bmag_dr"] - tgt_info[mask]["Vmag_dr"]
     
     plt.close("all")
     plt.scatter(b_v, abs_Vmag, s=100, c=tgt_info[mask]["FeH_rel"], marker="o")
@@ -1810,9 +1865,13 @@ def presentation_vis2_plot():
     plt.ylabel(r"Visibility$^2$")
     plt.tight_layout()
     
+    n_points = (len(freqs))
+    s_lambda = 1
+
     # First plot just the curves
     for ldd_i, ldd in enumerate(ldds):
-        vis2 = rdiam.calc_vis2_ls(freqs, ldd, c_scale, u_lld)
+        vis2 = rdiam.calc_vis2(freqs, ldd, c_scale, n_points, u_lld,
+                               s_lambda)
         
         plt.plot(freqs, vis2, label=r"$\theta_{\rm LD}$ = %0.1f mas" % ldd)
         plt.legend(loc="best")
@@ -1823,11 +1882,14 @@ def presentation_vis2_plot():
     # Next just the PIONIER points
     plt.text(0.5*xmax, 0.95, "PIONIER: 11-132m, H band", color="darkred", 
              ha='center')
-             
+    
+    n_points = (len(vlti_freqs),)
+
     for ldd in ldds:
         # PIONIER
         ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
-        vlti_vis2 = rdiam.calc_vis2_ls(vlti_freqs, ldd, c_scale, u_lld)
+        vlti_vis2 = rdiam.calc_vis2(vlti_freqs, ldd, c_scale, n_points, 
+                                    u_lld, s_lambda)
         plt.plot(vlti_freqs, vlti_vis2, ".", color="darkred") 
     
     plt.savefig("plots/presentation_vis2_vs_ldd_p.png")
@@ -1835,11 +1897,14 @@ def presentation_vis2_plot():
     # Finally the PAVO points
     plt.text(0.5*xmax, 0.9, "PAVO: 34-330m, R band", color="blue", 
              ha='center')
-             
+    
+    n_points = (len(chara_freqs),)
+
     for ldd in ldds:
         # CHARA
         ldd_rad = ldd / 1000 / 3600 / 180 * np.pi
-        chara_vis2 = rdiam.calc_vis2_ls(chara_freqs, ldd, c_scale, u_lld)
+        chara_vis2 = rdiam.calc_vis2(chara_freqs, ldd, c_scale, n_points,
+                                     u_lld, s_lambda)
         plt.plot(chara_freqs, chara_vis2, "+", color="blue")
     
     plt.tight_layout()

@@ -4,6 +4,7 @@ from __future__ import division, print_function
 import os
 import numpy as np
 import pandas as pd
+import astropy.constants as apc
 import reach.limb_darkening as rld
 import reach.utils as rutils
 # -----------------------------------------------------------------------------
@@ -132,7 +133,7 @@ def sample_bc_magnitudes(sampled_sci_params, tgt_info):
     star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
     
     # Initialise the new columns
-    mag_labels = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    mag_labels = ["Hpmag_dr", "BTmag_dr", "VTmag_dr", "BPmag_dr", "RPmag_dr"]
     e_mag_labels = ["e_Hpmag", "e_BTmag", "e_VTmag", "e_BPmag", "e_RPmag"]
     for mag in mag_labels:
         sampled_sci_params[mag] = 0
@@ -160,7 +161,7 @@ def compute_sampled_fbol(sampled_sci_params, band_mask=[1, 0, 0, 0, 0]):
     
     # Initialise the new columns
     bc_labels = ["BC_Hp", "BC_BT", "BC_VT", "BC_BP", "BC_RP"]
-    mag_labels = ["Hpmag", "BTmag", "VTmag", "BPmag", "RPmag"]
+    mag_labels = ["Hpmag_dr", "BTmag_dr", "VTmag_dr", "BPmag_dr", "RPmag_dr"]
     fbol_labels = ["f_bol_Hp", "f_bol_BT", "f_bol_VT", "f_bol_BP", "f_bol_RP"]
     e_fbol_labels = ["e_f_bol_Hp", "e_f_bol_BT", "e_f_bol_VT", "e_f_bol_BP", 
                      "e_f_bol_RP"]
@@ -310,7 +311,7 @@ def calc_all_f_bol(tgt_info, sampled_sci_params, band_mask=[1, 1, 1, 0, 0]):
     """
     # Define bands to reference, construct new headers
     bands = ["Hp", "BT", "VT", "BP", "RP"]
-    e_bands = ["e_%s" % band for band in bands] 
+    e_bands = ["e_%s_dr" % band for band in bands] 
     f_bol_bands = ["f_bol_%s" % band for band in bands] 
     e_f_bol_bands = ["e_f_bol_%s" % band for band in bands] 
     
@@ -356,8 +357,8 @@ def calc_all_r_star(sampled_sci_params):
     """Calculate the radius of each science target in units of Solar radii.
     """
     # Constants
-    pc = 3.0857*10**13 # km / pc
-    r_sun = 6.957 *10**5 # km
+    pc = apc.pc.value         # m / pc
+    r_sun = apc.R_sun.value   # m
     
     # Get the star IDs and do this one star at a time
     star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
@@ -367,14 +368,14 @@ def calc_all_r_star(sampled_sci_params):
     # Compute the physical radii
     for star in star_ids:
         # Convert to km and radians
-        dist_km = sampled_sci_params.loc[star]["Dist"].values * pc
+        dist_m = sampled_sci_params.loc[star]["Dist"].values * pc
         #e_dist_km = row["e_Dist"] * pc
         ldds = sampled_sci_params.loc[star]["LDD_FIT"].values 
         ldds_rad = ldds * np.pi/180/3600/1000
         #e_ldd_rad = row["e_ldd_final"] * np.pi/180/3600/1000
         
         # Calculate the stellar radii
-        r_stars = 0.5 * ldds_rad * dist_km / r_sun
+        r_stars = 0.5 * ldds_rad * dist_m / r_sun
         #e_r_star = r_star * ((e_ldd_rad/ldd_rad)**2
         #                     + (e_dist_km/dist_km)**2)**0.5
     
@@ -386,7 +387,7 @@ def calc_all_teff(sampled_sci_params):
     """Calculate the effective temperature for all stars
     """ 
     # Stefan-Boltzmann constant
-    sigma = 5.6704 * 10**-5 #erg cm^-2 s^-1 K^-4
+    sigma =  apc.sigma_sb.cgs.value #erg cm^-2 s^-1 K^-4
     
     # Get the star IDs and do this one star at a time
     star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
@@ -413,8 +414,8 @@ def calc_all_L_bol(sampled_sci_params):
     """Calculate the stellar luminosity with respect to Solar.
     """
     # Constants
-    L_sun = 3.839 * 10**33 # erg s^-1
-    pc = 3.0857*10**18 # cm / pc
+    L_sun = apc.L_sun.cgs.value   # erg s^-1
+    pc = apc.pc.cgs.value         # cm / pc
     
     # Get the star IDs and do this one star at a time
     star_ids = set(np.vstack(sampled_sci_params.index)[:,0])
@@ -446,8 +447,8 @@ def calc_all_L_bol(sampled_sci_params):
 def calc_f_bol(bc, mag):
     """Calculate the bolometric flux from a bolometric correction and mag.
     """
-    L_sun = 3.839 * 10**33 # erg s^-1
-    au = 1.495978707*10**13 # cm
+    L_sun = apc.L_sun.cgs.value # erg s^-1
+    au = apc.au.cgs.value       # cm
     M_bol_sun = 4.75
     
     exp = -0.4 * (bc - M_bol_sun + mag - 10)
@@ -460,8 +461,8 @@ def calc_f_bol(bc, mag):
 def calc_L_star(tgt_info):
     """Calculate the absolute stellar luminosity using the bolometric magnitude 
     """
-    L_sun = 3.839 * 10**33 # erg s^-1
-    au = 1.495978707*10**13 # cm
+    L_sun = apc.L_sun.cgs.value # erg s^-1
+    au = apc.au.cgs.value       # cm
     M_bol_sun = 4.75
     
     tgt_info["L_star"] = 10**(-0.4 * (tgt_info["M_bol"] - M_bol_sun))
