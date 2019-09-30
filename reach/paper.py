@@ -169,7 +169,8 @@ def make_table_seq_results(results):
                            #("HD", ""),
                            ("Period", ""),
                            ("Sequence", ""),
-                           ("C", "")])
+                           (r"C$_{\rm LD}$", ""),
+                           (r"C$_{\rm UD}$", "")])
                            
     header = []
     table_rows = []
@@ -196,8 +197,10 @@ def make_table_seq_results(results):
             table_row += "%s & " % rutils.format_id(str(id))
             table_row += "%s & " % period
             table_row += "%s & " % sequence
-            table_row += "%0.3f $\pm$ %0.3f" % (row["C_SCALE"][seq_i],
-                                              row["e_C_SCALE"][seq_i])
+            table_row += "%0.3f $\pm$ %0.3f & " % (row["C_SCALE"][seq_i],
+                                                   row["e_C_SCALE"][seq_i])
+            table_row += "%0.3f $\pm$ %0.3f" % (row["C_SCALE_UDD"][seq_i],
+                                                row["e_C_SCALE_UDD"][seq_i])
         
             table_rows.append(table_row + r"\\")
     
@@ -470,7 +473,7 @@ def make_table_targets(tgt_info):
     table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018}, "
                       "$^b$SIMBAD, $^c$Tycho \citet{hog_tycho-2_2000}, "
                       "$^d$2MASS \citet{skrutskie_two_2006} \\\\")
-    table_rows.append(" \\textbf{References for $T_{\\rm eff}$, logg, [Fe/H]"
+    table_rows.append(" \\textbf{References for T$_{\\rm eff}$, logg, [Fe/H]"
                       ", and vsini:}") 
     
     for ref_i, ref in enumerate(references):

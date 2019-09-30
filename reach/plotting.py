@@ -737,9 +737,6 @@ def plot_paper_vis2_fits(results, n_rows=8, n_cols=2):
 def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
     """Plot the rescaled simultaneous fits for multiple sequences
     """
-    #results = results.drop(3)
-    #results.set_index(np.arange(len(results)))
-       
     plt.close("all")
     with PdfPages("paper/joint_seq_vis2_plots.pdf") as pdf:
         # Figure out how many sets of plots are needed
@@ -837,6 +834,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                     ldd_fit = ldd_fit * s_lambdas[wl_i]
                     
                     u_lambda = u_lambdas[wl_i]
+                    s_lambda = s_lambdas[wl_i]
                     
                     # Apply mask
                     vis2 = vis2[valid_i]
@@ -846,7 +844,6 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                     x = np.arange(1*10**6, 25*10**7, 10000)
 
                     n_points = (len(x),)
-                    s_lambda = 1
 
                     y_fit = rdiam.calc_vis2(x, ldd_fit, 1.0, n_points,
                                             u_lambda, s_lambda) 
@@ -1003,8 +1000,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
         x = np.arange(1*10**6, 25*10**7, 10000)
 
         u_lambda = u_lambdas[wl_i]
+        s_lambda = s_lambdas[wl_i]
         n_points = (len(x),)
-        s_lambda = 1
 
         y_fit = rdiam.calc_vis2(x, ldd_fit, 1.0, n_points, u_lambda, s_lambda) 
 
@@ -1017,7 +1014,6 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
         axes.plot(x, y_fit, "--", linewidth=0.25, color=colours[wl_i])
 
         n_points = (len(sfreq),)
-        s_lambda = 1
 
         # Plot residuals below the vis2 plot
         residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, 1.0, n_points,
@@ -1148,6 +1144,12 @@ def plot_lit_diam_comp(tgt_info):
     ax.set_ylim(ylim)
     res_ax.set_xlim(xlim)
     
+    # Setup residual y axis
+    maj_loc = plticker.MultipleLocator(base=0.1)
+    min_loc = plticker.MultipleLocator(base=0.05)
+    res_ax.yaxis.set_major_locator(maj_loc)
+    res_ax.yaxis.set_minor_locator(min_loc)
+
     # Setup the rest of the plot
     ax.set_ylabel(r"$\theta_{\rm Lit}$ (mas)")  
     res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
@@ -1398,6 +1400,12 @@ def plot_casagrande_teff_comp(tgt_info):
     cb.set_label("[Fe/H]")
     res_ax.scatter(final_teffs, residuals, c=fehs, marker="o", zorder=2)
     
+    # Setup residual y axis
+    maj_loc = plticker.MultipleLocator(base=150)
+    min_loc = plticker.MultipleLocator(base=75)
+    res_ax.yaxis.set_major_locator(maj_loc)
+    res_ax.yaxis.set_minor_locator(min_loc)
+
     # Plot the two lines
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()

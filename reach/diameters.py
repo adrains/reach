@@ -1083,6 +1083,7 @@ def fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, results_path,
         bs_results[star]["C_SCALE"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["SEQ_ORDER"] = np.zeros((n_bootstraps, 0)).tolist()
         bs_results[star]["UDD_FIT"] = np.zeros((n_bootstraps, 0)).tolist()
+        bs_results[star]["C_SCALE_UDD"] = np.zeros((n_bootstraps, 0)).tolist()
     
     # Fit a LDD for every bootstrap iteration, and save the vis2, time, 
     # baseline, and wavelength information from each iteration
@@ -1160,6 +1161,7 @@ def fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, results_path,
                 bs_results[star]["C_SCALE"][bs_i] = np.vstack(ldd_fits[star][2])
                 bs_results[star]["SEQ_ORDER"][bs_i] = np.vstack(seq_order[star])
                 bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
+                bs_results[star]["C_SCALE_UDD"][bs_i] = np.vstack(udd_fits[star][2])
             
             else:
                 bs_results[star]["MJD"][bs_i] = mjds[star]
@@ -1172,6 +1174,7 @@ def fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, results_path,
                 bs_results[star]["C_SCALE"][bs_i] = ldd_fits[star][2]
                 bs_results[star]["SEQ_ORDER"][bs_i] = np.vstack(seq_order[star])
                 bs_results[star]["UDD_FIT"][bs_i] = udd_fits[star][0]
+                bs_results[star]["C_SCALE_UDD"][bs_i] = udd_fits[star][2]
 
     
     # A minority of bootstraps result in a different number of observed 
@@ -1233,7 +1236,7 @@ def summarise_results(bs_results, tgt_info, e_wl_frac, add_e_wl_to_ldd_in_quad,
     cols = ["STAR", "HD", "PERIOD", "SEQUENCE", "VIS2", "e_VIS2", "BASELINE", 
             "WAVELENGTH", "LDD_FIT", "e_LDD_FIT", "C_SCALE", "e_C_SCALE", 
             "SEQ_ORDER", "U_LAMBDA", "e_U_LAMBDA", "S_LAMBDA", "e_S_LAMBDA", 
-            "UDD_FIT", "e_UDD_FIT"]
+            "UDD_FIT", "e_UDD_FIT", "C_SCALE_UDD", "e_C_SCALE_UDD"]
             
     results = pd.DataFrame(index=np.arange(0, len(bs_results.keys())), 
                            columns=cols)  
@@ -1306,13 +1309,24 @@ def summarise_results(bs_results, tgt_info, e_wl_frac, add_e_wl_to_ldd_in_quad,
             results.iloc[star_i]["e_C_SCALE"] = \
                 np.nanstd(np.hstack(bs_results[star]["C_SCALE"]), axis=1) 
             
+            results.iloc[star_i]["C_SCALE_UDD"] = \
+                np.nanmean(np.hstack(bs_results[star]["C_SCALE_UDD"]), axis=1)
+     
+            results.iloc[star_i]["e_C_SCALE_UDD"] = \
+                np.nanstd(np.hstack(bs_results[star]["C_SCALE_UDD"]), axis=1) 
         # Split seq case
         else:
             results.iloc[star_i]["C_SCALE"] = \
                 np.nanmean(np.vstack(bs_results[star]["C_SCALE"]), axis=0)
      
             results.iloc[star_i]["e_C_SCALE"] = \
-                np.nanstd(np.vstack(bs_results[star]["C_SCALE"]), axis=0)   
+                np.nanstd(np.vstack(bs_results[star]["C_SCALE"]), axis=0)
+            
+            results.iloc[star_i]["C_SCALE_UDD"] = \
+                np.nanmean(np.vstack(bs_results[star]["C_SCALE_UDD"]), axis=0)
+     
+            results.iloc[star_i]["e_C_SCALE_UDD"] = \
+                np.nanstd(np.vstack(bs_results[star]["C_SCALE_UDD"]), axis=0) 
         
         # If we're bootstrapping, the order of the sequences shouldn't change
         # from iteration to iteration, so just take the first value
