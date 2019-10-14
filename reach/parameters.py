@@ -2,6 +2,7 @@
 """
 from __future__ import division, print_function
 import os
+import sys
 import numpy as np
 import pandas as pd
 import astropy.constants as apc
@@ -109,6 +110,9 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False,
                                  tgt_info.loc[id, "e_FeH_rel"], n_bootstraps)
                                   
         # Sample equivalent linear coefficients + scaling parameter
+        print("Sampling parameters for %s..." % tgt_info.loc[id]["Primary"], 
+              end="")
+        sys.stdout.flush()
         n_u_lambda = rld.sample_lld_coeff(n_logg, n_teff, n_feh, 
                                             use_claret_params)
         

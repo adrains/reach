@@ -211,7 +211,6 @@ def plot_all_vis2_fits(results, tgt_info):
             #except:
                 #print("Failed on star #%i, %s" % (star_i, sci))
             
-            
 
 def plot_ldd_hists(n_ldd_fit, n_bins=10):
     """Function to plot a grid of histogram for LDD realisations from each 
@@ -1296,7 +1295,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
         res_ax.yaxis.set_major_locator(loc)
     
         # Setup the rest of the plot
-        ax.set_ylabel(r"$\theta_{\rm %s}$ (mas)" % colour_rel)  
+        ax.set_ylabel(r"$\theta_{(%s)}$ (mas)" % colour_rel)  
         res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
         res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" 
                           % colour_rel)  
@@ -1423,9 +1422,9 @@ def plot_casagrande_teff_comp(tgt_info):
     #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
     
     # Setup the rest of the plot
-    ax.set_ylabel(r"T$_{\rm eff, Casagrande+2010}$ (K)")  
-    res_ax.set_xlabel(r"T$_{\rm eff, PIONIER}$ (K)")  
-    res_ax.set_ylabel(r"T$_{\rm eff, residuals}$ (K)")  
+    ax.set_ylabel(r"$T_{\rm eff, Casagrande+2010}$ (K)")  
+    res_ax.set_xlabel(r"$T_{\rm eff, PIONIER}$ (K)")  
+    res_ax.set_ylabel(r"$T_{\rm eff, residuals}$ (K)")  
     #ax.legend(loc="best")
     
     plt.tight_layout()
@@ -1603,7 +1602,7 @@ def plot_fbol_comp(tgt_info):
 
     axis.yaxis.get_major_formatter().set_powerlimits((0,1))                   
     axis.set_xlabel("Star")
-    axis.set_ylabel(r"Flux (ergs s$^{-1}$ cm $^{-2}$)")
+    axis.set_ylabel(r"$f_{\rm bol}$ (ergs s$^{-1}$ cm $^{-2}$)")
     plt.setp(axis.get_yticklabels(), fontsize="small")
     plt.setp(axis.get_xticklabels(), fontsize="xx-small", rotation="vertical")
     #plt.yscale("log")
@@ -1805,8 +1804,8 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
     
     plt.xlim([0, 1.5])
     plt.ylim([7.5, 0])
-    plt.xlabel(r"B-V")#(r"B$_{\rm T}$-V$_{\rm T}$")
-    plt.ylabel(r"V$_{\rm abs}$")#(r"V$_{\rm T, abs}$")
+    plt.xlabel(r"$(B-V)$")#(r"B$_{\rm T}$-V$_{\rm T}$")
+    plt.ylabel(r"$V_{\rm abs}$")#(r"V$_{\rm T, abs}$")
     plt.tight_layout()
     plt.savefig("paper/hr_diagram.pdf")
 

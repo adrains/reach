@@ -20,10 +20,10 @@ import pickle
 lb_pc = 70                          # The size of the local bubble in pc
 use_plx_systematic = True           # Use Stassun & Torres 18 plx offset
 combined_fit = True                 # Fit for LDD for multiple seq at once
-load_saved_results = True           # Load or do fitting fresh
+load_saved_results = False           # Load or do fitting fresh
 assign_default_uncertainties = True # Give default errors to stars without
 force_claret_params = False         # Force use of Claret+11 limb d. params
-n_bootstraps = 3000
+n_bootstraps = 3500
 fitting_method = "ls"               # Fitting method to use: ls or odr
 e_wl_frac = 0.0035                  # Fractional error on wl scale
 
@@ -36,7 +36,8 @@ else:
     add_e_wl_to_ldd_in_quad = False
 
 #results_folder = "19-06-27_i2000"       # Parallel!
-results_folder = "19-07-05_i3000"       # Long run with all bad cals removed
+#results_folder = "19-07-05_i3000"       # Long run with all bad cals removed
+results_folder = "19-09-30_i5000"       # Final run for 1st draft
 results_path = "results/%s/" % results_folder
 
 # Path to Casagrande & VandenBerg 2014/2018a/2018b bolometric correction code

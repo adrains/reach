@@ -24,11 +24,11 @@ def make_table_final_results(tgt_info):
                            #(r"s$_\lambda$", ""),
                            (r"$\theta_{\rm UD}$", "(mas)"),
                            (r"$\theta_{\rm LD}$", "(mas)"),
-                           (r"R", "($R_\odot$)"), 
-                           (r"f$_{\rm bol}$", 
+                           (r"$R$", "($R_\odot$)"), 
+                           (r"$f_{\rm bol}$", 
                             r"(10$^{%i}\,$ergs s$^{-1}$ cm $^{-2}$)" % exp_scale),
-                           (r"T$_{\rm eff}$", "(K)"),
-                           ("L", ("($L_\odot$)"))])
+                           (r"$T_{\rm eff}$", "(K)"),
+                           (r"$L$", ("($L_\odot$)"))])
                            
     header = []
     table_rows = []
@@ -54,7 +54,7 @@ def make_table_final_results(tgt_info):
         table_row += "%s & " % rutils.format_id(row["Primary"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["udd_final"], row["e_udd_final"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
-        table_row += r"%0.2f $\pm$ %0.2f &" % (row["r_star_final"], row["e_r_star_final"])
+        table_row += r"%0.2f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
         
         # For fbol representation, split mantissa and exponent
         table_row += r"%5.1f $\pm$ %0.1f &" % (row["f_bol_final"] / 10**exp_scale, 
@@ -169,8 +169,8 @@ def make_table_seq_results(results):
                            #("HD", ""),
                            ("Period", ""),
                            ("Sequence", ""),
-                           (r"C$_{\rm LD}$", ""),
-                           (r"C$_{\rm UD}$", "")])
+                           (r"$C_{\rm LD}$", ""),
+                           (r"$C_{\rm UD}$", "")])
                            
     header = []
     table_rows = []
@@ -223,7 +223,7 @@ def make_table_fbol(tgt_info):
     
     columns = OrderedDict([("Star", ""),
                            ("HD", ""),
-                           (r"f$_{\rm bol}$ (MARCS)", 
+                           (r"$f_{\rm bol}$ (MARCS)", 
                            r"(10$^{%i}\,$ergs s$^{-1}$ cm $^{-2}$)" % exp_scale),
                            (r"$\sigma_{f_{\rm bol}} (\zeta)$", r"(\%)")])
                            #(r"f$_{\rm bol} (avg)$", r"(ergs s$^{-1}$ cm $^{-2}$)")])
@@ -258,22 +258,17 @@ def make_table_fbol(tgt_info):
         table_row += "%s & " % rutils.format_id(star["Primary"])
         table_row += "%s & " % star.name.replace("HD", "")
         
-        if not np.isnan(star["f_bol_Hp"]):
-            table_row += r"H$_p$: %.3f & " % (star["f_bol_Hp"] / 10**exp_scale)
-        
-            e_pc_f_bol_hp = star["e_f_bol_Hp"] / star["f_bol_Hp"]
-        
-            table_row += r"%.2f \\" % (e_pc_f_bol_hp * 100)
-        else:
-            table_row += r"H$_p$: %s & %s \\" % ("-"*13, "-"*5)
-        
-        #table_row += r"%.3E $\pm$ %0.3E \\" % (star["f_bol_final"], 
-        #                                       star["e_f_bol_final"])
+        # Add final average value
+        table_row += r"$<>$: %.3f & " % (star["f_bol_final"] / 10**exp_scale)
+    
+        e_pc_f_bol_final = star["e_f_bol_final"] / star["f_bol_final"]
+    
+        table_row += r"%.2f \\" % (e_pc_f_bol_final * 100)
         
         table_rows.append(table_row)
         
         # Now have a separate row for each of the remaining filters
-        for band_i in np.arange(1, len(bands)):
+        for band_i in np.arange(len(bands)):
             table_row = r" & & %s: %.3f &" % (bands[band_i], 
                                         star[f_bols[band_i]] / 10**exp_scale)
             
@@ -374,10 +369,10 @@ def make_table_targets(tgt_info):
                            ("SpT$^b$", ""),
                            ("$V_{\\rm T}$^c$", "(mag)"), 
                            ("$H^d$", "(mag)"),
-                           ("T$_{\\rm eff}$", "(K)"),
-                           ("logg", "(dex)"), 
+                           ("$T_{\\rm eff}$", "(K)"),
+                           (r"$\log g$", "(dex)"), 
                            ("[Fe/H]", "(dex)"),
-                           ("vsini", r"(km$\,$s$^{-1}$)"),
+                           (r"$v \sin i$", r"(km$\,$s$^{-1}$)"),
                            ("Plx$^a$", "(mas)"),
                            ("Refs", "")])#,
                            #("Mission", "")])         
@@ -473,8 +468,8 @@ def make_table_targets(tgt_info):
     table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018}, "
                       "$^b$SIMBAD, $^c$Tycho \citet{hog_tycho-2_2000}, "
                       "$^d$2MASS \citet{skrutskie_two_2006} \\\\")
-    table_rows.append(" \\textbf{References for T$_{\\rm eff}$, logg, [Fe/H]"
-                      ", and vsini:}") 
+    table_rows.append(" \\textbf{References for $T_{\\rm eff}$, $\\log g$, "
+                      "[Fe/H], and $v \\sin i$:}") 
     
     for ref_i, ref in enumerate(references):
         table_rows.append("%i. \\citet{%s}, " % (ref_i+1, ref))
@@ -497,9 +492,9 @@ def make_table_calibrators(tgt_info, sequences):
     columns = OrderedDict([("HD", ""),
                            ("SpT$^a$", "(Actual)$^a$"),
                            ("SpT$^b$", "(Adopted)$^b$"),
-                           ("VTmag$^c$", "(mag)"), 
-                           ("Hmag$^d$", "(mag)"),
-                           ("E(B-V)", "(mag)"),
+                           (r"$V_{\rm T}$^c$", "(mag)"), 
+                           (r"$H$^d$", "(mag)"),
+                           (r"$E(B-V)$", "(mag)"),
                            ("$\\theta_{\\rm pred}$", "(mas)"),
                            ("$\\theta_{\\rm LD}$ Rel", ""),
                            ("Used", ""),
@@ -569,7 +564,7 @@ def make_table_calibrators(tgt_info, sequences):
         else:
             table_row += r"%0.3f $\pm$ %0.2f & " % (star["LDD_pred"], star["e_LDD_pred"])
             
-        table_row += ("%s & " % star["LDD_rel"]).split("_")[-1]
+        table_row += ("%s & " % star["LDD_rel"]).split("LDD_")[-1]
         
         # Determine whether the star was used as a calibrator
         if star["Quality"] == "BAD":

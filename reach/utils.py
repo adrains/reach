@@ -626,6 +626,28 @@ def summarise_cs(results):
     print("AVG: %0.2f \pm %0.2f" % (cs.mean(), cs.std()))
     print("Bright: %0.2f \pm %0.2f" % (cs[bmask].mean(), cs[bmask].std()))  
     print("Faint: %0.2f \pm %0.2f" % (cs[fmask].mean(), cs[fmask].std())) 
+
+
+def summarise_percentages(tgt_info):
+    """
+    """
+    mask = tgt_info["Science"] & tgt_info["in_paper"]
+
+    udd_pc = tgt_info[mask]["e_udd_final"]/tgt_info[mask]["udd_final"] * 100
+    ldd_pc = tgt_info[mask]["e_ldd_final"]/tgt_info[mask]["ldd_final"] * 100
+    rad_pc = tgt_info[mask]["e_r_star_final"]/tgt_info[mask]["r_star_final"] * 100
+    fb_pc = tgt_info[mask]["e_f_bol_final"]/tgt_info[mask]["f_bol_final"] * 100
+    l_pc = tgt_info[mask]["e_L_star_final"]/tgt_info[mask]["L_star_final"] * 100
+    teff_pc = tgt_info[mask]["e_teff_final"]/tgt_info[mask]["teff_final"] * 100
+
+    print("Mean UDD precision: %0.2f %%" % udd_pc.mean())
+    print("Mean LDD precision: %0.2f %%" % ldd_pc.mean())
+    print("Mean R precision: %0.2f %%" % rad_pc.mean())
+    print("Mean fbol precision: %0.2f %%" % fb_pc.mean())
+    print("Mean L precision: %0.2f %%" % l_pc.mean())
+    print("Mean Teff precision: %0.2f %%" % teff_pc.mean())
+
+
 # -----------------------------------------------------------------------------
 # Formatting
 # ----------------------------------------------------------------------------- 

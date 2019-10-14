@@ -57,9 +57,11 @@ def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
         n_u_lld = np.concatenate((elcs, scls)).T
         
         # Succeeded
+        print("using Stagger grid.")
         out_of_stagger_bounds = False
-    
+        
     except:
+        print("using Claret grid.")
         out_of_stagger_bounds = True
         
     # If we were out of grid bounds entirely, or some of the time, use Claret
