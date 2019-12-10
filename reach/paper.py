@@ -54,7 +54,7 @@ def make_table_final_results(tgt_info):
         table_row += "%s & " % rutils.format_id(row["Primary"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["udd_final"], row["e_udd_final"])
         table_row += r"%0.3f $\pm$ %0.3f & " % (row["ldd_final"], row["e_ldd_final"])
-        table_row += r"%0.2f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
+        table_row += r"%0.3f $\pm$ %0.3f &" % (row["r_star_final"], row["e_r_star_final"])
         
         # For fbol representation, split mantissa and exponent
         table_row += r"%5.1f $\pm$ %0.1f &" % (row["f_bol_final"] / 10**exp_scale, 
@@ -468,8 +468,8 @@ def make_table_targets(tgt_info):
     table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018}, "
                       "$^b$SIMBAD, $^c$Tycho \citet{hog_tycho-2_2000}, "
                       "$^d$2MASS \citet{skrutskie_two_2006} \\\\")
-    table_rows.append(" \\textbf{References for $T_{\\rm eff}$, $\\log g$, "
-                      "[Fe/H], and $v \\sin i$:}") 
+    table_rows.append(" \\textbf{References for spectroscopic $T_{\\rm eff}$, "
+                      "$\\log g$, [Fe/H], and $v \\sin i$:}") 
     
     for ref_i, ref in enumerate(references):
         table_rows.append("%i. \\citet{%s}, " % (ref_i+1, ref))

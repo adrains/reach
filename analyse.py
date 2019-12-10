@@ -23,7 +23,7 @@ combined_fit = True                 # Fit for LDD for multiple seq at once
 load_saved_results = False           # Load or do fitting fresh
 assign_default_uncertainties = True # Give default errors to stars without
 force_claret_params = False         # Force use of Claret+11 limb d. params
-n_bootstraps = 3500
+n_bootstraps = 5000
 fitting_method = "ls"               # Fitting method to use: ls or odr
 e_wl_frac = 0.0035                  # Fractional error on wl scale
 

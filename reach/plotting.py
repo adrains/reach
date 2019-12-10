@@ -791,7 +791,7 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                 #colours = ["mistyrose", "coral", "orangered", "red", 
                 #           "firebrick", "maroon"]
                 cmap = cm.get_cmap("magma")
-                colours = [cmap(i) for i in np.arange(0.96,0,-0.16)]
+                colours = [cmap(i) for i in np.arange(0.84,0,-0.14)]
                            
                 wl_um = [1.533, 1.581, 1.629, 1.677, 1.725, 1.773]
                 wl_lbl = [r"%s$\,\mu$m" % wl for wl in wl_um]
@@ -849,11 +849,11 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
     
                     # Plot the data points and best fit curve
                     axes[plt_i].errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
-                                    label=wl_lbl[wl_i], elinewidth=0.25, capsize=0.4, 
-                                    capthick=0.2, markersize=1, color=colours[wl_i],
+                                    label=wl_lbl[wl_i], elinewidth=0.3, capsize=0.6, 
+                                    capthick=0.3, markersize=3, color=colours[wl_i],
                                     markeredgecolor="grey", markeredgewidth=0.01)
     
-                    axes[plt_i].plot(x, y_fit, "--", linewidth=0.25, 
+                    axes[plt_i].plot(x, y_fit, "--", linewidth=0.4, 
                                      color=colours[wl_i])
                 
                     # Plot residuals below the vis2 plot
@@ -863,8 +863,8 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                                                        s_lambda)
             
                     res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", 
-                                elinewidth=0.25, capsize=0.4, 
-                                capthick=0.2, markersize=1, color=colours[wl_i],
+                                elinewidth=0.3, capsize=0.6, 
+                                capthick=0.3, markersize=3, color=colours[wl_i],
                                 markeredgecolor="grey", markeredgewidth=0.01)
                                 
                     #axes[plt_i].legend(loc="best", fontsize="xx-small")
@@ -909,12 +909,12 @@ def plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=3, n_cols=2):
                 res_ax.set_xlim([0.0,10E7])
                 res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
                 
-                plt.setp(axes[plt_i].get_xticklabels(), fontsize="xx-small")
-                plt.setp(axes[plt_i].get_yticklabels(), fontsize="xx-small")
-                plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
-                plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
-                res_ax.xaxis.offsetText.set_fontsize("xx-small")
-                res_ax.yaxis.offsetText.set_fontsize("xx-small")
+                plt.setp(axes[plt_i].get_xticklabels(), fontsize="small")
+                plt.setp(axes[plt_i].get_yticklabels(), fontsize="small")
+                plt.setp(res_ax.get_xticklabels(), fontsize="small")
+                plt.setp(res_ax.get_yticklabels(), fontsize="small")
+                res_ax.xaxis.offsetText.set_fontsize("small")
+                res_ax.yaxis.offsetText.set_fontsize("small")
                 
             # -----------------------------------------------------------------
             # Finalise
@@ -962,7 +962,7 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
                  for ni, n in enumerate(n_points)])
     
     cmap = cm.get_cmap("magma")
-    colours = [cmap(i) for i in np.arange(0.96,0,-0.16)]
+    colours = [cmap(i) for i in np.arange(0.84,0,-0.14)]
                
     wl_um = [1.533, 1.581, 1.629, 1.677, 1.725, 1.773]
     wl_lbl = [r"%s$\,\mu$m" % wl for wl in wl_um]
@@ -1006,11 +1006,11 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
 
         # Plot the data points and best fit curve
         axes.errorbar(sfreq, vis2, yerr=e_vis2, fmt=".", 
-                        label=wl_lbl[wl_i], elinewidth=0.1, capsize=0.2, 
-                        capthick=0.1, markersize=4.0, color=colours[wl_i],
+                        label=wl_lbl[wl_i], elinewidth=0.3, capsize=0.6, 
+                        capthick=0.3, markersize=6.0, color=colours[wl_i],
                         markeredgecolor="grey", markeredgewidth=0.05)
 
-        axes.plot(x, y_fit, "--", linewidth=0.25, color=colours[wl_i])
+        axes.plot(x, y_fit, "--", linewidth=0.4, color=colours[wl_i])
 
         n_points = (len(sfreq),)
 
@@ -1018,8 +1018,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
         residuals = vis2 - rdiam.calc_vis2(sfreq, ldd_fit, 1.0, n_points,
                                            u_lambda, s_lambda)
 
-        res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", elinewidth=0.1, 
-                    capsize=0.2, capthick=0.1, markersize=4.0, 
+        res_ax.errorbar(sfreq, residuals, yerr=e_vis2, fmt=".", elinewidth=0.3, 
+                    capsize=0.6, capthick=0.3, markersize=6.0, 
                     color=colours[wl_i], markeredgecolor="grey",
                     markeredgewidth=0.05)
     
@@ -1028,10 +1028,10 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     x = np.arange(1*10**6, 25*10**7, 10000)
     n_points = (len(x),)
     y_fit = rdiam.calc_vis2(x, udd_fit, 1.0, n_points, 0, s_lambda)
-    axes.plot(x, y_fit, "--", linewidth=0.25, color="black", 
+    axes.plot(x, y_fit, "--", linewidth=0.4, color="black", 
               label=r"$\theta_{\rm UD}$") 
     
-    axes.legend(loc="best", fontsize="xx-small")
+    axes.legend(loc="best", fontsize="small")
     
     # Set up ticks and axes
     axes.set_xlim([5.5E7,9.5E7])
@@ -1062,12 +1062,12 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     
     res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
     
-    plt.setp(axes.get_xticklabels(), fontsize="xx-small")
-    plt.setp(axes.get_yticklabels(), fontsize="xx-small")
-    plt.setp(res_ax.get_xticklabels(), fontsize="xx-small")
-    plt.setp(res_ax.get_yticklabels(), fontsize="xx-small")
-    res_ax.xaxis.offsetText.set_fontsize("xx-small")
-    res_ax.yaxis.offsetText.set_fontsize("xx-small")
+    plt.setp(axes.get_xticklabels(), fontsize="small")
+    plt.setp(axes.get_yticklabels(), fontsize="small")
+    plt.setp(res_ax.get_xticklabels(), fontsize="small")
+    plt.setp(res_ax.get_yticklabels(), fontsize="small")
+    res_ax.xaxis.offsetText.set_fontsize("small")
+    res_ax.yaxis.offsetText.set_fontsize("small")
         
     plt.tight_layout(pad=1.0)
     plt.savefig("paper/lam_sgr_sidelobe.pdf") 
@@ -1111,13 +1111,24 @@ def plot_lit_diam_comp(tgt_info):
             calc_diams.append(tgt_info.loc[star["HD"]]["ldd_final"])
             e_calc_diams.append(tgt_info.loc[star["HD"]]["e_ldd_final"])
             
+
+            if lit_diams[-1] < 1.2:
+                yy = 0.06
+                xx = -0.05
+            elif lit_diams[-1] > calc_diams[-1]:
+                yy = 0.05
+                xx = 0.0
+            else:
+                yy = 0.0
+                xx = 0.01
+
             # Plot the name of the star
             ax.annotate(rutils.format_id(star["Primary"].replace(" ", "")), 
                         xy=(calc_diams[-1], lit_diams[-1]), 
-                        xytext=(calc_diams[-1]+0.01, lit_diams[-1]+0.01), 
+                        xytext=(calc_diams[-1]+xx, lit_diams[-1]+yy), 
                         #arrowprops=dict(facecolor="black", width=0.1, 
                         #                headwidth=0.1),
-                        fontsize="xx-small")
+                        verticalalignment="center", fontsize="small")
                         
         # Plot the points
         ax.errorbar(calc_diams, lit_diams, xerr=e_calc_diams, yerr=e_lit_diams, 
@@ -1150,9 +1161,10 @@ def plot_lit_diam_comp(tgt_info):
     res_ax.yaxis.set_minor_locator(min_loc)
 
     # Setup the rest of the plot
-    ax.set_ylabel(r"$\theta_{\rm Lit}$ (mas)")  
-    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
-    res_ax.set_ylabel(r"$\theta_{\rm Lit} / \theta_{\rm PIONIER}$")  
+    ax.set_ylabel(r"$\theta_{\rm Lit}$ (mas)", fontsize="large")
+    res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)", fontsize="large")
+    res_ax.set_ylabel(r"$\theta_{\rm Lit} / \theta_{\rm PIONIER}$",
+                     fontsize="large")
     ax.legend(loc="best")
     
     plt.tight_layout()
@@ -1319,7 +1331,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
                 bbox_inches="tight", dpi=500)   
         
 
-def plot_casagrande_teff_comp(tgt_info):
+def plot_casagrande_teff_comp(tgt_info, xy_map=None):
     """Plot for paper comparing measured LDD vs Boyajian colour relation diams.
     """
     plt.close("all")
@@ -1361,7 +1373,12 @@ def plot_casagrande_teff_comp(tgt_info):
         xy = np.abs(np.array(xy_txt) - xy_abs)
         sep = 50
         
-        if len(xy_txt) > 0 and (xy < sep).any():
+        # Import the provided xy_map if given
+        if xy_map is not None:
+            xx = xy_map[star_data["Primary"]][0]
+            yy = xy_map[star_data["Primary"]][1]
+
+        elif len(xy_txt) > 0 and (xy < sep).any():
             xx = 25
             yy = 200
         else:
@@ -1371,10 +1388,10 @@ def plot_casagrande_teff_comp(tgt_info):
         # Plot the name of the star
         ax.annotate(rutils.format_id(star_data["Primary"]),  
                     xy=(final_teffs[-1],casagrande_teffs[-1]), 
-                    xytext=(final_teffs[-1]+xx, casagrande_teffs[-1]-yy), 
+                    xytext=(final_teffs[-1]+xx, casagrande_teffs[-1]+yy), 
                     #arrowprops=dict(facecolor="black", width=0.0, 
                                     #headwidth=0.0),
-                    fontsize="xx-small")
+                    fontsize="small", horizontalalignment="center")
                     
         xy_txt.append(xy_abs)
                         
@@ -1737,15 +1754,18 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
     star_ids = rutils.format_id(tgt_info[mask]["Primary"].values)
     for star_i, star in enumerate(star_ids):
         if tgt_info[mask]["Primary"][star_i] in ("epsInd", "chiEri"):
-            yy = -0.0
-            xx = 0.075
+            yy = -0.05
+            xx = 0.1
+        elif tgt_info[mask]["Primary"][star_i] in ("37Lib"):
+            yy = 0.3
+            xx = 0.0
         else:
             yy = 0.2
             xx = 0.0
         
         plt.annotate(star, xy=(b_v[star_i], abs_Vmag[star_i]), 
                     xytext=(b_v[star_i]-xx, abs_Vmag[star_i]-yy), 
-                    fontsize="x-small", horizontalalignment="center")
+                    fontsize="small", horizontalalignment="center")
     
     # Plot Padova isochrones. Note that these are for constant *age*
     if plot_isochrones_padova:
@@ -1790,12 +1810,26 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
                      label=r"M$_\odot$=%0.2f" % masses[mass_i], alpha=0.5, 
                      zorder=2, linewidth=0.5)
             
-            xx = 0.01
-            yy = 0.1
+            # Make sure track mass labels don't overlap with stars
+            if track["B-V"][0] < 0.05:
+                xx = 0.11
+                yy = -0.05
+
+            elif track["B-V"][0] < 0.15:
+                xx = 0.075
+                yy = 0.22
+
+            elif track["B-V"][0] < 0.8 and track["Mv"][0] > 5:
+                xx = -0.1
+                yy = 0.0
+
+            else:
+                xx = 0.01
+                yy = 0.3
             
             plt.text(track["B-V"][0]+xx, track["Mv"][0]+yy,
-                     r"$%0.2f\,$M$_\odot$" % masses[mass_i], ha="left",
-                     fontsize="xx-small", color="grey")
+                     r"$%0.2f\,$M$_\odot$" % masses[mass_i], ha="center",
+                     fontsize="small", color="grey")
         
     #plt.legend(loc="best")
     
@@ -1804,8 +1838,8 @@ def plot_hr_diagram(tgt_info, plot_isochrones_basti=False,
     
     plt.xlim([0, 1.5])
     plt.ylim([7.5, 0])
-    plt.xlabel(r"$(B-V)$")#(r"B$_{\rm T}$-V$_{\rm T}$")
-    plt.ylabel(r"$V_{\rm abs}$")#(r"V$_{\rm T, abs}$")
+    plt.xlabel(r"$(B-V)$", fontsize="large")
+    plt.ylabel(r"$V_{\rm abs}$", fontsize="large")
     plt.tight_layout()
     plt.savefig("paper/hr_diagram.pdf")
 
