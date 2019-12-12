@@ -431,13 +431,18 @@ def load_results(folder):
     return bs_results, results    
     
     
-def save_sampled_params(sampled_params, folder, final_teff_sample=False):
+def save_sampled_params(sampled_params, folder, force_claret_params=False, 
+                        final_teff_sample=False):
     """Save the sampled stellar parameters.
     """
-    # Using literature teffs
-    if not final_teff_sample:
+    # Using literature teffs (but not forcing Claret params)
+    if not force_claret_params and not final_teff_sample:
         pkl_params = open("results/%s/sampled_params.pkl" % folder, "wb")
     
+    # Using literature teffs (but forcing Claret params)
+    elif force_claret_params and not final_teff_sample:
+        pkl_params = open("results/%s/sampled_params_claret.pkl" % folder, "wb")
+
     # Using interferometric teffs
     else:
         pkl_params = open("results/%s/sampled_params_final.pkl" % folder, "wb")

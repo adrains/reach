@@ -23,9 +23,11 @@ from shapely.geometry.polygon import Polygon
 # -----------------------------------------------------------------------------
 # Sampling
 # -----------------------------------------------------------------------------   
-def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
+def sample_lld_coeff(n_logg, n_teff, n_feh, force_claret_params=False):
     """
-    
+    Get limb darkening coefficents. By default opt for Stagger grid if stars
+    fall within it, opting for Claret 2000 grid.
+
     For every science target, sample linear u_lambda N times, where u_lambda is
     a vector of length 6, corresponding to each of the wavelength channels of
     PIONIER. u_lambda in this case is the equivalent linear term for the 4
@@ -39,67 +41,65 @@ def sample_lld_coeff(n_logg, n_teff, n_feh, use_claret_params=False):
     This 3D pandas dataframe will have the structure:
         [star, [bs_i, teff, logg, feh, u_lld_1, u_lld_2, u_lld_3, u_lld_4, 
                 u_lld_5, u_lld_6, u_scale]]
+
+    Parameters
+    ----------
+    n_logg: float array
+        List of surface gravities (cgs units).
+
+    n_teff: float array
+        List of stellar effective temperatures (K).
+
+    n_feh: float array
+        List of stellar metallicities (relative to solar).
+
+    force_claret_params: boolean
+        Whether to only use the Claret grid. Defaults to true.
+    
+    Returns
+    -------
+    n_u_lld: float array
+        Array of limb darkening coefficients and scaling parameters for each 
+        star, of shape [n_star, 12]. All coefficients and scaling parameters
+        will be the same if using Claret params.
     """
     # Check if any set of logg/teff points lie outside the stagger grid. If any
     # do, we can't use the stagger grid as we won't be able to properly sample
     # the uncertainties.
-    #in_grid = np.all([in_grid_bounds(teff, logg) 
-    #                  for teff, logg in zip(n_teff, n_logg)])
-    
-    
+
     # First try to get the Stagger coefficients, but if this doesn't work, just
     # get the Claret params
-    try:
-        # Sample the grid
-        elcs, scls, ftcs = elc_stagger(n_logg, n_teff, n_feh)
-        
-        # Combine
-        n_u_lld = np.concatenate((elcs, scls)).T
-        
-        # Succeeded
-        print("using Stagger grid.")
-        out_of_stagger_bounds = False
-        
-    except:
-        print("using Claret grid.")
-        out_of_stagger_bounds = True
-        
-    # If we were out of grid bounds entirely, or some of the time, use Claret
-    if out_of_stagger_bounds or elcs.shape[1] != len(n_logg):
-        # Get the H band linear coefficient
-        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
-        
-        # Stack x6 for each wavelength dimension
-        n_u_lld = np.tile(n_u_lld, 6).reshape(6, len(n_logg))
-        
-        # Add a set of scaling coefficients (just ones)
-        n_u_lld = np.concatenate((n_u_lld, np.ones((6, len(n_logg))))).T
-    
-    """
-    # If the target is out of the grid, fill the grid with standard linear
-    # (i.e. non-equivalent) u_lambda, and s_lambda = 1
-    if not in_grid or use_claret_params:
-        # Get the H band linear coefficient
-        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
-        
-        # Stack x6 for each wavelength dimension
-        n_u_lld = np.tile(n_u_lld, 6).reshape(6, len(n_logg))
-        
-        # Add a set of scaling coefficients (just ones)
-        n_u_lld = np.concatenate((n_u_lld, np.ones((6, len(n_logg))))).T
-        
-        # Add a column of booleans indicating whether the star got results from
-        # the stagger grid?
-        pass
-    
-    # This star is in the grid, get Stagger coefficients
+    if not force_claret_params:
+        try:
+            # Sample the grid
+            elcs, scls, ftcs = elc_stagger(n_logg, n_teff, n_feh)
+            
+            # Combine
+            n_u_lld = np.concatenate((elcs, scls)).T
+            
+            # Succeeded
+            print("using Stagger grid.")
+            out_of_stagger_bounds = False
+            
+        except:
+            print("using Claret grid.")
+            out_of_stagger_bounds = True
+
     else:
-        # Sample the grid
-        elcs, scls, ftcs = elc_stagger(n_logg, n_teff, n_feh)
+        print("using Claret grid.")
+
+    # If we were out of grid bounds entirely, or some of the time, use Claret
+    if (force_claret_params 
+        or (out_of_stagger_bounds or elcs.shape[1] != len(n_logg))):
+        # Get the H band linear coefficient
+        n_u_lld = get_linear_limb_darkening_coeff(n_logg, n_teff, n_feh)
         
-        # Combine
-        n_u_lld = np.concatenate((elcs, scls)).T
-    """    
+        # Stack x6 for each wavelength dimension
+        n_u_lld = np.tile(n_u_lld, 6).reshape(6, len(n_logg))
+        
+        # Add a set of scaling coefficients (just ones)
+        n_u_lld = np.concatenate((n_u_lld, np.ones((6, len(n_logg))))).T
+    
     return n_u_lld
 
 # -----------------------------------------------------------------------------

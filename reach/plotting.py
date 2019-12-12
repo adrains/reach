@@ -1047,7 +1047,8 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     
     axes.yaxis.set_major_locator(maj_loc)
     axes.yaxis.set_minor_locator(min_loc)
-    axes.set_ylabel(r"Visibility$^2$", va='center', rotation='vertical')
+    axes.set_ylabel(r"Visibility$^2$", va='center', rotation='vertical', 
+                    fontsize="large")
     
     res_maj_loc = plticker.MultipleLocator(base=0.005)
     res_min_loc = plticker.MultipleLocator(base=0.001)
@@ -1058,9 +1059,9 @@ def plot_sidelobe_vis2_fit(tgt_info, results, sci="lamSgr"):
     res_ax.set_xlim([5.5E7,9.5E7])
     res_ax.set_ylim([-0.008,0.008])
     res_ax.hlines(0, 0, 25E7, linestyles="dotted", linewidth=0.25)
-    res_ax.set_ylabel("Residuals")
+    res_ax.set_ylabel("Residuals", fontsize="large")
     
-    res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$")
+    res_ax.set_xlabel(r"Spatial Frequency (rad$^{-1})$", fontsize="large")
     
     plt.setp(axes.get_xticklabels(), fontsize="small")
     plt.setp(axes.get_yticklabels(), fontsize="small")
@@ -1174,7 +1175,7 @@ def plot_lit_diam_comp(tgt_info):
 
 
 def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"], 
-                              cbar="feh"):
+                              cbar="feh", xy_maps=(None,None,None)):
     """Plot for paper comparing measured LDD vs Boyajian colour relation diams.
     
     Colourbar solution from here:
@@ -1189,7 +1190,7 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
         axes = np.array([axes])
     
     # Plot each subplot
-    for ax_i, (ax, colour_rel) in enumerate(zip(axes, colour_rels)):
+    for ax_i, (ax, colour_rel, xy_map) in enumerate(zip(axes, colour_rels, xy_maps)):
         # Format the colour relation
         colour_rel_col = "LDD_" + colour_rel.replace("-", "")
     
@@ -1236,8 +1237,13 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
             xy_abs = (fit_diams[-1]**2 + colour_rel_diams[-1]**2)**0.5
             xy = np.abs(np.array(xy_txt) - xy_abs)
             sep = 0.1
-        
-            if len(xy_txt) > 0 and (xy < sep).any():
+
+            # Import the provided xy_map if given
+            if xy_map is not None:
+                xx = xy_map[star_data["Primary"]][0]
+                yy = xy_map[star_data["Primary"]][1]
+
+            elif len(xy_txt) > 0 and (xy < sep).any():
                 xx = 0.025
                 yy = 0.2
             else:
@@ -1247,8 +1253,11 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
             # Plot the name of the star
             ax.annotate(rutils.format_id(star_data["Primary"]),  
                         xy=(fit_diams[-1], colour_rel_diams[-1]), 
-                        xytext=(fit_diams[-1]+xx, colour_rel_diams[-1]-yy), 
-                        fontsize=4)
+                        xytext=(fit_diams[-1]+xx, colour_rel_diams[-1]+yy), 
+                        fontsize="small", verticalalignment="center",
+                        #arrowprops=dict(facecolor="black", width=0.0, 
+                                    #headwidth=0.0),
+                        )
                     
             xy_txt.append(xy_abs)
                         
@@ -1307,10 +1316,10 @@ def plot_colour_rel_diam_comp(tgt_info, colour_rels=["V-W3","V-W4","B-V_feh"],
         res_ax.yaxis.set_major_locator(loc)
     
         # Setup the rest of the plot
-        ax.set_ylabel(r"$\theta_{(%s)}$ (mas)" % colour_rel)  
-        res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)")   
+        ax.set_ylabel(r"$\theta_{(%s)}$ (mas)" % colour_rel, fontsize="large")
+        res_ax.set_xlabel(r"$\theta_{\rm PIONIER}$ (mas)", fontsize="large") 
         res_ax.set_ylabel(r"$\theta_{\rm %s} / \theta_{\rm PIONIER}$" 
-                          % colour_rel)  
+                          % colour_rel, fontsize="large")
         
         if ax_i != 0:
             res_ax.set_yticklabels([])
@@ -1439,9 +1448,9 @@ def plot_casagrande_teff_comp(tgt_info, xy_map=None):
     #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
     
     # Setup the rest of the plot
-    ax.set_ylabel(r"$T_{\rm eff, Casagrande+2010}$ (K)")  
-    res_ax.set_xlabel(r"$T_{\rm eff, PIONIER}$ (K)")  
-    res_ax.set_ylabel(r"$T_{\rm eff, residuals}$ (K)")  
+    ax.set_ylabel(r"$T_{\rm eff, Casagrande+2010}$ (K)", fontsize="large")  
+    res_ax.set_xlabel(r"$T_{\rm eff, PIONIER}$ (K)", fontsize="large")  
+    res_ax.set_ylabel(r"$T_{\rm eff, residuals}$ (K)", fontsize="large")  
     #ax.legend(loc="best")
     
     plt.tight_layout()
@@ -1618,12 +1627,14 @@ def plot_fbol_comp(tgt_info):
                     #marker="$%s$" % bands[band_i])
 
     axis.yaxis.get_major_formatter().set_powerlimits((0,1))                   
-    axis.set_xlabel("Star")
-    axis.set_ylabel(r"$f_{\rm bol}$ (ergs s$^{-1}$ cm $^{-2}$)")
+    #axis.set_xlabel("Star", fontsize="large")
+    axis.set_ylabel(r"$f_{\rm bol}$ (ergs s$^{-1}$ cm $^{-2}$)", 
+                    fontsize="large")
     plt.setp(axis.get_yticklabels(), fontsize="small")
-    plt.setp(axis.get_xticklabels(), fontsize="xx-small", rotation="vertical")
+    plt.setp(axis.get_xticklabels(), fontsize="small", rotation="vertical")
     #plt.yscale("log")
-    legend = plt.legend(loc="best")
+    plt.tight_layout()
+    legend = plt.legend(loc="best", fontsize="large")
     for handle in legend.legendHandles:
         handle.set_sizes([20])
 

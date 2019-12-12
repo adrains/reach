@@ -465,7 +465,9 @@ def make_table_targets(tgt_info):
     table_rows.append("\\begin{minipage}{\linewidth}")
     table_rows.append("\\vspace{0.1cm}")
     
-    table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018}, "
+    table_rows.append("\\textbf{Notes:} $^a$Gaia \citet{brown_gaia_2018} - "
+                      " note that Gaia parallaxes listed here have not been "
+                      "corrected for the zeropoint offset, "
                       "$^b$SIMBAD, $^c$Tycho \citet{hog_tycho-2_2000}, "
                       "$^d$2MASS \citet{skrutskie_two_2006} \\\\")
     table_rows.append(" \\textbf{References for spectroscopic $T_{\\rm eff}$, "

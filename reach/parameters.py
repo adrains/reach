@@ -53,7 +53,7 @@ def sample_stellar_params_pd(tgt_info, n_bootstraps,
     return n_logg, n_teff, n_feh 
 
 
-def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False, 
+def sample_parameters(tgt_info, n_bootstraps, force_claret_params=False, 
                       use_literature_teffs=True):
     """Sample stellar parameters (teff, logg, feh) and derived parameters 
     (u_lambda, s_lambda) N times and save in a single datastructure. The result
@@ -114,7 +114,7 @@ def sample_parameters(tgt_info, n_bootstraps, use_claret_params=False,
               end="")
         sys.stdout.flush()
         n_u_lambda = rld.sample_lld_coeff(n_logg, n_teff, n_feh, 
-                                            use_claret_params)
+                                            force_claret_params)
         
         # Assemble
         data[:, 0] = n_logg
@@ -222,7 +222,7 @@ def sample_distance(sampled_sci_params, tgt_info):
         sampled_sci_params.loc[star, "Dist"] = dist
 
 
-def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False, 
+def sample_all(tgt_info, n_bootstraps, bc_path, force_claret_params=False, 
                band_mask=[1, 0, 0, 0, 0], use_literature_teffs=True):
     """Sample each of teff, logg, [Fe/H], u_lambda, s_lambda, Hp, VT, BT, BP,
     RP, BC_Hp, BC_VT, BC_BT, BC_BP, BC_RP, fbol_Hp, fbol_VT, fbol_BT, fbol_BP, 
@@ -232,7 +232,7 @@ def sample_all(tgt_info, n_bootstraps, bc_path, use_claret_params=False,
     # Sample stellar parameters and limb darkening coefficients (and initialise
     # the 3D pandas dataframe
     sampled_sci_params = sample_parameters(tgt_info, n_bootstraps, 
-                                    use_claret_params, use_literature_teffs)
+                                    force_claret_params, use_literature_teffs)
                                     
     # Then sample distance, magnitudes and bolometric corrections, and fbol
     sample_distance(sampled_sci_params, tgt_info)
