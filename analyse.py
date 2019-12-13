@@ -20,7 +20,7 @@ import pickle
 lb_pc = 70                          # The size of the local bubble in pc
 use_plx_systematic = True           # Use Stassun & Torres 18 plx offset
 combined_fit = True                 # Fit for LDD for multiple seq at once
-load_saved_results = False           # Load or do fitting fresh
+load_saved_results = True           # Load or do fitting fresh
 assign_default_uncertainties = True # Give default errors to stars without
 force_claret_params = False         # Force use of Claret+11 limb d. params
 n_bootstraps = 5000
@@ -118,6 +118,7 @@ else:
                                            use_literature_teffs=False)
                                                                        
     rutils.save_sampled_params(sampled_sci_params, results_folder, 
+                               force_claret_params=force_claret_params,
                                final_teff_sample=True)
     
     bs_results = rdiam.fit_ldd_for_all_bootstraps(tgt_info, n_bootstraps, 

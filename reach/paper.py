@@ -5,6 +5,7 @@ Note that it might be helpful to plot dates the tables were generated to ease
 copying and pasting?
 """
 from __future__ import division, print_function
+import pandas as pd
 import numpy as np
 import reach.utils as rutils
 from collections import OrderedDict
@@ -146,9 +147,9 @@ def make_table_limb_darkening(tgt_info):
                                  row[e_u_lambda_cols[u_i]]))
             
             for s_i in np.arange(6):
-                table_row += r"%0.3f & " % (row[s_lambda_cols[s_i]])
+                table_row += r"%0.3f &" % (row[s_lambda_cols[s_i]])
         
-        table_rows.append(table_row + r"\\")
+        table_rows.append(table_row[:-1] + r" \\")
     
     
     # Finish the table
@@ -291,7 +292,70 @@ def make_table_fbol(tgt_info):
     np.savetxt("paper/table_fbol_1.tex", table_1, fmt="%s")      
     #np.savetxt("paper/table_fbol_2.tex", table_2, fmt="%s")     
     
+
+def make_table_claret_stagger_comp():
+    """
+    """
+    diams_claret = pd.read_csv("results/paper_results/diams_claret.csv")
+    diams_stagger = pd.read_csv("results/paper_results/diams_stagger.csv")
     
+    assert (tuple(diams_claret["Primary"].values) 
+        == tuple(diams_stagger["Primary"].values))
+
+    stars = diams_claret["Primary"].values
+    ldd_claret = diams_claret["ldd_final"].values
+    e_ldd_claret = diams_claret["e_ldd_final"].values
+    ldd_stagger = diams_stagger["ldd_final"].values
+    e_ldd_stagger = diams_stagger["e_ldd_final"].values
+
+    columns = OrderedDict([("Star", ""),
+                           (r"$\theta_{\rm LD, CB11}$", "(mas)"),
+                           (r"$\theta_{\rm LD, \textsc{stagger}}$", "(mas)"),
+                           (r"$\sigma_{\theta_{\rm LD}}$", r"(\%)"),
+                           ])
+                     
+    header = []
+    table_rows = []
+    footer = []
+    
+    # Construct the header of the table
+    header.append("\\begin{tabular}{%s}" % ("c"*len(columns)))
+    header.append("\hline")
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.keys()))
+    header.append((("%s & "*len(columns))[:-2] + r"\\") % tuple(columns.values()))
+    header.append("\hline")    
+    
+     # Populate the table for every science target
+    for star_i, (star, ldd_c, e_ldd_c, ldd_s, e_ldd_s) in enumerate(
+            zip(stars, ldd_claret, e_ldd_claret, ldd_stagger, e_ldd_stagger)):
+        # ....
+        table_row = ""
+        
+        # Step through column by column
+        table_row += "%s & " % rutils.format_id(star)
+        
+        # Claret & Bloemen 2011
+        table_row += r"%.3f $\pm$ %0.3f & " % (ldd_c, e_ldd_c)
+
+        # Stagger
+        table_row += r"%.3f $\pm$ %0.3f & " % (ldd_s, e_ldd_s)
+
+        # Percent
+        table_row += r"%.2f \\" % ((ldd_c - ldd_s)/ldd_c * 100)
+        
+        table_rows.append(table_row)
+    
+    # Finish the table
+    footer.append("\hline")
+    footer.append("\end{tabular}")
+    
+    # Write the tables
+    table_1 = header + table_rows + footer
+    #table_2 = header + table_rows[30:] + footer
+    
+    # Write the table
+    np.savetxt("paper/table_claret_stagger_comp.tex", table_1, fmt="%s")
+
 
 def make_table_observation_log(tgt_info, complete_sequences, sequences):
     """Make the table to summarise the observations, including what star was
@@ -367,7 +431,7 @@ def make_table_targets(tgt_info):
                            ("RA$^a$", "(hh mm ss.ss)"),
                            ("DEC$^a$", "(dd mm ss.ss)"),
                            ("SpT$^b$", ""),
-                           ("$V_{\\rm T}$^c$", "(mag)"), 
+                           ("$V_{\\rm T}^c$", "(mag)"), 
                            ("$H^d$", "(mag)"),
                            ("$T_{\\rm eff}$", "(K)"),
                            (r"$\log g$", "(dex)"), 
@@ -494,8 +558,8 @@ def make_table_calibrators(tgt_info, sequences):
     columns = OrderedDict([("HD", ""),
                            ("SpT$^a$", "(Actual)$^a$"),
                            ("SpT$^b$", "(Adopted)$^b$"),
-                           (r"$V_{\rm T}$^c$", "(mag)"), 
-                           (r"$H$^d$", "(mag)"),
+                           (r"$V_{\rm T}^c$", "(mag)"), 
+                           (r"$H^d$", "(mag)"),
                            (r"$E(B-V)$", "(mag)"),
                            ("$\\theta_{\\rm pred}$", "(mas)"),
                            ("$\\theta_{\\rm LD}$ Rel", ""),
@@ -566,7 +630,7 @@ def make_table_calibrators(tgt_info, sequences):
         else:
             table_row += r"%0.3f $\pm$ %0.2f & " % (star["LDD_pred"], star["e_LDD_pred"])
             
-        table_row += ("%s & " % star["LDD_rel"]).split("LDD_")[-1]
+        table_row += ("%s & " % star["LDD_rel"]).split("LDD_")[-1].replace("_", "-")
         
         # Determine whether the star was used as a calibrator
         if star["Quality"] == "BAD":

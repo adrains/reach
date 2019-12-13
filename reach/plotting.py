@@ -1743,7 +1743,113 @@ def plot_jsdc_ldd_comp(tgt_info):
     
     plt.tight_layout()
     plt.savefig("plots/ldd_comp_jsdc.pdf") 
+
+def plot_claret_vs_stagger_diam_comp():
+    """
+    """
+    diams_claret = pd.read_csv("results/paper_results/diams_claret.csv")
+    diams_stagger = pd.read_csv("results/paper_results/diams_stagger.csv")
+
+    plt.close("all")
+    fig, ax = plt.subplots()
+            
+    # Setup lower panel for residuals
+    divider = make_axes_locatable(ax)
+    res_ax = divider.append_axes("bottom", size="30%", pad=0.1)
+    ax.figure.add_axes(res_ax)
     
+    # Change the annotation rotation to prevent labels overlapping
+    xy_txt = []
+    """
+    # For every science target, plot using the given relation
+    for star, star_data in tgt_info[tgt_info["Science"]].iterrows():
+        
+        # Get the two LDDs to compare
+        final_teffs.append(star_data["teff_final"])
+        e_final_teffs.append(star_data["e_teff_final"])
+        casagrande_teffs.append(star_data["teff_casagrande"])
+        e_casagrande_teffs.append(star_data["e_teff_casagrande"])
+        fehs.append(star_data["FeH_rel"])
+    
+        
+        # Import the provided xy_map if given
+        if xy_map is not None:
+            xx = xy_map[star_data["Primary"]][0]
+            yy = xy_map[star_data["Primary"]][1]
+
+        elif len(xy_txt) > 0 and (xy < sep).any():
+            xx = 25
+            yy = 200
+        else:
+            xx = 25
+            yy = 100
+        
+        # Plot the name of the star
+        ax.annotate(rutils.format_id(star_data["Primary"]),  
+                    xy=(final_teffs[-1],casagrande_teffs[-1]), 
+                    xytext=(final_teffs[-1]+xx, casagrande_teffs[-1]+yy), 
+                    #arrowprops=dict(facecolor="black", width=0.0, 
+                                    #headwidth=0.0),
+                    fontsize="small", horizontalalignment="center")
+                    
+        xy_txt.append(xy_abs)
+    """
+    # Plot the points + errors
+    ax.errorbar(diams_claret["ldd_final"], diams_stagger["ldd_final"], 
+                xerr=diams_claret["e_ldd_final"], 
+                yerr=diams_stagger["e_ldd_final"], fmt=".", ecolor="firebrick",
+                elinewidth=0.5, capsize=0.8, capthick=0.5, zorder=1)
+        
+    # Plot residuals
+    ax.set_xticklabels([])
+    residuals = diams_stagger["ldd_final"] - diams_claret["ldd_final"]
+        
+    res_ax.errorbar(diams_claret["ldd_final"], residuals, 
+                    xerr=diams_claret["e_ldd_final"], 
+                    yerr=diams_stagger["e_ldd_final"], fmt=".", elinewidth=0.5, 
+                    ecolor="firebrick", capsize=0.8, capthick=0.5, zorder=1)
+    
+    scatter = ax.scatter(diams_claret["ldd_final"], diams_stagger["ldd_final"], 
+                         c=diams_claret["FeH_rel"], marker="o", zorder=2)
+                         
+
+    cb = fig.colorbar(scatter, ax=ax)
+    cb.set_label("[Fe/H]")
+    res_ax.scatter(diams_claret["ldd_final"], residuals, 
+                   c=diams_claret["FeH_rel"], marker="o", zorder=2)
+    
+    # Setup residual y axis
+    maj_loc = plticker.MultipleLocator(base=150)
+    min_loc = plticker.MultipleLocator(base=75)
+    res_ax.yaxis.set_major_locator(maj_loc)
+    res_ax.yaxis.set_minor_locator(min_loc)
+
+    # Plot the two lines
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    ax.plot(np.arange(0, 10000), np.arange(0, 10000), "--", color="black", 
+            zorder=1)
+    res_ax.hlines(0, xmin=0, xmax=10000, linestyles="dashed", zorder=1)
+                      
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    res_ax.set_xlim(xlim)
+    
+    # Set residual y ticks sensibly
+    #loc = plticker.MultipleLocator(base=0.1)
+    #res_ax.yaxis.set_major_locator(loc)
+    #res_ax.yticks([0.8, 0.9, 1.0, 1.1, 1.2])
+    
+    # Setup the rest of the plot
+    ax.set_ylabel(r"$\theta_{\rm Final, Stagger}$ (mas)", fontsize="large")  
+    res_ax.set_xlabel(r"$\theta_{\rm Final, Claret}$ (mas)", fontsize="large")  
+    res_ax.set_ylabel(r"$\theta_{\rm Final, residuals}$ (K)", fontsize="large")  
+    #ax.legend(loc="best")
+    
+    plt.tight_layout()
+    #plt.savefig("paper/teff_comp_casagrande.pdf")  
+    #plt.savefig("paper/teff_comp_casagrande.png", dpi=500)  
+
 
 def plot_hr_diagram(tgt_info, plot_isochrones_basti=False, 
                     plot_isochrones_padova=False, feh=0.058):
