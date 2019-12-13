@@ -14,6 +14,9 @@ import reach.pndrs as rpndrs
 import reach.utils as rutils
 import pickle
 
+# Import plotting xy offsets map
+import xy_map
+
 # -----------------------------------------------------------------------------
 # Setup & Loading
 # -----------------------------------------------------------------------------
@@ -162,11 +165,12 @@ rpaper.make_table_limb_darkening(tgt_info)
 print("Generating plots...")
 rplt.plot_fbol_comp(tgt_info)
 rplt.plot_hr_diagram(tgt_info, plot_isochrones_basti=True)
-rplt.plot_casagrande_teff_comp(tgt_info)
+rplt.plot_casagrande_teff_comp(tgt_info, xy_map.teff)
 rplt.plot_lit_diam_comp(tgt_info)
 rplt.plot_sidelobe_vis2_fit(tgt_info, results)  
 rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=4, n_cols=2)
-rplt.plot_colour_rel_diam_comp(tgt_info)
+rplt.plot_colour_rel_diam_comp(tgt_info, 
+                               xy_maps=(xy_map.vw3, xy_map.vw4, xy_map.bv_feh))
 rplt.plot_bootstrapping_summary(results, bs_results, plot_cal_info=False, 
                                 sequences=sequences, 
                                 complete_sequences=complete_sequences, 
