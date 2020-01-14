@@ -166,7 +166,7 @@ print("Generating plots...")
 rplt.plot_fbol_comp(tgt_info)
 rplt.plot_hr_diagram(tgt_info, plot_isochrones_basti=True)
 rplt.plot_casagrande_teff_comp(tgt_info, xy_map.teff)
-rplt.plot_lit_diam_comp(tgt_info)
+rplt.plot_lit_diam_comp(tgt_info, xy_map.lit_diam)
 rplt.plot_sidelobe_vis2_fit(tgt_info, results)  
 rplt.plot_joint_seq_paper_vis2_fits(tgt_info, results, n_rows=4, n_cols=2)
 rplt.plot_colour_rel_diam_comp(tgt_info, 

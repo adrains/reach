@@ -3,19 +3,19 @@ This file contains sets of xy offsets for use when plotting
 """
 teff = {
     "TauCet":(0,150),
-    "alfHyi":(0,100),
+    "alfHyi":(-25,100),
     "chiEri":(100,-150),
     "95Cet":(0,-200),
     "epsEri":(100,-150),
     "delEri":(0,-225),
     "omi2Eri":(0,250),
     "37Lib":(0,150),
-    "betTrA":(0,-150),
+    "betTrA":(0,-200),
     "lamSgr":(100,-150),
     "delPav":(0,150),
     "epsInd":(0,175),
-    "HD131977":(0,100),
-    "etaSco":(0,-150),
+    "HD131977":(25,100),
+    "etaSco":(0,-200),
     "betAql":(0,200),
     "HR7221":(0,150),
 }
@@ -75,4 +75,13 @@ bv_feh = {
     "etaSco":(-0.5,-0.00),
     "betAql":(-0.5,0.1),
     "HR7221":(0.1,-0.075),
+}
+
+lit_diam = {
+    "TauCet":(0,0.05),
+    "epsEri":(0,-0.125),
+    "omi2Eri":(0,-0.1),
+    "epsInd":(0,0.1),
+    "HD131977":(0.03,0.2),
+    "betAql":(0,0.1),
 }
